@@ -44,7 +44,7 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
         self.save_hyperparameters()
 
     def forward(self, eeg):
-        x = eeg  # (b s c)
+        x = eeg.to(self.device)  # (b s c)
 
         # transformer encoder
         x = PositionalEncoding(x.shape[-1])(x)

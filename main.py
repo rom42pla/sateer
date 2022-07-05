@@ -13,18 +13,22 @@ import pytorch_lightning as pl
 args = get_training_args()
 experiment_name = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
 if args.dataset_type == "deap":
     dataset = DEAPDataset(path=args.dataset_path,
                           windows_size=args.windows_size, drop_last=True, discretize_labels=args.discretize_labels,
                           validation=args.validation, k_folds=args.k_folds)
 
+print(f"starting training with {dataset.validation} validation")
 if dataset.validation == "k_fold":
     for i_fold in range(dataset.k_folds):
+        print(f"training fold_{i_fold}")
         dataset.set_k_fold(i_fold)
         dataset.setup(stage="fit")
 
         model = EEGEmotionRecognitionTransformer(in_channels=dataset.in_channels,
-                                                 labels=dataset.labels)
+                                                 labels=dataset.labels) \
+            .to("cuda" if torch.cuda.is_available() else "cpu")
         trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
                              max_epochs=args.max_epochs, check_val_every_n_epoch=1,
                              num_sanity_val_steps=args.batch_size,
