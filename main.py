@@ -1,3 +1,4 @@
+import gc
 from datetime import datetime
 from os.path import join
 
@@ -23,6 +24,7 @@ print(f"starting training with {dataset.validation} validation")
 if dataset.validation == "k_fold":
     for i_fold in range(dataset.k_folds):
         print(f"training fold_{i_fold}")
+        gc.collect()
         dataset.set_k_fold(i_fold)
         dataset.setup(stage="fit")
 
@@ -43,9 +45,11 @@ if dataset.validation == "k_fold":
                                                  filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}")
                              ] if args.checkpoints_path is not None else [])
         trainer.fit(model, datamodule=dataset)
+        del trainer, model
 
 elif dataset.validation == "loso":
     for i_subject in dataset.subjects_ids_indices.keys():
+        gc.collect()
         dataset.set_loso_index(i_subject)
         dataset.setup(stage="fit")
 
@@ -54,6 +58,7 @@ elif dataset.validation == "loso":
 
         trainer = pl.Trainer(gpus=0, precision=32, max_epochs=100, check_val_every_n_epoch=2,
                              logger=False, enable_checkpointing=False)
+        del trainer, model
         # trainer.fit(model, datamodule=dataset)
 
 # deap_dataloader = DEAPDataloader(dataset=deap_dataset, batch_size=256)

@@ -22,7 +22,7 @@ def get_training_args():
                         action="store_true",
                         help="Whether not to discretize labels in {0, 1}")
     parser.add_argument("--limit_train_batches",
-                        default=1.0,
+                        default=None,
                         help="Whether to limit the number of train batches")
     parser.add_argument("--checkpoints_path",
                         type=str,
@@ -58,15 +58,13 @@ def get_training_args():
     assert args.max_epochs >= 1
     if args.validation == "k_fold":
         assert args.k_folds >= 2
-    assert True in [isinstance(args.limit_train_batches, t) for t in [int, float, str]]
+    assert args.limit_train_batches is None or \
+           True in [isinstance(args.limit_train_batches, t) for t in [int, float, str]]
     if isinstance(args.limit_train_batches, str):
         if "." in args.limit_train_batches:
             args.limit_train_batches = float(args.limit_train_batches)
         else:
             args.limit_train_batches = int(args.limit_train_batches)
-    if isinstance(args.limit_train_batches, int):
-        assert args.limit_train_batches >= 1
-    else:
-        assert 0 < args.limit_train_batches <= 1
+        assert args.limit_train_batches > 0
 
     return args
