@@ -18,7 +18,8 @@ import pytorch_lightning as pl
 class DEAPDataset(pl.LightningDataModule):
     def __init__(self, path: str, windows_size: Union[float, int] = 1, drop_last: bool = True,
                  subject_ids: Optional[Union[str, List[str]]] = None, discretize_labels: bool = False,
-                 validation: Optional[str] = None, k_folds: Optional[int] = 10):
+                 validation: Optional[str] = None, k_folds: Optional[int] = 10,
+                 batch_size: int = 32):
         super().__init__()
         assert isdir(path)
         self.path: str = path
@@ -35,6 +36,9 @@ class DEAPDataset(pl.LightningDataModule):
 
         assert isinstance(drop_last, bool)
         self.drop_last = drop_last
+
+        assert isinstance(batch_size, int)
+        self.batch_size = batch_size
 
         assert subject_ids is None or isinstance(subject_ids, str) or isinstance(subject_ids, list)
         if isinstance(subject_ids, str):
@@ -157,11 +161,11 @@ class DEAPDataset(pl.LightningDataModule):
                                                Subset(self, test_indices)
 
     def train_dataloader(self):
-        return DataLoader(self.train_split, batch_size=32, shuffle=True,
+        return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True,
                           num_workers=os.cpu_count()-2)
 
     def val_dataloader(self):
-        return DataLoader(self.val_split, batch_size=32, shuffle=False,
+        return DataLoader(self.val_split, batch_size=self.batch_size, shuffle=False,
                           num_workers=os.cpu_count()-2)
 
     def set_k_fold(self, i: int) -> None:

@@ -18,7 +18,8 @@ print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
 if args.dataset_type == "deap":
     dataset = DEAPDataset(path=args.dataset_path,
                           windows_size=args.windows_size, drop_last=True, discretize_labels=args.discretize_labels,
-                          validation=args.validation, k_folds=args.k_folds)
+                          validation=args.validation, k_folds=args.k_folds,
+                          batch_size=args.batch_size)
 
 print(f"starting training with {dataset.validation} validation")
 if dataset.validation == "k_fold":
