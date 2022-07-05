@@ -1,5 +1,5 @@
 import math
-from typing import Union, List
+from typing import Union, List, Optional
 
 import torch
 from torch import nn
@@ -22,13 +22,26 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
         else:
             self.labels = [f"label_{i}" for i in range(labels)]
 
+        self.cnn_pre = nn.Sequential(
+            ResidualBlock(in_channels=self.in_channels, out_channels=64),
+            ResidualBlock(in_channels=64, out_channels=64),
+            ResidualBlock(in_channels=64, out_channels=128),
+
+            ResidualBlock(in_channels=128, out_channels=128),
+            ResidualBlock(in_channels=128, out_channels=128),
+            ResidualBlock(in_channels=128, out_channels=256),
+
+            ResidualBlock(in_channels=256, out_channels=256),
+            ResidualBlock(in_channels=256, out_channels=256),
+            ResidualBlock(in_channels=256, out_channels=512),
+        )
         self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=32, nhead=8, batch_first=True),
+            nn.TransformerEncoderLayer(d_model=512, nhead=8, batch_first=True),
             num_layers=8)
         self.transformer_decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(d_model=32, nhead=8, batch_first=True),
+            nn.TransformerDecoderLayer(d_model=512, nhead=8, batch_first=True),
             num_layers=8)
-        self.target_embeddings = nn.Embedding(len(self.labels), 32)
+        self.target_embeddings = nn.Embedding(len(self.labels), 512)
 
         self.reshape_layer = nn.Sequential(
             nn.AdaptiveAvgPool1d(output_size=1),
@@ -37,14 +50,24 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
         self.classification = nn.ModuleList()
         for label in self.labels:
             self.classification.add_module(label,
-                                           nn.Sequential(nn.Linear(in_features=32, out_features=2)))
+                                           nn.Sequential(
+                                               nn.Linear(in_features=512, out_features=256),
+                                               nn.ReLU(),
+                                               nn.BatchNorm1d(256),
+                                               nn.Linear(in_features=256, out_features=2),
+                                           ))
         self.float()
         self.save_hyperparameters()
 
     def forward(self, eeg):
         x = eeg.to(self.device)  # (b s c)
 
+        # latent space
+        x = einops.rearrange(x, "b s c -> b c s")
+        x = self.cnn_pre(x)
+
         # transformer encoder
+        x = einops.rearrange(x, "b c s -> b s c")
         x = PositionalEncoding(x.shape[-1]).to(self.device)(x)
         # mask = nn.Transformer.generate_square_subsequent_mask(x.shape[1])
         # mask = torch.triu(torch.full((x.shape[1], x.shape[1]), float('-inf')), diagonal=1).to(self.device).repeat(x.shape[0], 1, 1)
@@ -95,6 +118,49 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
         return optimizer
+
+
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: Optional[int] = None,
+                 reduce_output: bool = False):
+        super(ResidualBlock, self).__init__()
+        assert isinstance(in_channels, int) and in_channels >= 1
+        self.in_channels = in_channels
+
+        assert out_channels is None or (isinstance(in_channels, int) and in_channels >= 1)
+        if out_channels is None:
+            self.out_channels = self.in_channels
+        else:
+            self.out_channels = out_channels
+
+        assert isinstance(reduce_output, bool)
+        self.reduce_output = reduce_output
+
+        self.reduction_stream = nn.Sequential(
+            nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
+                      kernel_size=1, stride=1),
+            nn.BatchNorm1d(num_features=self.in_channels),
+            nn.ReLU(),
+
+            nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
+                      kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(num_features=self.in_channels),
+            nn.ReLU(),
+
+            nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
+                      kernel_size=1, stride=2 if self.reduce_output else 1),
+            nn.BatchNorm1d(num_features=self.out_channels),
+        )
+        self.projection_stream = nn.Sequential(
+            nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
+                      kernel_size=1, stride=2 if self.reduce_output else 1),
+        )
+
+    def forward(self, x):
+        x_transformed = self.reduction_stream(x)
+        x_projection = self.projection_stream(x)
+        out = x_transformed + x_projection
+        return out
 
 
 class PositionalEncoding(nn.Module):

@@ -2,9 +2,11 @@ import gc
 from datetime import datetime
 from os.path import join
 
+import numpy as np
 import torch.cuda
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import CSVLogger
+from tqdm import tqdm
 
 from arg_parsers import get_training_args
 from datasets.deap import DEAPDataset
@@ -17,10 +19,15 @@ experiment_name = datetime.now().strftime("%Y%m%d_%H%M%S")
 print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
 if args.dataset_type == "deap":
     dataset = DEAPDataset(path=args.dataset_path,
-                          windows_size=args.windows_size, drop_last=True, discretize_labels=args.discretize_labels,
+                          windows_size=args.windows_size, drop_last=True,
+                          discretize_labels=args.discretize_labels, normalize_eegs=True,
                           validation=args.validation, k_folds=args.k_folds,
                           batch_size=args.batch_size)
-
+# model = EEGEmotionRecognitionTransformer(in_channels=32,
+#                                          labels=4) \
+#     .to("cuda" if torch.cuda.is_available() else "cpu")
+# model(torch.randn(64, 128, 32))
+# exit()
 print(f"starting training with {dataset.validation} validation")
 if dataset.validation == "k_fold":
     for i_fold in range(dataset.k_folds):
@@ -29,11 +36,9 @@ if dataset.validation == "k_fold":
         dataset.set_k_fold(i_fold)
         dataset.setup(stage="fit")
 
-        model = EEGEmotionRecognitionTransformer(in_channels=dataset.in_channels,
-                                                 labels=dataset.labels) \
+        model = EEGEmotionRecognitionTransformer(in_channels=32,
+                                                 labels=["valence", "arousal", "dominance", "liking"]) \
             .to("cuda" if torch.cuda.is_available() else "cpu")
-        # model(torch.randn(128, 128, 32))
-
         trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
                              max_epochs=args.max_epochs, check_val_every_n_epoch=1,
                              num_sanity_val_steps=args.batch_size,

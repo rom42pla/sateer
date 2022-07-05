@@ -17,7 +17,8 @@ import pytorch_lightning as pl
 
 class DEAPDataset(pl.LightningDataModule):
     def __init__(self, path: str, windows_size: Union[float, int] = 1, drop_last: bool = True,
-                 subject_ids: Optional[Union[str, List[str]]] = None, discretize_labels: bool = False,
+                 subject_ids: Optional[Union[str, List[str]]] = None,
+                 discretize_labels: bool = False, normalize_eegs: bool = False,
                  validation: Optional[str] = None, k_folds: Optional[int] = 10,
                  batch_size: int = 32):
         super().__init__()
@@ -26,6 +27,8 @@ class DEAPDataset(pl.LightningDataModule):
 
         assert isinstance(discretize_labels, bool)
         self.discretize_labels = discretize_labels
+        assert isinstance(normalize_eegs, bool)
+        self.normalize_eegs = normalize_eegs
 
         assert isinstance(windows_size, float) or isinstance(windows_size, int) and windows_size > 0
         self.windows_size: float = float(windows_size)  # s
@@ -134,8 +137,11 @@ class DEAPDataset(pl.LightningDataModule):
             else:
                 self.label_windows[i_window] /= 9
         # converts data to tensors
-        self.eeg_windows = [torch.as_tensor(w).float() for w in self.eeg_windows]
-        self.label_windows = [torch.as_tensor(w).long() for w in self.label_windows]
+        self.eeg_windows = torch.stack([torch.as_tensor(w).float() for w in self.eeg_windows])
+        if self.normalize_eegs:
+            self.eeg_windows -= self.eeg_windows.amin(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
+            self.eeg_windows /= self.eeg_windows.amax(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
+        self.label_windows = torch.stack([torch.as_tensor(w).long() for w in self.label_windows])
 
     def setup(self, stage: Optional[str] = None):
         if stage == "fit":
@@ -162,11 +168,11 @@ class DEAPDataset(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True,
-                          num_workers=os.cpu_count()-2)
+                          num_workers=os.cpu_count() - 2)
 
     def val_dataloader(self):
         return DataLoader(self.val_split, batch_size=self.batch_size, shuffle=False,
-                          num_workers=os.cpu_count()-2)
+                          num_workers=os.cpu_count() - 2)
 
     def set_k_fold(self, i: int) -> None:
         assert isinstance(i, int) and 0 <= i < self.k_folds
