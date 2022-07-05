@@ -24,6 +24,10 @@ def get_training_args():
     parser.add_argument("--limit_train_batches",
                         default=None,
                         help="Whether to limit the number of train batches")
+    parser.add_argument("--single_validation_step",
+                        default=False,
+                        action="store_true",
+                        help="Whether to interrupt the validation after one loop")
     parser.add_argument("--checkpoints_path",
                         type=str,
                         help="Path to where to save the checkpoints")

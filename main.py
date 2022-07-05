@@ -49,6 +49,9 @@ if dataset.validation == "k_fold":
                              ] if args.checkpoints_path is not None else [])
         trainer.fit(model, datamodule=dataset)
         del trainer, model
+        # eventually stops validation
+        if args.single_validation_step:
+            break
 
 elif dataset.validation == "loso":
     for i_subject in dataset.subjects_ids_indices.keys():
