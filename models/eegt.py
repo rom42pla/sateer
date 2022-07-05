@@ -53,7 +53,8 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
         x = self.transformer_encoder(x)
 
         # transformer decoder
-        e = self.target_embeddings(torch.arange(len(self.labels))).unsqueeze(0).repeat(x.shape[0], 1, 1)
+        e = self.target_embeddings(torch.arange(len(self.labels), device=self.device)) \
+            .unsqueeze(0).repeat(x.shape[0], 1, 1)
         x = self.transformer_decoder(e, x)
 
         labels_pred = torch.stack([net(x[:, i_label, :])
