@@ -24,10 +24,10 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
 
         self.transformer_encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=32, nhead=8, batch_first=True),
-            num_layers=2)
+            num_layers=8)
         self.transformer_decoder = nn.TransformerDecoder(
             nn.TransformerDecoderLayer(d_model=32, nhead=8, batch_first=True),
-            num_layers=2)
+            num_layers=8)
         self.target_embeddings = nn.Embedding(len(self.labels), 32)
 
         self.reshape_layer = nn.Sequential(
@@ -37,9 +37,7 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
         self.classification = nn.ModuleList()
         for label in self.labels:
             self.classification.add_module(label,
-                                           nn.Sequential(nn.Linear(in_features=32, out_features=32),
-                                                         nn.ReLU(),
-                                                         nn.Linear(in_features=32, out_features=2)))
+                                           nn.Sequential(nn.Linear(in_features=32, out_features=2)))
         self.float()
         self.save_hyperparameters()
 
