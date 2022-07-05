@@ -47,7 +47,7 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
         x = eeg.to(self.device)  # (b s c)
 
         # transformer encoder
-        x = PositionalEncoding(x.shape[-1])(x)
+        x = PositionalEncoding(x.shape[-1]).to(self.device)(x)
         # mask = nn.Transformer.generate_square_subsequent_mask(x.shape[1])
         # x = self.transformer_encoder(x, mask)
         x = self.transformer_encoder(x)
