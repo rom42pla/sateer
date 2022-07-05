@@ -3,7 +3,7 @@ from datetime import datetime
 from os.path import join
 
 import torch.cuda
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import CSVLogger
 
 from arg_parsers import get_training_args
@@ -45,7 +45,10 @@ if dataset.validation == "k_fold":
                                  ModelCheckpoint(dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
                                                  save_top_k=1,
                                                  monitor="loss_val", mode="min",
-                                                 filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}")
+                                                 filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
+                                 EarlyStopping(monitor="acc_val",
+                                               min_delta=0, patience=20,
+                                               verbose=False, mode="max", check_on_train_epoch_end=False),
                              ] if args.checkpoints_path is not None else [])
         trainer.fit(model, datamodule=dataset)
         del trainer, model
