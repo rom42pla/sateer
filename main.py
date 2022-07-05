@@ -31,6 +31,8 @@ if dataset.validation == "k_fold":
         model = EEGEmotionRecognitionTransformer(in_channels=dataset.in_channels,
                                                  labels=dataset.labels) \
             .to("cuda" if torch.cuda.is_available() else "cpu")
+        # model(torch.randn(128, 128, 32))
+
         trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
                              max_epochs=args.max_epochs, check_val_every_n_epoch=1,
                              num_sanity_val_steps=args.batch_size,

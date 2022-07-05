@@ -49,6 +49,8 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
         # transformer encoder
         x = PositionalEncoding(x.shape[-1]).to(self.device)(x)
         # mask = nn.Transformer.generate_square_subsequent_mask(x.shape[1])
+        # mask = torch.triu(torch.full((x.shape[1], x.shape[1]), float('-inf')), diagonal=1).to(self.device).repeat(x.shape[0], 1, 1)
+        # print(mask.shape, x.shape)
         # x = self.transformer_encoder(x, mask)
         x = self.transformer_encoder(x)
 
@@ -73,8 +75,9 @@ class EEGEmotionRecognitionTransformer(pl.LightningModule):
             self.log(f"{label}_loss_train", losses[i_label], prog_bar=False)
             self.log(f"{label}_acc_train", accs[i_label], prog_bar=False)
         loss, acc = sum(losses), (sum(accs) / len(accs))
-        self.log(f"loss_train", loss, prog_bar=True)
+        self.log(f"loss", loss, prog_bar=True)
         self.log(f"acc_train", acc, prog_bar=True)
+        return loss
 
     def validation_step(self, batch, batch_idx):
         eeg, labels = batch  # (b s c), (b l)
