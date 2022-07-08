@@ -1,5 +1,6 @@
 import gc
 import json
+import logging
 import random
 from datetime import datetime
 from os import listdir, makedirs
@@ -9,14 +10,22 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 import torch.cuda
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichProgressBar
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichProgressBar, TQDMProgressBar
 from pytorch_lightning.loggers import CSVLogger
-from tqdm import tqdm
+from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
+from rich.progress import track
+from tqdm.autonotebook import tqdm
 
 from arg_parsers import get_training_args
 from datasets.deap import DEAPDataset
 from models.eegt import EEGT
 import pytorch_lightning as pl
+
+import warnings
+
+# suppresses some warnings
+warnings.filterwarnings("ignore", category=LightningDeprecationWarning)
+logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
 # retrieves line arguments
 args = get_training_args()
@@ -80,13 +89,12 @@ if args.setting == "cross_subject":
     #         trainer.fit(model, datamodule=dataset)
     #         del trainer, model
     #         # eventually stops validation
-    #         if args.single_validation_step:
-    #             break
     raise NotImplementedError
 elif args.setting == "within_subject":
     if args.validation == "k_fold":
-        for i_subject, subject_id in tqdm(enumerate(dataset_class.get_subject_ids_static(args.dataset_path)),
-                                          desc="looping through subjects"):
+        subject_ids = dataset_class.get_subject_ids_static(args.dataset_path)
+        for i_subject, subject_id in tqdm(enumerate(subject_ids),
+                                          desc="looping through subjects", total=len(subject_ids)):
             if i_subject >= 2:
                 break
             dataset = dataset_class(path=args.dataset_path,
@@ -96,7 +104,6 @@ elif args.setting == "within_subject":
                                     validation=args.validation, k_folds=args.k_folds,
                                     batch_size=args.batch_size)
             for i_fold in range(dataset.k_folds):
-                print(f"training fold_{i_fold}")
                 gc.collect()
                 dataset.set_k_fold(i_fold)
 
@@ -112,6 +119,8 @@ elif args.setting == "within_subject":
                                      num_sanity_val_steps=args.batch_size,
                                      logger=CSVLogger(args.checkpoints_path, name=experiment_name,
                                                       version=join(subject_id, f"fold_{i_fold}")),
+                                     enable_progress_bar=False,
+                                     enable_model_summary=True if (i_subject == 0 and i_fold == 0) else False,
                                      limit_train_batches=args.limit_train_batches,
                                      limit_val_batches=args.limit_train_batches,
                                      log_every_n_steps=1,
@@ -125,13 +134,24 @@ elif args.setting == "within_subject":
                                          EarlyStopping(monitor="acc_val",
                                                        min_delta=0, patience=20,
                                                        verbose=False, mode="max", check_on_train_epoch_end=False),
-                                         RichProgressBar(),
                                      ] if args.checkpoints_path is not None else [])
                 trainer.fit(model, datamodule=dataset)
                 del trainer, model
-                # eventually stops validation
-                # if args.single_validation_step:
-                #     break
+            subject_metrics_dfs = []
+            for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
+                             if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))
+                                and f.startswith("fold_")]:
+                subject_df = pd.read_csv(
+                    join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
+                subject_df["subject_id"] = subject_id
+                subject_metrics_dfs += [subject_df]
+            metrics_df = pd.concat(subject_metrics_dfs)
+            mean_performances_df = metrics_df[
+                ["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
+                 "acc_val", "subject_id"]].groupby("subject_id").max().mean()
+            print(f"Stats for subject {subject_id}:")
+            pprint(mean_performances_df.to_dict())
+
         # logs metrics
         metrics_df = []
         for subject_id in [f for f in listdir(join(args.checkpoints_path, experiment_name))
