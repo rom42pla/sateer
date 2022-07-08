@@ -103,7 +103,7 @@ elif args.setting == "within_subject":
                                     discretize_labels=args.discretize_labels, normalize_eegs=True,
                                     validation=args.validation, k_folds=args.k_folds,
                                     batch_size=args.batch_size)
-            for i_fold in range(dataset.k_folds):
+            for i_fold in tqdm(range(dataset.k_folds), desc="fold"):
                 gc.collect()
                 dataset.set_k_fold(i_fold)
 
