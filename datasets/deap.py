@@ -19,6 +19,7 @@ import pytorch_lightning as pl
 class DEAPDataset(pl.LightningDataModule):
     def __init__(self, path: str, windows_size: Union[float, int] = 1, drop_last: bool = True,
                  subject_ids: Optional[Union[str, List[str]]] = None,
+                 labels_to_use: Optional[List[str]] = None,
                  discretize_labels: bool = False, normalize_eegs: bool = False,
                  validation: Optional[str] = None, k_folds: Optional[int] = 10,
                  batch_size: int = 32):
@@ -35,7 +36,10 @@ class DEAPDataset(pl.LightningDataModule):
         self.windows_size: float = float(windows_size)  # s
         self.sampling_rate: int = 128  # Hz
         self.in_channels: int = 32
-        self.labels: List[str] = ["valence", "arousal", "dominance", "liking"]  # valence, arousal, dominance, liking
+        self.labels: Dict[str, int] = {"valence": 0,
+                                       "arousal": 1,
+                                       "dominance": 2,
+                                       "liking": 3}  # valence, arousal, dominance, liking
         self.samples_per_window = int(np.floor(self.sampling_rate * self.windows_size))
 
         assert isinstance(drop_last, bool)
@@ -53,6 +57,13 @@ class DEAPDataset(pl.LightningDataModule):
             self.subject_ids: List[str] = subject_ids
         else:
             self.subject_ids: List[str] = self.get_subject_ids()
+
+        if labels_to_use is not None:
+            assert isinstance(labels_to_use, list)
+            for label in labels_to_use:
+                assert label in self.labels
+            self.labels_to_use = labels_to_use
+
         self.prepare_data()
 
         # sets up k-fold
@@ -96,7 +107,9 @@ class DEAPDataset(pl.LightningDataModule):
                                              self.samples_per_window),
                                    0)
                 # adjusts the labels
-                labels = np.tile(subject_labels[i_experiment], reps=(len(windows), 1))
+                labels = subject_labels[i_experiment]
+                labels = labels[[self.labels[l] for l in self.labels_to_use]]
+                labels = np.tile(labels, reps=(len(windows), 1))
                 assert np.isclose(labels, labels[0]).all()
                 assert len(windows) == len(labels)
                 # appends the windows

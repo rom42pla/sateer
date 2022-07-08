@@ -102,17 +102,18 @@ elif args.setting == "within_subject":
                                     windows_size=args.windows_size, drop_last=True,
                                     discretize_labels=args.discretize_labels, normalize_eegs=True,
                                     validation=args.validation, k_folds=args.k_folds,
+                                    labels_to_use=["valence", "arousal", "dominance"],
                                     batch_size=args.batch_size)
             for i_fold in tqdm(range(dataset.k_folds), desc="fold"):
                 gc.collect()
                 dataset.set_k_fold(i_fold)
 
                 model = EEGT(in_channels=32,
-                             labels=["valence", "arousal", "dominance", "liking"],
+                             labels=dataset.labels_to_use,
                              sampling_rate=dataset.sampling_rate, windows_length=0.1,
                              num_encoders=args.num_encoders, num_decoders=args.num_decoders,
                              window_embedding_dim=args.window_embedding_dim,
-                             mask_perc_min=0.1, mask_perc_max=0.3) \
+                             mask_perc_min=0.05, mask_perc_max=0.2) \
                     .to("cuda" if torch.cuda.is_available() else "cpu")
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
                                      max_epochs=args.max_epochs, check_val_every_n_epoch=1,
@@ -147,7 +148,7 @@ elif args.setting == "within_subject":
                 subject_metrics_dfs += [subject_df]
             metrics_df = pd.concat(subject_metrics_dfs)
             mean_performances_df = metrics_df[
-                ["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
+                ["valence_acc_val", "arousal_acc_val", "dominance_acc_val",
                  "acc_val", "subject_id"]].groupby("subject_id").max().mean()
             print(f"Stats for subject {subject_id}:")
             pprint(mean_performances_df.to_dict())
