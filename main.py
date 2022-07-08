@@ -9,7 +9,7 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 import torch.cuda
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichProgressBar
 from pytorch_lightning.loggers import CSVLogger
 from tqdm import tqdm
 
@@ -114,6 +114,7 @@ elif args.setting == "within_subject":
                                                       version=join(subject_id, f"fold_{i_fold}")),
                                      limit_train_batches=args.limit_train_batches,
                                      limit_val_batches=args.limit_train_batches,
+                                     log_every_n_steps=1,
                                      enable_checkpointing=False,
                                      callbacks=[
                                          # ModelCheckpoint(
@@ -124,6 +125,7 @@ elif args.setting == "within_subject":
                                          EarlyStopping(monitor="acc_val",
                                                        min_delta=0, patience=20,
                                                        verbose=False, mode="max", check_on_train_epoch_end=False),
+                                         RichProgressBar(),
                                      ] if args.checkpoints_path is not None else [])
                 trainer.fit(model, datamodule=dataset)
                 del trainer, model
