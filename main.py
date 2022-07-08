@@ -132,7 +132,7 @@ elif args.setting == "within_subject":
                                          #     monitor="loss_val", mode="min",
                                          #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
                                          EarlyStopping(monitor="acc_val",
-                                                       min_delta=0, patience=20,
+                                                       min_delta=0, patience=10,
                                                        verbose=False, mode="max", check_on_train_epoch_end=False),
                                      ] if args.checkpoints_path is not None else [])
                 trainer.fit(model, datamodule=dataset)
