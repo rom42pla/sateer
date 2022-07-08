@@ -60,6 +60,13 @@ class EEGT(pl.LightningModule):
             nn.AdaptiveMaxPool1d(output_size=(1,)),
             nn.Flatten(start_dim=1),
         )
+        self.linear_pre = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.Linear(in_features=self.windows_length * self.in_channels, out_features=1024),
+            nn.ReLU(),
+            nn.BatchNorm1d(num_features=1024),
+            nn.Linear(in_features=1024, out_features=512),
+        )
         self.special_tokens = {
             token: i_token
             for i_token, token in enumerate(["start", "end", "mask"])
@@ -86,6 +93,7 @@ class EEGT(pl.LightningModule):
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
+        print(x.shape)
 
         with profiler.record_function("cnns"):
             timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length))
@@ -94,7 +102,8 @@ class EEGT(pl.LightningModule):
             x = einops.rearrange(x, "b s c -> b c s")  # (b c s)
             latent_representations = []
             for t in timestamps:
-                latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
+                # latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
+                latent_representations += [self.linear_pre(x[:, :, t - self.windows_length:t])]
             x = torch.stack(latent_representations, dim=1)
 
         with profiler.record_function("transformer encoder"):
@@ -137,6 +146,7 @@ class EEGT(pl.LightningModule):
                                      for i_label, net in enumerate(self.classification)],
                                     dim=-1)  # (b l)
             assert labels_pred.shape[1] == len(self.labels)
+
         return labels_pred
 
     def training_step(self, batch, batch_idx):
