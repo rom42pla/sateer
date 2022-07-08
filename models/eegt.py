@@ -93,7 +93,6 @@ class EEGT(pl.LightningModule):
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
-        print(x.shape)
 
         with profiler.record_function("cnns"):
             timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length))
