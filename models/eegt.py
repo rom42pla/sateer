@@ -164,6 +164,7 @@ class EEGT(pl.LightningModule):
         loss, acc = sum(losses), (sum(accs) / len(accs))
         self.log(f"loss", loss)
         self.log(f"acc_train", acc, prog_bar=True)
+        self.log("training", True, prog_bar=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -179,6 +180,7 @@ class EEGT(pl.LightningModule):
         loss, acc = sum(losses), (sum(accs) / len(accs))
         self.log(f"loss_val", loss, prog_bar=True)
         self.log(f"acc_val", acc, prog_bar=True)
+        self.log("training", False, prog_bar=False)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)

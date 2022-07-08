@@ -52,44 +52,52 @@ if args.dataset_type == "deap":
 
 print(f"starting {args.setting} training with {args.validation} validation")
 if args.setting == "cross_subject":
-    # print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
-    # if args.dataset_type == "deap":
-    #     dataset = dataset_class(path=args.dataset_path,
-    #                             windows_size=args.windows_size, drop_last=True,
-    #                             discretize_labels=args.discretize_labels, normalize_eegs=True,
-    #                             validation=args.validation, k_folds=args.k_folds,
-    #                             batch_size=args.batch_size)
-    # if args.validation == "k_fold":
-    #     for i_fold in range(dataset.k_folds):
-    #         print(f"training fold_{i_fold}")
-    #         gc.collect()
-    #         dataset.set_k_fold(i_fold)
-    #
-    #         model = EEGT(in_channels=32,
-    #                      labels=["valence", "arousal", "dominance", "liking"]) \
-    #             .to("cuda" if torch.cuda.is_available() else "cpu")
-    #         trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
-    #                              max_epochs=args.max_epochs, check_val_every_n_epoch=1,
-    #                              num_sanity_val_steps=args.batch_size,
-    #                              logger=CSVLogger(args.checkpoints_path, name=experiment_name,
-    #                                               version=f"fold_{i_fold}"),
-    #                              limit_train_batches=args.limit_train_batches,
-    #                              limit_val_batches=args.limit_train_batches,
-    #                              enable_checkpointing=True if args.checkpoints_path is not None else False,
-    #                              callbacks=[
-    #                                  ModelCheckpoint(
-    #                                      dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
-    #                                      save_top_k=1,
-    #                                      monitor="loss_val", mode="min",
-    #                                      filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
-    #                                  EarlyStopping(monitor="acc_val",
-    #                                                min_delta=0, patience=20,
-    #                                                verbose=False, mode="max", check_on_train_epoch_end=False),
-    #                              ] if args.checkpoints_path is not None else [])
-    #         trainer.fit(model, datamodule=dataset)
-    #         del trainer, model
-    #         # eventually stops validation
-    raise NotImplementedError
+    print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
+    if args.dataset_type == "deap":
+        dataset = dataset_class(path=args.dataset_path,
+                                split_in_windows=False,
+                                windows_size=args.windows_size, drop_last=True,
+                                discretize_labels=args.discretize_labels, normalize_eegs=True,
+                                validation=args.validation, k_folds=args.k_folds,
+                                labels_to_use=["valence", "arousal", "dominance"],
+                                batch_size=args.batch_size)
+    if args.validation == "k_fold":
+        for i_fold in tqdm(range(dataset.k_folds), desc="fold"):
+            gc.collect()
+            dataset.set_k_fold(i_fold)
+
+            model = EEGT(in_channels=32,
+                         labels=dataset.labels_to_use,
+                         sampling_rate=dataset.sampling_rate, windows_length=1,
+                         num_encoders=args.num_encoders, num_decoders=args.num_decoders,
+                         window_embedding_dim=args.window_embedding_dim,
+                         mask_perc_min=0.05, mask_perc_max=0.2) \
+                .to("cuda" if torch.cuda.is_available() else "cpu")
+            trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
+                                 max_epochs=args.max_epochs, check_val_every_n_epoch=1,
+                                 num_sanity_val_steps=args.batch_size,
+                                 logger=CSVLogger(args.checkpoints_path, name=experiment_name,
+                                                  version=f"fold_{i_fold}"),
+                                 enable_progress_bar=True,
+                                 enable_model_summary=True,
+                                 limit_train_batches=args.limit_train_batches,
+                                 limit_val_batches=args.limit_train_batches,
+                                 log_every_n_steps=1,
+                                 enable_checkpointing=False,
+                                 callbacks=[
+                                     # ModelCheckpoint(
+                                     #     dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
+                                     #     save_top_k=1,
+                                     #     monitor="loss_val", mode="min",
+                                     #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
+                                     EarlyStopping(monitor="acc_val",
+                                                   min_delta=0, patience=10,
+                                                   verbose=False, mode="max", check_on_train_epoch_end=False),
+                                 ] if args.checkpoints_path is not None else [])
+            trainer.fit(model, datamodule=dataset)
+            del trainer, model
+    elif args.validation == "loso":
+        raise NotImplementedError
 elif args.setting == "within_subject":
     if args.validation == "k_fold":
         subject_ids = dataset_class.get_subject_ids_static(args.dataset_path)
@@ -103,6 +111,7 @@ elif args.setting == "within_subject":
                                     validation=args.validation, k_folds=args.k_folds,
                                     labels_to_use=["valence", "arousal", "dominance"],
                                     batch_size=args.batch_size)
+            dataset.setup("fit")
             for i_fold in tqdm(range(dataset.k_folds), desc="fold"):
                 gc.collect()
                 dataset.set_k_fold(i_fold)
