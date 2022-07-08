@@ -52,21 +52,26 @@ class EEGT(pl.LightningModule):
         assert isinstance(window_embedding_dim, int) and window_embedding_dim >= 1
         self.window_embedding_dim = window_embedding_dim
 
-        self.cnn_pre = nn.Sequential(
-            # ResidualBlock(in_channels=self.in_channels, out_channels=64, reduce_output=True),
+        self.cnn = nn.Sequential(
+            ResidualBlock(in_channels=self.in_channels, out_channels=256, reduce_output=True),
             # ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
-            # ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
-            ResidualBlock(in_channels=self.in_channels, out_channels=self.window_embedding_dim, reduce_output=True),
-            nn.AdaptiveMaxPool1d(output_size=(1,)),
-            nn.Flatten(start_dim=1),
+            ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
         )
-        self.linear_pre = nn.Sequential(
-            nn.Flatten(start_dim=1),
-            nn.Linear(in_features=self.windows_length * self.in_channels, out_features=1024),
-            nn.ReLU(),
-            nn.BatchNorm1d(num_features=1024),
-            nn.Linear(in_features=1024, out_features=512),
-        )
+        # self.cnn_pre = nn.Sequential(
+        #     # ResidualBlock(in_channels=self.in_channels, out_channels=64, reduce_output=True),
+        #     # ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
+        #     # ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
+        #     ResidualBlock(in_channels=self.in_channels, out_channels=self.window_embedding_dim, reduce_output=True),
+        #     nn.AdaptiveMaxPool1d(output_size=(1,)),
+        #     nn.Flatten(start_dim=1),
+        # )
+        # self.linear_pre = nn.Sequential(
+        #     nn.Flatten(start_dim=1),
+        #     nn.Linear(in_features=self.windows_length * self.in_channels, out_features=1024),
+        #     nn.ReLU(),
+        #     nn.BatchNorm1d(num_features=1024),
+        #     nn.Linear(in_features=1024, out_features=512),
+        # )
         self.special_tokens = {
             token: i_token
             for i_token, token in enumerate(["start", "end", "mask"])
@@ -95,15 +100,17 @@ class EEGT(pl.LightningModule):
         x = eeg  # (b s c)
 
         with profiler.record_function("cnns"):
-            timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length))
-            if timestamps[-1] != x.shape[1]:
-                timestamps += [x.shape[1]]
             x = einops.rearrange(x, "b s c -> b c s")  # (b c s)
-            latent_representations = []
-            for t in timestamps:
-                # latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
-                latent_representations += [self.linear_pre(x[:, :, t - self.windows_length:t])]
-            x = torch.stack(latent_representations, dim=1)
+            # timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length))
+            # if timestamps[-1] != x.shape[1]:
+            #     timestamps += [x.shape[1]]
+            # latent_representations = []
+            # for t in timestamps:
+            #     # latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
+            #     latent_representations += [self.linear_pre(x[:, :, t - self.windows_length:t])]
+            # x = torch.stack(latent_representations, dim=1)
+            x = self.cnn(x)
+            x = einops.rearrange(x, "b c s -> b s c")  # (b s c)
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
