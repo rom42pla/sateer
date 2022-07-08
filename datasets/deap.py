@@ -145,7 +145,7 @@ class DEAPDataset(pl.LightningDataModule):
         # handle labels
         for i_window, window_labels in enumerate(self.label_windows):
             if self.discretize_labels:
-                self.label_windows[i_window] = [1 if label >= 5 else 0 for label in window_labels]
+                self.label_windows[i_window] = [1 if label > 5 else 0 for label in window_labels]
             else:
                 self.label_windows[i_window] /= 9
         # converts data to tensors
