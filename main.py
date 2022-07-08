@@ -95,8 +95,6 @@ elif args.setting == "within_subject":
         subject_ids = dataset_class.get_subject_ids_static(args.dataset_path)
         for i_subject, subject_id in tqdm(enumerate(subject_ids),
                                           desc="looping through subjects", total=len(subject_ids)):
-            # if i_subject >= 2:
-            #     break
             dataset = dataset_class(path=args.dataset_path,
                                     subject_ids=subject_id,
                                     split_in_windows=False,
@@ -154,9 +152,6 @@ elif args.setting == "within_subject":
                  "acc_val", "subject_id"]].groupby("subject_id").max().mean()
             print(f"Stats for subject {subject_id}:")
             pprint(mean_performances_df.to_dict())
-            print(metrics_df)
-            print(metrics_df.columns)
-            exit()
 
         # logs metrics
         metrics_df = []
