@@ -6,4 +6,3 @@ einops
 torch
 pytorch-lightning
 torchmetrics
-rich

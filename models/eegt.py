@@ -57,14 +57,14 @@ class EEGT(pl.LightningModule):
             # ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
             ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
         )
-        # self.cnn_pre = nn.Sequential(
-        #     # ResidualBlock(in_channels=self.in_channels, out_channels=64, reduce_output=True),
-        #     # ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
-        #     # ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
-        #     ResidualBlock(in_channels=self.in_channels, out_channels=self.window_embedding_dim, reduce_output=True),
-        #     nn.AdaptiveMaxPool1d(output_size=(1,)),
-        #     nn.Flatten(start_dim=1),
-        # )
+        self.cnn_pre = nn.Sequential(
+            # ResidualBlock(in_channels=self.in_channels, out_channels=64, reduce_output=True),
+            # ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
+            # ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
+            ResidualBlock(in_channels=self.in_channels, out_channels=self.window_embedding_dim, reduce_output=True),
+            nn.AdaptiveMaxPool1d(output_size=(1,)),
+            nn.Flatten(start_dim=1),
+        )
         # self.linear_pre = nn.Sequential(
         #     nn.Flatten(start_dim=1),
         #     nn.Linear(in_features=self.windows_length * self.in_channels, out_features=1024),
@@ -98,19 +98,15 @@ class EEGT(pl.LightningModule):
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
-
         with profiler.record_function("cnns"):
+            timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length//2))
+            if timestamps[-1] != x.shape[1]:
+                timestamps += [x.shape[1]]
             x = einops.rearrange(x, "b s c -> b c s")  # (b c s)
-            # timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length))
-            # if timestamps[-1] != x.shape[1]:
-            #     timestamps += [x.shape[1]]
-            # latent_representations = []
-            # for t in timestamps:
-            #     # latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
-            #     latent_representations += [self.linear_pre(x[:, :, t - self.windows_length:t])]
-            # x = torch.stack(latent_representations, dim=1)
-            x = self.cnn(x)
-            x = einops.rearrange(x, "b c s -> b s c")  # (b s c)
+            latent_representations = []
+            for t in timestamps:
+                latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
+            x = torch.stack(latent_representations, dim=1)
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
@@ -234,17 +230,17 @@ class ResidualBlock(nn.Module):
         self.reduction_stream = nn.Sequential(
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
                       kernel_size=1, stride=1),
-            nn.BatchNorm1d(num_features=self.in_channels),
-            nn.GELU(),
+            # nn.BatchNorm1d(num_features=self.in_channels),
+            nn.ReLU(),
 
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
                       kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm1d(num_features=self.in_channels),
-            nn.GELU(),
+            # nn.BatchNorm1d(num_features=self.in_channels),
+            nn.ReLU(),
 
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
                       kernel_size=1, stride=2 if self.reduce_output else 1),
-            nn.BatchNorm1d(num_features=self.out_channels),
+            # nn.BatchNorm1d(num_features=self.out_channels),
         )
         self.projection_stream = nn.Sequential(
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,

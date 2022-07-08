@@ -23,7 +23,7 @@ def get_training_args():
                         action="store_true",
                         help="Whether not to discretize labels in {0, 1}")
     parser.add_argument("--limit_train_batches",
-                        default=None,
+                        default=1.0,
                         help="Whether to limit the number of train batches")
     parser.add_argument("--checkpoints_path",
                         type=str,
@@ -58,11 +58,11 @@ def get_training_args():
 
     # model args
     parser.add_argument("--num_encoders",
-                        default=4,
+                        default=2,
                         type=int,
                         help="Number of encoders in EEGT")
     parser.add_argument("--num_decoders",
-                        default=4,
+                        default=2,
                         type=int,
                         help="Number of decoders in EEGT")
     parser.add_argument("--window_embedding_dim",

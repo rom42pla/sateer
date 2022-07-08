@@ -95,10 +95,11 @@ elif args.setting == "within_subject":
         subject_ids = dataset_class.get_subject_ids_static(args.dataset_path)
         for i_subject, subject_id in tqdm(enumerate(subject_ids),
                                           desc="looping through subjects", total=len(subject_ids)):
-            if i_subject >= 2:
-                break
+            # if i_subject >= 2:
+            #     break
             dataset = dataset_class(path=args.dataset_path,
                                     subject_ids=subject_id,
+                                    split_in_windows=False,
                                     windows_size=args.windows_size, drop_last=True,
                                     discretize_labels=args.discretize_labels, normalize_eegs=True,
                                     validation=args.validation, k_folds=args.k_folds,
@@ -110,7 +111,7 @@ elif args.setting == "within_subject":
 
                 model = EEGT(in_channels=32,
                              labels=dataset.labels_to_use,
-                             sampling_rate=dataset.sampling_rate, windows_length=0.1,
+                             sampling_rate=dataset.sampling_rate, windows_length=1,
                              num_encoders=args.num_encoders, num_decoders=args.num_decoders,
                              window_embedding_dim=args.window_embedding_dim,
                              mask_perc_min=0.05, mask_perc_max=0.2) \
@@ -145,6 +146,7 @@ elif args.setting == "within_subject":
                 subject_df = pd.read_csv(
                     join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
                 subject_df["subject_id"] = subject_id
+                subject_df["fold"] = fold_dir
                 subject_metrics_dfs += [subject_df]
             metrics_df = pd.concat(subject_metrics_dfs)
             mean_performances_df = metrics_df[
@@ -152,6 +154,9 @@ elif args.setting == "within_subject":
                  "acc_val", "subject_id"]].groupby("subject_id").max().mean()
             print(f"Stats for subject {subject_id}:")
             pprint(mean_performances_df.to_dict())
+            print(metrics_df)
+            print(metrics_df.columns)
+            exit()
 
         # logs metrics
         metrics_df = []

@@ -17,11 +17,11 @@ import pytorch_lightning as pl
 
 
 class DEAPDataset(pl.LightningDataModule):
-    def __init__(self, path: str, windows_size: Union[float, int] = 1, drop_last: bool = True,
-                 subject_ids: Optional[Union[str, List[str]]] = None,
+    def __init__(self, path: str, subject_ids: Optional[Union[str, List[str]]] = None,
                  labels_to_use: Optional[List[str]] = None,
                  discretize_labels: bool = False, normalize_eegs: bool = False,
                  validation: Optional[str] = None, k_folds: Optional[int] = 10,
+                 split_in_windows: bool = True, windows_size: Union[float, int] = 1, drop_last: bool = True,
                  batch_size: int = 32):
         super().__init__()
         assert isdir(path)
@@ -32,18 +32,20 @@ class DEAPDataset(pl.LightningDataModule):
         assert isinstance(normalize_eegs, bool)
         self.normalize_eegs = normalize_eegs
 
-        assert isinstance(windows_size, float) or isinstance(windows_size, int) and windows_size > 0
-        self.windows_size: float = float(windows_size)  # s
         self.sampling_rate: int = 128  # Hz
         self.in_channels: int = 32
         self.labels: Dict[str, int] = {"valence": 0,
                                        "arousal": 1,
                                        "dominance": 2,
                                        "liking": 3}  # valence, arousal, dominance, liking
-        self.samples_per_window = int(np.floor(self.sampling_rate * self.windows_size))
-
-        assert isinstance(drop_last, bool)
-        self.drop_last = drop_last
+        assert isinstance(split_in_windows, bool)
+        self.split_in_windows = split_in_windows
+        if self.split_in_windows is True:
+            assert isinstance(windows_size, float) or isinstance(windows_size, int) and windows_size > 0
+            self.windows_size: float = float(windows_size)  # s
+            self.samples_per_window = int(np.floor(self.sampling_rate * self.windows_size))
+            assert isinstance(drop_last, bool)
+            self.drop_last = drop_last
 
         assert isinstance(batch_size, int)
         self.batch_size = batch_size
@@ -101,21 +103,28 @@ class DEAPDataset(pl.LightningDataModule):
                                                         "v e s -> v s e")[:, :self.sampling_rate * 60, :32]
             subject_labels: np.ndarray = subject_data_dict["labels"]
             for i_experiment in range(subject_eegs.shape[-1]):
-                # split the eegs in windows
-                windows = np.split(subject_eegs[i_experiment],
-                                   np.arange(self.samples_per_window, subject_eegs[i_experiment].shape[0],
-                                             self.samples_per_window),
-                                   0)
                 # adjusts the labels
-                labels = subject_labels[i_experiment]
-                labels = labels[[self.labels[l] for l in self.labels_to_use]]
-                labels = np.tile(labels, reps=(len(windows), 1))
-                assert np.isclose(labels, labels[0]).all()
-                assert len(windows) == len(labels)
-                # appends the windows
-                data["eegs"] += windows
-                data["labels"] += [l for l in labels]
-                data["subject_id"] += [subject_id for _ in windows]
+                experiment_eegs = subject_eegs[i_experiment]
+                experiment_labels = subject_labels[i_experiment]
+                experiment_labels = experiment_labels[[self.labels[l] for l in self.labels_to_use]]
+                if self.split_in_windows:
+                    # split the eegs in windows
+                    experiment_eegs = np.split(experiment_eegs,
+                                               np.arange(self.samples_per_window, experiment_eegs.shape[0],
+                                                         self.samples_per_window),
+                                               0)
+                    experiment_labels = np.tile(experiment_labels, reps=(len(experiment_eegs), 1))
+                    assert np.isclose(experiment_labels, experiment_labels[0]).all()
+                    assert len(experiment_eegs) == len(experiment_labels)
+                    # appends the windows
+                    data["eegs"] += experiment_eegs
+                    data["labels"] += [l for l in experiment_labels]
+                    data["subject_id"] += [subject_id for _ in experiment_eegs]
+                else:
+                    # appends the windows
+                    data["eegs"] += [experiment_eegs]
+                    data["labels"] += [experiment_labels]
+                    data["subject_id"] += [subject_id]
             return data
 
         eegs_path = [join(self.path, "data_preprocessed_python", s)
@@ -129,7 +138,7 @@ class DEAPDataset(pl.LightningDataModule):
             self.subject_ids_windows: List[np.ndarray] = [labels for data in data_pool for labels in data["subject_id"]]
         assert len(self.eeg_windows) == len(self.label_windows)
         # eventually drops uneven windows
-        if self.drop_last is True:
+        if self.split_in_windows and self.drop_last is True:
             i_windows = [i for i, w in enumerate(self.eeg_windows)
                          if w.shape[0] == self.samples_per_window]
             self.eeg_windows, self.label_windows, self.subject_ids_windows = [self.eeg_windows[i] for i in i_windows], \
@@ -138,7 +147,7 @@ class DEAPDataset(pl.LightningDataModule):
                                                                              [self.subject_ids_windows[i] for i in
                                                                               i_windows]
         # eventually pads uneven windows
-        else:
+        elif self.split_in_windows:
             self.eeg_windows = [w if w.shape[0] == self.samples_per_window
                                 else np.vstack((w, np.zeros((self.samples_per_window - w.shape[0], w.shape[1]))))
                                 for w in self.eeg_windows]
