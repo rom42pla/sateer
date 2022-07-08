@@ -105,7 +105,7 @@ class EEGT(pl.LightningModule):
                 self.special_tokens["start"],
                 self.special_tokens["end"],
                 self.special_tokens["mask"],
-            ]))
+            ], device=self.device))
             if self.training:
                 # masks a percentage of tokens
                 for i_batch, batch in enumerate(x):
