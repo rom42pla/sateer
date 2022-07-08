@@ -1,3 +1,4 @@
+from copy import deepcopy
 from multiprocessing import Pool
 from os.path import isdir, join, splitext, basename
 from pprint import pprint
@@ -131,7 +132,7 @@ class DEAPDataset(pl.LightningDataModule):
         # handle labels
         for i_window, window_labels in enumerate(self.label_windows):
             if self.discretize_labels:
-                self.label_windows[i_window] = [1 if label > 5 else 0 for label in window_labels]
+                self.label_windows[i_window] = [1 if label >= 5 else 0 for label in window_labels]
             else:
                 self.label_windows[i_window] /= 9
         # converts data to tensors
@@ -139,7 +140,8 @@ class DEAPDataset(pl.LightningDataModule):
         if self.normalize_eegs:
             # self.eeg_windows -= self.eeg_windows.amin(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
             # self.eeg_windows /= self.eeg_windows.amax(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
-            self.eeg_windows = (self.eeg_windows - self.eeg_windows.mean(dim=0)) / self.eeg_windows.std(dim=0)
+            self.eeg_windows = self.eeg_windows / self.eeg_windows.amax()
+            # self.eeg_windows = (self.eeg_windows - self.eeg_windows.mean()) / self.eeg_windows.std()
         self.label_windows = torch.stack([torch.as_tensor(w).long() for w in self.label_windows])
 
     def setup(self, stage: Optional[str] = None):
