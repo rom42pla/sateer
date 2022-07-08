@@ -1,8 +1,13 @@
 import gc
+import json
+import random
 from datetime import datetime
-from os.path import join
+from os import listdir, makedirs
+from os.path import join, isdir
+from pprint import pprint
 
 import numpy as np
+import pandas as pd
 import torch.cuda
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import CSVLogger
@@ -10,73 +15,138 @@ from tqdm import tqdm
 
 from arg_parsers import get_training_args
 from datasets.deap import DEAPDataset
-from models.eegt import EEGEmotionRecognitionTransformer
+from models.eegt import EEGT
 import pytorch_lightning as pl
 
+# retrieves line arguments
 args = get_training_args()
-experiment_name = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
+# sets the random seed
+random.seed(args.seed)
+np.random.seed(args.seed)
+torch.manual_seed(args.seed)
+
+# sets the logging folder
+datetime_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+experiment_name = f"{datetime_str}_{args.setting}_{args.validation}"
+makedirs(join(args.checkpoints_path, experiment_name))
+
+# saves the line arguments
+with open(join(args.checkpoints_path, experiment_name, "line_args.json"), 'w') as fp:
+    json.dump(vars(args), fp, indent=4)
+print(f"Line args")
+pprint(vars(args))
+
+# sets up the dataset to use
 if args.dataset_type == "deap":
-    dataset = DEAPDataset(path=args.dataset_path,
-                          windows_size=args.windows_size, drop_last=True,
-                          discretize_labels=args.discretize_labels, normalize_eegs=True,
-                          validation=args.validation, k_folds=args.k_folds,
-                          batch_size=args.batch_size)
-# model = EEGEmotionRecognitionTransformer(in_channels=32,
-#                                          labels=4) \
-#     .to("cuda" if torch.cuda.is_available() else "cpu")
-# model(torch.randn(64, 128, 32))
-# exit()
-print(f"starting training with {dataset.validation} validation")
-if dataset.validation == "k_fold":
-    for i_fold in range(dataset.k_folds):
-        print(f"training fold_{i_fold}")
-        gc.collect()
-        dataset.set_k_fold(i_fold)
-        dataset.setup(stage="fit")
+    dataset_class = DEAPDataset
 
-        model = EEGEmotionRecognitionTransformer(in_channels=32,
-                                                 labels=["valence", "arousal", "dominance", "liking"]) \
-            .to("cuda" if torch.cuda.is_available() else "cpu")
-        trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
-                             max_epochs=args.max_epochs, check_val_every_n_epoch=1,
-                             num_sanity_val_steps=args.batch_size,
-                             logger=CSVLogger(args.checkpoints_path, name=experiment_name, version=f"fold_{i_fold}"),
-                             limit_train_batches=args.limit_train_batches,
-                             limit_val_batches=args.limit_train_batches,
-                             enable_checkpointing=True if args.checkpoints_path is not None else False,
-                             callbacks=[
-                                 ModelCheckpoint(dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
-                                                 save_top_k=1,
-                                                 monitor="loss_val", mode="min",
-                                                 filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
-                                 EarlyStopping(monitor="acc_val",
-                                               min_delta=0, patience=20,
-                                               verbose=False, mode="max", check_on_train_epoch_end=False),
-                             ] if args.checkpoints_path is not None else [])
-        trainer.fit(model, datamodule=dataset)
-        del trainer, model
-        # eventually stops validation
-        if args.single_validation_step:
-            break
+print(f"starting {args.setting} training with {args.validation} validation")
+if args.setting == "cross_subject":
+    # print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
+    # if args.dataset_type == "deap":
+    #     dataset = dataset_class(path=args.dataset_path,
+    #                             windows_size=args.windows_size, drop_last=True,
+    #                             discretize_labels=args.discretize_labels, normalize_eegs=True,
+    #                             validation=args.validation, k_folds=args.k_folds,
+    #                             batch_size=args.batch_size)
+    # if args.validation == "k_fold":
+    #     for i_fold in range(dataset.k_folds):
+    #         print(f"training fold_{i_fold}")
+    #         gc.collect()
+    #         dataset.set_k_fold(i_fold)
+    #
+    #         model = EEGT(in_channels=32,
+    #                      labels=["valence", "arousal", "dominance", "liking"]) \
+    #             .to("cuda" if torch.cuda.is_available() else "cpu")
+    #         trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
+    #                              max_epochs=args.max_epochs, check_val_every_n_epoch=1,
+    #                              num_sanity_val_steps=args.batch_size,
+    #                              logger=CSVLogger(args.checkpoints_path, name=experiment_name,
+    #                                               version=f"fold_{i_fold}"),
+    #                              limit_train_batches=args.limit_train_batches,
+    #                              limit_val_batches=args.limit_train_batches,
+    #                              enable_checkpointing=True if args.checkpoints_path is not None else False,
+    #                              callbacks=[
+    #                                  ModelCheckpoint(
+    #                                      dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
+    #                                      save_top_k=1,
+    #                                      monitor="loss_val", mode="min",
+    #                                      filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
+    #                                  EarlyStopping(monitor="acc_val",
+    #                                                min_delta=0, patience=20,
+    #                                                verbose=False, mode="max", check_on_train_epoch_end=False),
+    #                              ] if args.checkpoints_path is not None else [])
+    #         trainer.fit(model, datamodule=dataset)
+    #         del trainer, model
+    #         # eventually stops validation
+    #         if args.single_validation_step:
+    #             break
+    raise NotImplementedError
+elif args.setting == "within_subject":
+    if args.validation == "k_fold":
+        for i_subject, subject_id in tqdm(enumerate(dataset_class.get_subject_ids_static(args.dataset_path)),
+                                          desc="looping through subjects"):
+            if i_subject >= 2:
+                break
+            dataset = dataset_class(path=args.dataset_path,
+                                    subject_ids=subject_id,
+                                    windows_size=args.windows_size, drop_last=True,
+                                    discretize_labels=args.discretize_labels, normalize_eegs=True,
+                                    validation=args.validation, k_folds=args.k_folds,
+                                    batch_size=args.batch_size)
+            for i_fold in range(dataset.k_folds):
+                print(f"training fold_{i_fold}")
+                gc.collect()
+                dataset.set_k_fold(i_fold)
 
-elif dataset.validation == "loso":
-    for i_subject in dataset.subjects_ids_indices.keys():
-        gc.collect()
-        dataset.set_loso_index(i_subject)
-        dataset.setup(stage="fit")
-
-        model = EEGEmotionRecognitionTransformer()
-        model = model.double()
-
-        trainer = pl.Trainer(gpus=0, precision=32, max_epochs=100, check_val_every_n_epoch=2,
-                             logger=False, enable_checkpointing=False)
-        del trainer, model
-        # trainer.fit(model, datamodule=dataset)
-
-# deap_dataloader = DEAPDataloader(dataset=deap_dataset, batch_size=256)
-# print(deap_dataset[0][0].shape)
-
-# model = MyModel()
-# print(model)
+                model = EEGT(in_channels=32,
+                             labels=["valence", "arousal", "dominance", "liking"],
+                             sampling_rate=dataset.sampling_rate, windows_length=0.1,
+                             num_encoders=args.num_encoders, num_decoders=args.num_decoders,
+                             window_embedding_dim=args.window_embedding_dim,
+                             mask_perc_min=0.1, mask_perc_max=0.3) \
+                    .to("cuda" if torch.cuda.is_available() else "cpu")
+                trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
+                                     max_epochs=args.max_epochs, check_val_every_n_epoch=1,
+                                     num_sanity_val_steps=args.batch_size,
+                                     logger=CSVLogger(args.checkpoints_path, name=experiment_name,
+                                                      version=join(subject_id, f"fold_{i_fold}")),
+                                     limit_train_batches=args.limit_train_batches,
+                                     limit_val_batches=args.limit_train_batches,
+                                     enable_checkpointing=False,
+                                     callbacks=[
+                                         # ModelCheckpoint(
+                                         #     dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
+                                         #     save_top_k=1,
+                                         #     monitor="loss_val", mode="min",
+                                         #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
+                                         EarlyStopping(monitor="acc_val",
+                                                       min_delta=0, patience=20,
+                                                       verbose=False, mode="max", check_on_train_epoch_end=False),
+                                     ] if args.checkpoints_path is not None else [])
+                trainer.fit(model, datamodule=dataset)
+                del trainer, model
+                # eventually stops validation
+                # if args.single_validation_step:
+                #     break
+        # logs metrics
+        metrics_df = []
+        for subject_id in [f for f in listdir(join(args.checkpoints_path, experiment_name))
+                           if isdir(join(args.checkpoints_path, experiment_name, f))]:
+            for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
+                             if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))
+                                and f.startswith("fold_")]:
+                subject_df = pd.read_csv(
+                    join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
+                subject_df["subject_id"] = subject_id
+                metrics_df += [subject_df]
+        metrics_df = pd.concat(metrics_df)
+        metrics_df.to_csv(join(args.checkpoints_path, experiment_name, "metrics.csv"), index=False)
+        mean_performances_df = metrics_df[["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
+                                           "acc_val", "subject_id"]].groupby("subject_id").max().mean()
+        # saves the mean values
+        with open(join(args.checkpoints_path, experiment_name, "mean_performances.json"), 'w') as fp:
+            json.dump(mean_performances_df.to_dict(), fp, indent=4)
+        print(f"Mean performances from all users")
+        pprint(mean_performances_df.to_dict())

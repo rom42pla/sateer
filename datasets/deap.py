@@ -49,10 +49,9 @@ class DEAPDataset(pl.LightningDataModule):
         if subject_ids is not None:
             assert set(subject_ids).issubset(
                 DEAPDataset.get_subject_ids_static(path)), f"one or more subject ids are not in dataset"
-            self.subject_ids: Optional[List[str]] = subject_ids
+            self.subject_ids: List[str] = subject_ids
         else:
-            self.subject_ids = DEAPDataset.get_subject_ids_static(self.path)
-
+            self.subject_ids: List[str] = self.get_subject_ids()
         self.prepare_data()
 
         # sets up k-fold
@@ -72,7 +71,6 @@ class DEAPDataset(pl.LightningDataModule):
             self.subjects_ids_indices = {i_subject: subject_id
                                          for i_subject, subject_id in
                                          enumerate(DEAPDataset.get_subject_ids_static(path=self.path))}
-        self.setup(stage="fit")
 
     def __len__(self):
         return len(self.eeg_windows)
@@ -120,11 +118,11 @@ class DEAPDataset(pl.LightningDataModule):
         if self.drop_last is True:
             i_windows = [i for i, w in enumerate(self.eeg_windows)
                          if w.shape[0] == self.samples_per_window]
-            self.eeg_windows, self.label_windows, self.subject_ids_windows, = [self.eeg_windows[i] for i in i_windows], \
-                                                                              [self.label_windows[i] for i in
-                                                                               i_windows], \
-                                                                              [self.subject_ids_windows[i] for i in
-                                                                               i_windows]
+            self.eeg_windows, self.label_windows, self.subject_ids_windows = [self.eeg_windows[i] for i in i_windows], \
+                                                                             [self.label_windows[i] for i in
+                                                                              i_windows], \
+                                                                             [self.subject_ids_windows[i] for i in
+                                                                              i_windows]
         # eventually pads uneven windows
         else:
             self.eeg_windows = [w if w.shape[0] == self.samples_per_window
@@ -139,8 +137,9 @@ class DEAPDataset(pl.LightningDataModule):
         # converts data to tensors
         self.eeg_windows = torch.stack([torch.as_tensor(w).float() for w in self.eeg_windows])
         if self.normalize_eegs:
-            self.eeg_windows -= self.eeg_windows.amin(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
-            self.eeg_windows /= self.eeg_windows.amax(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
+            # self.eeg_windows -= self.eeg_windows.amin(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
+            # self.eeg_windows /= self.eeg_windows.amax(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
+            self.eeg_windows = (self.eeg_windows - self.eeg_windows.mean(dim=0)) / self.eeg_windows.std(dim=0)
         self.label_windows = torch.stack([torch.as_tensor(w).long() for w in self.label_windows])
 
     def setup(self, stage: Optional[str] = None):
@@ -182,10 +181,9 @@ class DEAPDataset(pl.LightningDataModule):
         assert isinstance(i, int) and i in self.subjects_ids_indices.keys()
         self.current_loso_index = i
 
-    def get_subject_ids(path: str) -> List[str]:
-        assert isdir(path)
+    def get_subject_ids(self) -> List[str]:
         subject_ids = [basename(splitext(s)[0])
-                       for s in os.listdir(join(path, "data_preprocessed_python"))]
+                       for s in os.listdir(join(self.path, "data_preprocessed_python"))]
         subject_ids.sort()
         return subject_ids
 
