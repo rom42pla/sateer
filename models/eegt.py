@@ -184,7 +184,7 @@ class EEGT(pl.LightningModule):
         return mask
 
     def add_positional_encodings(self, x):
-        position = torch.arange(self.max_sequence_length).unsqueeze(1)
+        position = torch.arange(self.max_sequence_length, device=self.device).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, x.shape[-1], 2, device=self.device, dtype=torch.float32)
                              * (-math.log(10000.0) / x.shape[-1]))
         pe = torch.zeros(self.max_sequence_length, 1, x.shape[-1], device=self.device, dtype=torch.float32)
