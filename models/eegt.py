@@ -43,7 +43,7 @@ class EEGT(pl.LightningModule):
         assert isinstance(mask_perc_max, float) and 0 <= mask_perc_max < 1 and mask_perc_max >= mask_perc_min
         self.mask_perc_max = mask_perc_max
 
-        assert isinstance(num_encoders, int) and num_encoders >=1
+        assert isinstance(num_encoders, int) and num_encoders >= 1
         self.num_encoders = num_encoders
 
         assert isinstance(num_decoders, int) and num_decoders >= 1
@@ -53,9 +53,10 @@ class EEGT(pl.LightningModule):
         self.window_embedding_dim = window_embedding_dim
 
         self.cnn_pre = nn.Sequential(
-            ResidualBlock(in_channels=self.in_channels, out_channels=64, reduce_output=True),
-            ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
-            ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
+            # ResidualBlock(in_channels=self.in_channels, out_channels=64, reduce_output=True),
+            # ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
+            # ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
+            ResidualBlock(in_channels=self.in_channels, out_channels=self.window_embedding_dim, reduce_output=True),
             nn.AdaptiveMaxPool1d(output_size=(1,)),
             nn.Flatten(start_dim=1),
         )
@@ -77,10 +78,7 @@ class EEGT(pl.LightningModule):
         for label in self.labels:
             self.classification.add_module(label,
                                            nn.Sequential(
-                                               nn.Linear(in_features=self.window_embedding_dim, out_features=256),
-                                               nn.ReLU(),
-                                               nn.BatchNorm1d(256),
-                                               nn.Linear(in_features=256, out_features=2),
+                                               nn.Linear(in_features=self.window_embedding_dim, out_features=1),
                                            ))
         self.float()
         self.save_hyperparameters()
@@ -132,39 +130,50 @@ class EEGT(pl.LightningModule):
             x = self.transformer_decoder(e, x)
 
         with profiler.record_function("predictions"):
-            labels_pred = torch.stack([net(x[:, i_label, :])
-                                       for i_label, net in enumerate(self.classification)],
-                                      dim=1)  # (b l d)
+            # labels_pred = torch.stack([net(x[:, i_label, :])
+            #                            for i_label, net in enumerate(self.classification)],
+            #                           dim=1)  # (b l d)
+            labels_pred = torch.cat([net(x[:, i_label, :])
+                                     for i_label, net in enumerate(self.classification)],
+                                    dim=-1)  # (b l)
             assert labels_pred.shape[1] == len(self.labels)
-
         return labels_pred
 
     def training_step(self, batch, batch_idx):
         eeg, labels = [e.to(self.device) for e in batch]  # (b s c), (b l)
-        labels_pred = self(eeg)  # (b l d)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
-                  for i_label in range(labels.shape[-1])]
-        accs = [torchmetrics.functional.accuracy(labels_pred[:, i_label, :], labels[:, i_label], average="micro")
+        # labels_pred = self(eeg)  # (b l d)
+        labels_pred = self(eeg)  # (b l)
+        # losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
+        #           for i_label in range(labels.shape[-1])]
+        loss = F.binary_cross_entropy_with_logits(input=labels_pred, target=labels.float())
+        # accs = [torchmetrics.functional.accuracy(labels_pred[:, i_label, :], labels[:, i_label], average="micro")
+        #         for i_label in range(labels.shape[-1])]
+        accs = [torchmetrics.functional.accuracy(labels_pred[:, i_label], labels[:, i_label], average="micro")
                 for i_label in range(labels.shape[-1])]
         for i_label, label in enumerate(self.labels):
-            self.log(f"{label}_loss_train", losses[i_label], prog_bar=False)
+            # self.log(f"{label}_loss_train", losses[i_label], prog_bar=False)
             self.log(f"{label}_acc_train", accs[i_label], prog_bar=False)
-        loss, acc = sum(losses), (sum(accs) / len(accs))
+        # loss, acc = sum(losses), (sum(accs) / len(accs))
+        acc = (sum(accs) / len(accs))
         self.log(f"loss", loss)
         self.log(f"acc_train", acc, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         eeg, labels = [e.to(self.device) for e in batch]  # (b s c), (b l)
-        labels_pred = self(eeg)  # (b l d)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
-                  for i_label in range(labels.shape[-1])]
-        accs = [torchmetrics.functional.accuracy(labels_pred[:, i_label, :], labels[:, i_label], average="micro")
+        labels_pred = self(eeg)  # (b l)
+        # losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
+        #           for i_label in range(labels.shape[-1])]
+        loss = F.binary_cross_entropy_with_logits(input=labels_pred, target=labels.float())
+        # accs = [torchmetrics.functional.accuracy(labels_pred[:, i_label, :], labels[:, i_label], average="micro")
+        #         for i_label in range(labels.shape[-1])]
+        accs = [torchmetrics.functional.accuracy(labels_pred[:, i_label], labels[:, i_label], average="micro")
                 for i_label in range(labels.shape[-1])]
         for i_label, label in enumerate(self.labels):
-            self.log(f"{label}_loss_val", losses[i_label], prog_bar=False)
+            # self.log(f"{label}_loss_val", losses[i_label], prog_bar=False)
             self.log(f"{label}_acc_val", accs[i_label], prog_bar=False)
-        loss, acc = sum(losses), (sum(accs) / len(accs))
+        # loss, acc = sum(losses), (sum(accs) / len(accs))
+        acc = (sum(accs) / len(accs))
         self.log(f"loss_val", loss, prog_bar=True)
         self.log(f"acc_val", acc, prog_bar=True)
 
