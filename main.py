@@ -10,10 +10,10 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 import torch.cuda
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichProgressBar, TQDMProgressBar
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
-from rich.progress import track
+
 from tqdm.autonotebook import tqdm
 
 from arg_parsers import get_training_args
