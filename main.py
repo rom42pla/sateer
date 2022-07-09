@@ -71,6 +71,7 @@ if args.setting == "cross_subject":
                          sampling_rate=dataset.sampling_rate, windows_length=1,
                          num_encoders=args.num_encoders, num_decoders=args.num_decoders,
                          window_embedding_dim=args.window_embedding_dim,
+                         learning_rate=args.learning_rate,
                          mask_perc_min=0.05, mask_perc_max=0.2) \
                 .to("cuda" if torch.cuda.is_available() else "cpu")
             trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
@@ -121,6 +122,7 @@ elif args.setting == "within_subject":
                              sampling_rate=dataset.sampling_rate, windows_length=1,
                              num_encoders=args.num_encoders, num_decoders=args.num_decoders,
                              window_embedding_dim=args.window_embedding_dim,
+                             learning_rate=args.learning_rate,
                              mask_perc_min=0.05, mask_perc_max=0.2) \
                     .to("cuda" if torch.cuda.is_available() else "cpu")
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,

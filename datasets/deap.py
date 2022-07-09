@@ -12,7 +12,6 @@ import os
 import numpy as np
 import pickle
 import einops
-from tqdm import tqdm
 import pytorch_lightning as pl
 
 

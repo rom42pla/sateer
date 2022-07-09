@@ -17,7 +17,8 @@ class EEGT(pl.LightningModule):
                  max_sequence_length: int = 5000,
                  mask_perc_min: float = 0.05, mask_perc_max: float = 0.15,
                  num_encoders: int = 4, num_decoders: int = 4,
-                 window_embedding_dim: int = 512):
+                 window_embedding_dim: int = 512,
+                 learning_rate: float = 1e-3):
         super().__init__()
         assert isinstance(in_channels, int) and in_channels >= 1
         self.in_channels = in_channels
@@ -51,6 +52,9 @@ class EEGT(pl.LightningModule):
 
         assert isinstance(window_embedding_dim, int) and window_embedding_dim >= 1
         self.window_embedding_dim = window_embedding_dim
+
+        assert isinstance(learning_rate, float) and learning_rate > 0
+        self.learning_rate = learning_rate
 
         self.cnn = nn.Sequential(
             ResidualBlock(in_channels=self.in_channels, out_channels=256, reduce_output=True),
@@ -183,7 +187,7 @@ class EEGT(pl.LightningModule):
         self.log("training", False, prog_bar=False)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
 
     def generate_square_subsequent_mask(self, sequence_length: int):

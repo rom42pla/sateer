@@ -69,6 +69,10 @@ def get_training_args():
                         default=512,
                         type=int,
                         help="Dimension of the internal windows embedding in EEGT")
+    parser.add_argument("--learning_rate",
+                        default=1e-3,
+                        type=float,
+                        help="Learning rate of the model")
 
     args = parser.parse_args()
 
@@ -94,5 +98,6 @@ def get_training_args():
 
     assert args.num_encoders >= 1
     assert args.num_decoders >= 1
+    assert args.learning_rate > 0
 
     return args
