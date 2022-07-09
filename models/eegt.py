@@ -103,7 +103,7 @@ class EEGT(pl.LightningModule):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
         with profiler.record_function("cnns"):
-            timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length//2))
+            timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length // 2))
             if timestamps[-1] != x.shape[1]:
                 timestamps += [x.shape[1]]
             x = einops.rearrange(x, "b s c -> b c s")  # (b c s)
@@ -168,7 +168,7 @@ class EEGT(pl.LightningModule):
         loss, acc = sum(losses), (sum(accs) / len(accs))
         self.log(f"loss", loss)
         self.log(f"acc_train", acc, prog_bar=True)
-        self.log("training", True, prog_bar=False)
+        self.log("training", 1, prog_bar=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -184,7 +184,7 @@ class EEGT(pl.LightningModule):
         loss, acc = sum(losses), (sum(accs) / len(accs))
         self.log(f"loss_val", loss, prog_bar=True)
         self.log(f"acc_val", acc, prog_bar=True)
-        self.log("training", False, prog_bar=False)
+        self.log("training", 0, prog_bar=False)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
@@ -236,27 +236,33 @@ class ResidualBlock(nn.Module):
         self.reduction_stream = nn.Sequential(
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
                       kernel_size=1, stride=1),
-            # nn.BatchNorm1d(num_features=self.in_channels),
+            nn.BatchNorm1d(num_features=self.in_channels),
             nn.ReLU(),
 
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
-                      kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm1d(num_features=self.in_channels),
+                      kernel_size=3, stride=2 if self.reduce_output else 1, padding=1),
+            nn.BatchNorm1d(num_features=self.in_channels),
             nn.ReLU(),
 
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
-                      kernel_size=1, stride=2 if self.reduce_output else 1),
-            # nn.BatchNorm1d(num_features=self.out_channels),
+                      kernel_size=1, stride=1),
+            nn.BatchNorm1d(num_features=self.out_channels),
         )
         self.projection_stream = nn.Sequential(
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
                       kernel_size=1, stride=2 if self.reduce_output else 1),
+            nn.BatchNorm1d(num_features=self.out_channels),
+        )
+        self.normalization_stream = nn.Sequential(
+            nn.ReLU()
         )
 
     def forward(self, x):
         x_transformed = self.reduction_stream(x)
-        x_projection = self.projection_stream(x)
-        out = x_transformed + x_projection
+        if self.in_channels != self.out_channels or self.reduce_output:
+            x = self.projection_stream(x)
+        x = x_transformed + x
+        out = self.normalization_stream(x)
         return out
 
 

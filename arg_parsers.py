@@ -58,6 +58,11 @@ def get_training_args():
                         help="The setting of the experiment, whether cross- or within-subject")
 
     # model args
+    parser.add_argument("--model",
+                        default="eegt",
+                        type=str,
+                        choices={"eegt", "cnn_baseline"},
+                        help="The model to use")
     parser.add_argument("--num_encoders",
                         default=2,
                         type=int,
