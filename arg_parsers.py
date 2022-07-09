@@ -2,6 +2,7 @@ import argparse
 import random
 from os import makedirs
 from os.path import isdir
+from typing import Optional
 
 
 def get_training_args():
@@ -15,8 +16,8 @@ def get_training_args():
                         type=str,
                         help="Path to dataset's directory")
     parser.add_argument("--windows_size",
-                        default=1,
-                        type=float,
+                        default=None,
+                        type=Optional[float],
                         help="Duration of the windows in seconds")
     parser.add_argument("--discretize_labels",
                         default=False,
@@ -80,7 +81,7 @@ def get_training_args():
     assert args.checkpoints_path is None or isinstance(args.checkpoints_path, str)
     if isinstance(args.checkpoints_path, str) and not isdir(args.checkpoints_path):
         makedirs(args.checkpoints_path)
-    assert args.windows_size > 0
+    assert args.windows_size is None or args.windows_size > 0
     assert args.batch_size >= 1
     assert args.max_epochs >= 1
     if args.validation == "k_fold":

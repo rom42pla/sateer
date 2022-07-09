@@ -55,7 +55,7 @@ if args.setting == "cross_subject":
     print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
     if args.dataset_type == "deap":
         dataset = dataset_class(path=args.dataset_path,
-                                split_in_windows=False,
+                                split_in_windows=True if args.windows_size is not None else False,
                                 windows_size=args.windows_size, drop_last=True,
                                 discretize_labels=args.discretize_labels, normalize_eegs=True,
                                 validation=args.validation, k_folds=args.k_folds,
@@ -106,7 +106,7 @@ elif args.setting == "within_subject":
                                           desc="looping through subjects", total=len(subject_ids)):
             dataset = dataset_class(path=args.dataset_path,
                                     subject_ids=subject_id,
-                                    split_in_windows=False,
+                                    split_in_windows=True if args.windows_size is not None else False,
                                     windows_size=args.windows_size, drop_last=True,
                                     discretize_labels=args.discretize_labels, normalize_eegs=True,
                                     validation=args.validation, k_folds=args.k_folds,
