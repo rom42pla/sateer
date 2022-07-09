@@ -161,8 +161,8 @@ class DEAPDataset(pl.LightningDataModule):
         if self.normalize_eegs:
             # self.eeg_windows -= self.eeg_windows.amin(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
             # self.eeg_windows /= self.eeg_windows.amax(dim=[0, 1]).repeat(*self.eeg_windows.shape[:2], 1)
-            # self.eeg_windows = self.eeg_windows / self.eeg_windows.amax()
             self.eeg_windows = (self.eeg_windows - self.eeg_windows.mean()) / self.eeg_windows.std()
+            self.eeg_windows = self.eeg_windows / self.eeg_windows.amax()
         self.label_windows = torch.stack([torch.as_tensor(w).long() for w in self.label_windows])
 
     def setup(self, stage: Optional[str] = None):
