@@ -17,7 +17,7 @@ def get_training_args():
                         help="Path to dataset's directory")
     parser.add_argument("--windows_size",
                         default=None,
-                        type=Optional[float],
+                        type=float,
                         help="Duration of the windows in seconds")
     parser.add_argument("--discretize_labels",
                         default=False,
