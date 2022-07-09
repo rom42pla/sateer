@@ -55,11 +55,16 @@ class CNNBaseline(pl.LightningModule):
             nn.AdaptiveAvgPool1d(output_size=(1,)),
             nn.Flatten(start_dim=1),
         )
-        self.cnn2d = nn.Sequential(
-            nn.Conv2d(in_channels=self.in_channels,out_channels=3, kernel_size=1, stride=1),
-            *list(torchvision.models.resnet34().children())[:-1],
-            nn.Flatten(start_dim=1)
+        self.bands_reduction = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.Linear(in_features=self.window_embedding_dim * 5, out_features=self.window_embedding_dim),
+            nn.ReLU()
         )
+        # self.cnn2d = nn.Sequential(
+        #     nn.Conv2d(in_channels=self.in_channels,out_channels=3, kernel_size=1, stride=1),
+        #     *list(torchvision.models.resnet34().children())[:-1],
+        #     nn.Flatten(start_dim=1)
+        # )
 
         self.special_tokens = {
             token: i_token
@@ -98,8 +103,10 @@ class CNNBaseline(pl.LightningModule):
 
         with profiler.record_function("cnns"):
             x = einops.rearrange(x, "b n s c -> b c s n")
-            # x = self.cnn(x)
-            x = self.cnn2d(x)
+            x = torch.stack([self.cnn(x[:, :, :, i_band])
+                             for i_band in range(x.shape[-1])],
+                            dim=1)  # (b n d)
+            x = self.bands_reduction(x)
 
         with profiler.record_function("predictions"):
             labels_pred = torch.stack([net(x)
