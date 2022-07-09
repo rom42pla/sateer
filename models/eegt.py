@@ -187,7 +187,7 @@ class EEGT(pl.LightningModule):
         self.log("training", False, prog_bar=False)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optimizer
 
     def generate_square_subsequent_mask(self, sequence_length: int):
