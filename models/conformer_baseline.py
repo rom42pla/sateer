@@ -1,10 +1,7 @@
 import math
 from typing import Union, List, Optional
 
-import julius
 import torch
-import torchaudio
-import torchvision.models
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
@@ -12,9 +9,10 @@ import torchmetrics
 import einops
 import torch.autograd.profiler as profiler
 from torch.profiler import profile, record_function, ProfilerActivity
+from torchaudio.models import Conformer
 
 
-class CNNBaseline(pl.LightningModule):
+class ConformerBaseline(pl.LightningModule):
     def __init__(self, in_channels: int, labels: Union[int, List[str]],
                  sampling_rate: int,
                  window_embedding_dim: int = 512,
@@ -39,33 +37,8 @@ class CNNBaseline(pl.LightningModule):
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
-        self.cnn = nn.Sequential(
-            nn.Conv1d(self.in_channels, 64, kernel_size=1, stride=1),
-
-            ResidualBlock(in_channels=64, out_channels=64, reduce_output=True),
-            ResidualBlock(in_channels=64, out_channels=64, reduce_output=False),
-            ResidualBlock(in_channels=64, out_channels=128, reduce_output=True),
-
-            ResidualBlock(in_channels=128, out_channels=128, reduce_output=True),
-            ResidualBlock(in_channels=128, out_channels=128, reduce_output=False),
-            ResidualBlock(in_channels=128, out_channels=256, reduce_output=True),
-
-            ResidualBlock(in_channels=256, out_channels=256, reduce_output=False),
-            ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
-            nn.AdaptiveAvgPool1d(output_size=(1,)),
-            nn.Flatten(start_dim=1),
-        )
-        self.cnn2d = nn.Sequential(
-            nn.Conv2d(in_channels=self.in_channels,out_channels=3, kernel_size=1, stride=1),
-            *list(torchvision.models.resnet34().children())[:-1],
-            nn.Flatten(start_dim=1)
-        )
-
-        self.special_tokens = {
-            token: i_token
-            for i_token, token in enumerate(["mask"])
-        }
-        self.tokens_embedder = nn.Embedding(len(self.special_tokens), self.window_embedding_dim)
+        self.conformer = Conformer(input_dim=self.in_channels, num_layers=2,
+                                   depthwise_conv_kernel_size=31, num_heads=8, ffn_dim=self.window_embedding_dim)
 
         self.classification = nn.ModuleList()
         for label in self.labels:
@@ -84,22 +57,15 @@ class CNNBaseline(pl.LightningModule):
         self.float()
         self.save_hyperparameters()
 
-    def split_in_bands(self, x):
-        x_bands = julius.split_bands(einops.rearrange(x, "b s c -> b c s").contiguous(),
-                                     sample_rate=self.eeg_sampling_rate,
-                                     cutoffs=[4, 8, 13, 30, 50])[1:]  # (n b c s)
-        x_bands = einops.rearrange(x_bands, "n b c s -> b n s c")
-        return x_bands
-
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
-        x = self.split_in_bands(x)  # (b n s c)
-
-        with profiler.record_function("cnns"):
-            x = einops.rearrange(x, "b n s c -> b c s n")
-            # x = self.cnn(x)
-            x = self.cnn2d(x)
+        with profiler.record_function("feature extraction"):
+            print(x.shape)
+            lengths = torch.as_tensor([x.shape[1]]).repeat(x.shape[0])
+            # x = einops.rearrange(x, "b s c -> b c s")
+            x = self.conformer(x, lengths)[0]
+            print(x.shape)
 
         with profiler.record_function("predictions"):
             labels_pred = torch.stack([net(x)
@@ -195,7 +161,7 @@ class ResidualBlock(nn.Module):
 
 
 if __name__ == "__main__":
-    model = CNNBaseline(in_channels=32, labels=4, sampling_rate=128)
+    model = ConformerBaseline(in_channels=32, labels=4, sampling_rate=128)
     x = torch.randn(64, 128, 32)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):

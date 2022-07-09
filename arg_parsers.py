@@ -61,7 +61,7 @@ def get_training_args():
     parser.add_argument("--model",
                         default="eegt",
                         type=str,
-                        choices={"eegt", "cnn_baseline"},
+                        choices={"eegt", "cnn_baseline", "conformer"},
                         help="The model to use")
     parser.add_argument("--num_encoders",
                         default=2,
