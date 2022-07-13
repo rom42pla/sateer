@@ -149,7 +149,7 @@ elif args.setting == "within_subject":
                                      num_sanity_val_steps=args.batch_size,
                                      logger=CSVLogger(args.checkpoints_path, name=experiment_name,
                                                       version=join(subject_id, f"fold_{i_fold}")),
-                                     enable_progress_bar=False,
+                                     enable_progress_bar=True,
                                      enable_model_summary=True if (i_subject == 0 and i_fold == 0) else False,
                                      limit_train_batches=args.limit_train_batches,
                                      limit_val_batches=args.limit_train_batches,
