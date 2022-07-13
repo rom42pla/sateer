@@ -7,10 +7,11 @@ from typing import Optional
 
 def get_training_args():
     parser = argparse.ArgumentParser()
+
     # dataset args
     parser.add_argument("dataset_type",
                         type=str,
-                        choices={"deap"},
+                        choices={"deap", "dreamer"},
                         help="Type of dataset")
     parser.add_argument("dataset_path",
                         type=str,
@@ -23,6 +24,10 @@ def get_training_args():
                         default=False,
                         action="store_true",
                         help="Whether not to discretize labels in {0, 1}")
+    parser.add_argument("--normalize_eegs",
+                        default=False,
+                        action="store_true",
+                        help="Whether not to normalize the EEGs with zero mean and unit variance")
     parser.add_argument("--limit_train_batches",
                         default=1.0,
                         help="Whether to limit the number of train batches")
