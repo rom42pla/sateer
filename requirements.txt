@@ -7,3 +7,4 @@ einops
 torch
 pytorch-lightning
 torchmetrics
+julius
