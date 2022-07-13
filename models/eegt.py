@@ -203,8 +203,9 @@ class EEGT(pl.LightningModule):
         return optimizer
 
     def training_epoch_end(self, outputs: Dict[str, Any]) -> None:
-        print(outputs)
-        exit()
+        # print(outputs)
+        # exit()
+        pass
 
     def generate_square_subsequent_mask(self, sequence_length: int):
         assert isinstance(sequence_length, int) and sequence_length >= 1
