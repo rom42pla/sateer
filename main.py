@@ -138,7 +138,7 @@ elif args.setting == "within_subject":
                                  learning_rate=args.learning_rate,
                                  mask_perc_min=0.05, mask_perc_max=0.2)
                 elif args.model == "cnn_baseline":
-                    model = CNNBaseline(in_channels=32,
+                    model = CNNBaseline(in_channels=len(dataset.electrodes),
                                         labels=dataset.labels_to_use,
                                         sampling_rate=dataset.sampling_rate,
                                         window_embedding_dim=args.window_embedding_dim,

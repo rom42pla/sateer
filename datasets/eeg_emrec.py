@@ -99,7 +99,7 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
         self.normalize_eegs: bool = normalize_eegs
 
         self.eegs_data, self.labels_data, self.subject_ids_data = self.load_data()
-        self.prepare_data()
+        self.setup_data()
 
         # sets up k-fold
         assert validation in {None, "k_fold", "loso"}
@@ -131,7 +131,7 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray], List[str]]:
         pass
 
-    def prepare_data(self) -> None:
+    def setup_data(self) -> None:
         # eventually normalize the eegs
         if self.normalize_eegs:
             # loops through the experiments
@@ -169,10 +169,6 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
         # handle labels
         self.labels_data = [[1 if label > 3 else 0 for label in w] if self.discretize_labels else w / 5
                             for w in self.labels_data]
-        # # converts to numpy array
-        # self.eegs_data: np.ndarray = np.stack(self.eegs_data)
-        # self.labels_data: np.ndarray = np.stack(self.labels_data)
-        # assert len(self.eegs_data) == len(self.labels_data) == len(self.subject_ids_data)
         # eventually pads uneven windows
         windows_size = max([len(w) for w in self.eegs_data])
         self.eegs_data = [w if w.shape[0] == windows_size
