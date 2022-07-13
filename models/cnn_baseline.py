@@ -98,6 +98,7 @@ class CNNBaseline(pl.LightningModule):
 
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
+        eeg *= 1e5
         x = eeg  # (b s c)
         x = self.split_in_bands(x)  # (b n s c)
 
