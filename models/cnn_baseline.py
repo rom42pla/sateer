@@ -60,31 +60,32 @@ class CNNBaseline(pl.LightningModule):
         self.bands_reduction = nn.Sequential(
             nn.Flatten(start_dim=1),
             nn.Linear(in_features=self.window_embedding_dim * 5, out_features=self.window_embedding_dim),
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout(),
         )
-        # self.cnn2d = nn.Sequential(
-        #     nn.Conv2d(in_channels=self.in_channels,out_channels=3, kernel_size=1, stride=1),
-        #     *list(torchvision.models.resnet34().children())[:-1],
-        #     nn.Flatten(start_dim=1)
-        # )
 
         self.special_tokens = {
             token: i_token
             for i_token, token in enumerate(["mask"])
         }
-        self.tokens_embedder = nn.Embedding(len(self.special_tokens), self.window_embedding_dim)
+        self.tokens_embedder = nn.Sequential(
+            nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
+            nn.Dropout(),
+        )
 
         self.classification = nn.ModuleList()
         for label in self.labels:
             self.classification.add_module(label,
                                            nn.Sequential(
                                                nn.Linear(in_features=self.window_embedding_dim, out_features=1024),
-                                               nn.Sigmoid(),
+                                               nn.ReLU(),
                                                nn.BatchNorm1d(num_features=1024),
+                                               nn.Dropout(),
 
                                                nn.Linear(in_features=1024, out_features=128),
-                                               nn.Sigmoid(),
+                                               nn.ReLU(),
                                                nn.BatchNorm1d(num_features=128),
+                                               nn.Dropout(),
 
                                                nn.Linear(in_features=128, out_features=2),
                                            ))
@@ -182,15 +183,18 @@ class ResidualBlock(nn.Module):
                       kernel_size=1, stride=1),
             nn.BatchNorm1d(num_features=self.in_channels),
             nn.ReLU(),
+            nn.Dropout1d(),
 
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
                       kernel_size=3, stride=2 if self.reduce_output else 1, padding=1),
             nn.BatchNorm1d(num_features=self.in_channels),
             nn.ReLU(),
+            nn.Dropout1d(),
 
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
                       kernel_size=1, stride=1),
             nn.BatchNorm1d(num_features=self.out_channels),
+            nn.Dropout1d(),
         )
         self.projection_stream = nn.Sequential(
             nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
@@ -198,7 +202,8 @@ class ResidualBlock(nn.Module):
             nn.BatchNorm1d(num_features=self.out_channels),
         )
         self.normalization_stream = nn.Sequential(
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout1d(),
         )
 
     def forward(self, x):
