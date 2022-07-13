@@ -22,7 +22,6 @@ from datasets.dreamer import DREAMERDataset
 from models.cnn_baseline import CNNBaseline
 from models.eegt import EEGT
 import pytorch_lightning as pl
-import intel_extension_for_pytorch as ipex
 
 import warnings
 
