@@ -19,7 +19,8 @@ class EEGT(pl.LightningModule):
                  mask_perc_min: float = 0.05, mask_perc_max: float = 0.15,
                  num_encoders: int = 4, num_decoders: int = 4,
                  window_embedding_dim: int = 512,
-                 learning_rate: float = 1e-3):
+                 learning_rate: float = 1e-3,
+                 device: Optional[str] = None):
         super().__init__()
         assert isinstance(in_channels, int) and in_channels >= 1
         self.in_channels = in_channels
@@ -98,6 +99,10 @@ class EEGT(pl.LightningModule):
                                                nn.Linear(in_features=self.window_embedding_dim, out_features=2),
                                            ))
         self.float()
+        assert device is None or device in {"cuda", "cpu"}
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.to(device)
         self.save_hyperparameters()
 
     def forward(self, eeg):

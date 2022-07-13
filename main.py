@@ -144,7 +144,6 @@ elif args.setting == "within_subject":
                                                             sampling_rate=dataset.sampling_rate,
                                                             window_embedding_dim=args.window_embedding_dim,
                                                             learning_rate=args.learning_rate)
-                model.to("cuda" if torch.cuda.is_available() else "cpu")
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
                                      max_epochs=args.max_epochs, check_val_every_n_epoch=1,
                                      num_sanity_val_steps=args.batch_size,

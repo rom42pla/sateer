@@ -18,7 +18,8 @@ class CNNBaseline(pl.LightningModule):
     def __init__(self, in_channels: int, labels: Union[int, List[str]],
                  sampling_rate: int,
                  window_embedding_dim: int = 512,
-                 learning_rate: float = 1e-3):
+                 learning_rate: float = 1e-3,
+                 device: Optional[str] = None):
         super().__init__()
         assert isinstance(in_channels, int) and in_channels >= 1
         self.in_channels = in_channels
@@ -87,6 +88,10 @@ class CNNBaseline(pl.LightningModule):
                                                nn.Linear(in_features=128, out_features=2),
                                            ))
         self.float()
+        assert device is None or device in {"cuda", "cpu"}
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.to(device)
         self.save_hyperparameters()
 
     def split_in_bands(self, x):
@@ -148,7 +153,7 @@ class CNNBaseline(pl.LightningModule):
         self.log("training", 0.0, prog_bar=False)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
 
 
