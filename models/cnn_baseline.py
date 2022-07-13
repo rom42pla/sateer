@@ -45,15 +45,15 @@ class CNNBaseline(pl.LightningModule):
 
             # ResidualBlock(in_channels=64, out_channels=64, reduce_output=True),
             # ResidualBlock(in_channels=64, out_channels=64, reduce_output=False),
-            ResidualBlock(in_channels=64, out_channels=128, reduce_output=True),
+            # ResidualBlock(in_channels=64, out_channels=128, reduce_output=True),
 
             # ResidualBlock(in_channels=128, out_channels=128, reduce_output=True),
             # ResidualBlock(in_channels=128, out_channels=128, reduce_output=False),
-            ResidualBlock(in_channels=128, out_channels=256, reduce_output=True),
+            # ResidualBlock(in_channels=128, out_channels=256, reduce_output=True),
 
             # ResidualBlock(in_channels=256, out_channels=256, reduce_output=False),
-            ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
-            # ResidualBlock(in_channels=64, out_channels=self.window_embedding_dim, reduce_output=True),
+            # ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
+            ResidualBlock(in_channels=64, out_channels=self.window_embedding_dim, reduce_output=True),
             nn.AdaptiveAvgPool1d(output_size=(1,)),
             nn.Flatten(start_dim=1),
         )
@@ -156,6 +156,9 @@ class CNNBaseline(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
+
+    def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
+        optimizer.zero_grad(set_to_none=True)
 
 
 class ResidualBlock(nn.Module):
