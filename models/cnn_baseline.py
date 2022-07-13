@@ -42,15 +42,15 @@ class CNNBaseline(pl.LightningModule):
         self.cnn = nn.Sequential(
             nn.Conv1d(self.in_channels, 64, kernel_size=1, stride=1),
 
-            ResidualBlock(in_channels=64, out_channels=64, reduce_output=True),
-            ResidualBlock(in_channels=64, out_channels=64, reduce_output=False),
+            # ResidualBlock(in_channels=64, out_channels=64, reduce_output=True),
+            # ResidualBlock(in_channels=64, out_channels=64, reduce_output=False),
             ResidualBlock(in_channels=64, out_channels=128, reduce_output=True),
 
-            ResidualBlock(in_channels=128, out_channels=128, reduce_output=True),
-            ResidualBlock(in_channels=128, out_channels=128, reduce_output=False),
+            # ResidualBlock(in_channels=128, out_channels=128, reduce_output=True),
+            # ResidualBlock(in_channels=128, out_channels=128, reduce_output=False),
             ResidualBlock(in_channels=128, out_channels=256, reduce_output=True),
 
-            ResidualBlock(in_channels=256, out_channels=256, reduce_output=False),
+            # ResidualBlock(in_channels=256, out_channels=256, reduce_output=False),
             ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
             nn.AdaptiveAvgPool1d(output_size=(1,)),
             nn.Flatten(start_dim=1),
@@ -98,7 +98,6 @@ class CNNBaseline(pl.LightningModule):
 
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
-        eeg *= 1e5
         x = eeg  # (b s c)
         x = self.split_in_bands(x)  # (b n s c)
 

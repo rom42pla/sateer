@@ -1,7 +1,8 @@
 import math
-from typing import Union, List, Optional
+from typing import Union, List, Optional, Dict, Any
 
 import torch
+from pytorch_lightning.utilities.types import EPOCH_OUTPUT
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
@@ -168,9 +169,11 @@ class EEGT(pl.LightningModule):
             self.log(f"{label}_acc_train", accs[i_label], prog_bar=False)
         loss, acc = sum(losses), (sum(accs) / len(accs))
         self.log(f"loss", loss)
-        self.log(f"acc_train", acc, prog_bar=True)
-        self.log("training", 1, prog_bar=False)
-        return loss
+        self.log(f"acc_train", acc, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("training", 1.0, prog_bar=False, on_step=False, on_epoch=True)
+        return {
+            "loss": loss,
+        }
 
     def validation_step(self, batch, batch_idx):
         eeg, labels = [e.to(self.device) for e in batch]  # (b s c), (b l)
@@ -183,13 +186,20 @@ class EEGT(pl.LightningModule):
         for i_label, label in enumerate(self.labels):
             self.log(f"{label}_acc_val", accs[i_label], prog_bar=False)
         loss, acc = sum(losses), (sum(accs) / len(accs))
-        self.log(f"loss_val", loss, prog_bar=True)
-        self.log(f"acc_val", acc, prog_bar=True)
-        self.log("training", 0, prog_bar=False)
+        self.log(f"loss_val", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(f"acc_val", acc, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("training", 0.0, prog_bar=False)
+        return {
+            "loss": loss,
+        }
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optimizer
+
+    def training_epoch_end(self, outputs: Dict[str, Any]) -> None:
+        print(outputs)
+        exit()
 
     def generate_square_subsequent_mask(self, sequence_length: int):
         assert isinstance(sequence_length, int) and sequence_length >= 1

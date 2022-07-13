@@ -22,6 +22,7 @@ from datasets.dreamer import DREAMERDataset
 from models.cnn_baseline import CNNBaseline
 from models.eegt import EEGT
 import pytorch_lightning as pl
+import intel_extension_for_pytorch as ipex
 
 import warnings
 
@@ -130,19 +131,20 @@ elif args.setting == "within_subject":
                 dataset.set_k_fold(i_fold)
 
                 if args.model == "eegt":
-                    model = EEGT(in_channels=len(dataset.electrodes),
-                                 labels=dataset.labels_to_use,
-                                 sampling_rate=dataset.sampling_rate, windows_length=dataset.window_size,
-                                 num_encoders=args.num_encoders, num_decoders=args.num_decoders,
-                                 window_embedding_dim=args.window_embedding_dim,
-                                 learning_rate=args.learning_rate,
-                                 mask_perc_min=0.05, mask_perc_max=0.2)
+                    model: pl.LightningModule = EEGT(in_channels=len(dataset.electrodes),
+                                                     labels=dataset.labels_to_use,
+                                                     sampling_rate=dataset.sampling_rate,
+                                                     windows_length=dataset.window_size,
+                                                     num_encoders=args.num_encoders, num_decoders=args.num_decoders,
+                                                     window_embedding_dim=args.window_embedding_dim,
+                                                     learning_rate=args.learning_rate,
+                                                     mask_perc_min=0.05, mask_perc_max=0.2)
                 elif args.model == "cnn_baseline":
-                    model = CNNBaseline(in_channels=len(dataset.electrodes),
-                                        labels=dataset.labels_to_use,
-                                        sampling_rate=dataset.sampling_rate,
-                                        window_embedding_dim=args.window_embedding_dim,
-                                        learning_rate=args.learning_rate)
+                    model: pl.LightningModule = CNNBaseline(in_channels=len(dataset.electrodes),
+                                                            labels=dataset.labels_to_use,
+                                                            sampling_rate=dataset.sampling_rate,
+                                                            window_embedding_dim=args.window_embedding_dim,
+                                                            learning_rate=args.learning_rate)
                 model.to("cuda" if torch.cuda.is_available() else "cpu")
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
                                      max_epochs=args.max_epochs, check_val_every_n_epoch=1,

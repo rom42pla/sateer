@@ -20,6 +20,7 @@ import pytorch_lightning as pl
 
 
 class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
+
     def __init__(self, path: str,
                  sampling_rate: int,
                  electrodes: Union[int, List[str]],
@@ -206,11 +207,11 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
 
     def train_dataloader(self):
         return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True,
-                          num_workers=os.cpu_count() - 2)
+                          num_workers=os.cpu_count() - 2, pin_memory=True)
 
     def val_dataloader(self):
         return DataLoader(self.val_split, batch_size=self.batch_size, shuffle=False,
-                          num_workers=os.cpu_count() - 2)
+                          num_workers=os.cpu_count() - 2, pin_memory=True)
 
     def set_k_fold(self, i: int) -> None:
         assert isinstance(i, int) and 0 <= i < self.k_folds
