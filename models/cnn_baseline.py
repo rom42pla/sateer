@@ -43,41 +43,32 @@ class CNNBaseline(pl.LightningModule):
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
+        assert 0 <= dropout < 1
+        self.dropout = dropout
+
         self.wavelet_scales = [1, 2, 4, 8, 16, 32]
-        # self.cnn = nn.Sequential(
-        #     nn.Conv1d(self.in_channels, 64, kernel_size=1, stride=1),
-        #
-        #     # ResidualBlock(in_channels=64, out_channels=64, reduce_output=True),
-        #     # ResidualBlock(in_channels=64, out_channels=64, reduce_output=False),
-        #     # ResidualBlock(in_channels=64, out_channels=128, reduce_output=True),
-        #
-        #     # ResidualBlock(in_channels=128, out_channels=128, reduce_output=True),
-        #     # ResidualBlock(in_channels=128, out_channels=128, reduce_output=False),
-        #     # ResidualBlock(in_channels=128, out_channels=256, reduce_output=True),
-        #
-        #     # ResidualBlock(in_channels=256, out_channels=256, reduce_output=False),
-        #     # ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
-        #     ResidualBlock(in_channels=64, out_channels=self.window_embedding_dim, reduce_output=True),
-        #     nn.AdaptiveAvgPool1d(output_size=(1,)),
-        #     nn.Flatten(start_dim=1),
-        # )
+
         self.cnn_bands = nn.ModuleList()
-        for i_band in range(5):
+        for i_band in range(len(self.wavelet_scales)):
             self.cnn_bands.add_module(f"band_{i_band}",
                                       nn.Sequential(
                                           nn.Conv1d(self.in_channels, 64, kernel_size=1, stride=1),
+                                          nn.Dropout(p=self.dropout),
 
                                           nn.Conv1d(64, 128, kernel_size=1, stride=2),
                                           nn.ReLU(),
                                           nn.BatchNorm1d(num_features=128),
+                                          nn.Dropout(p=self.dropout),
 
                                           nn.Conv1d(128, 256, kernel_size=1, stride=2),
                                           nn.ReLU(),
                                           nn.BatchNorm1d(num_features=256),
+                                          nn.Dropout(p=self.dropout),
 
                                           nn.Conv1d(256, self.window_embedding_dim, kernel_size=1, stride=2),
                                           nn.ReLU(),
                                           nn.BatchNorm1d(num_features=512),
+                                          nn.Dropout(p=self.dropout),
 
                                           nn.AdaptiveAvgPool1d(output_size=(1,)),
                                           nn.Flatten(start_dim=1),
@@ -85,13 +76,13 @@ class CNNBaseline(pl.LightningModule):
         self.bands_reduction = nn.Sequential(
             nn.Flatten(start_dim=1),
 
-            nn.Linear(in_features=self.window_embedding_dim * 5, out_features=1024),
+            nn.Linear(in_features=self.window_embedding_dim * len(self.wavelet_scales), out_features=1024),
             nn.ReLU(),
-            nn.Dropout(p=0.1),
+            nn.Dropout(p=self.dropout),
 
             nn.Linear(in_features=1024, out_features=self.window_embedding_dim),
             nn.ReLU(),
-            nn.Dropout(p=0.1),
+            nn.Dropout(p=self.dropout),
         )
 
         self.special_tokens = {
@@ -100,7 +91,7 @@ class CNNBaseline(pl.LightningModule):
         }
         self.tokens_embedder = nn.Sequential(
             nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
-            nn.Dropout(p=0.1),
+            nn.Dropout(p=self.dropout),
         )
 
         self.classification = nn.ModuleList()
@@ -110,12 +101,12 @@ class CNNBaseline(pl.LightningModule):
                                                nn.Linear(in_features=self.window_embedding_dim, out_features=1024),
                                                nn.ReLU(),
                                                nn.BatchNorm1d(num_features=1024),
-                                               nn.Dropout(p=0.1),
+                                               nn.Dropout(p=self.dropout),
 
                                                nn.Linear(in_features=1024, out_features=128),
                                                nn.ReLU(),
                                                nn.BatchNorm1d(num_features=128),
-                                               nn.Dropout(p=0.1),
+                                               nn.Dropout(p=self.dropout),
 
                                                nn.Linear(in_features=128, out_features=2),
                                            ))
@@ -136,11 +127,11 @@ class CNNBaseline(pl.LightningModule):
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
-        x = self.wavelet_decompose(x, scales=self.wavelet_scales)
+        x = self.wavelet_decompose(x, scales=self.wavelet_scales)  # (b w s e)
 
         with profiler.record_function("cnns"):
-            x = einops.rearrange(x, "b n s c -> b c s n")
-            x = torch.stack([net(x[:, :, :, i_band])
+            x = einops.rearrange(x, "b w s c -> b w c s")
+            x = torch.stack([net(x[:, i_band, :, :])
                              for i_band, net in enumerate(self.cnn_bands)],
                             dim=1)  # (b n d)
             x = self.bands_reduction(x)
