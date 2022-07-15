@@ -128,7 +128,7 @@ class CNNBaseline(pl.LightningModule):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
         x = self.wavelet_decompose(x, scales=self.wavelet_scales)  # (b w s e)
-        x.to(self.device)
+        x = x.to(self.device)
 
         with profiler.record_function("cnns"):
             x = einops.rearrange(x, "b w s c -> b w c s")
