@@ -151,7 +151,7 @@ class CNNBaseline(pl.LightningModule):
         assert any([isinstance(scales, t) for t in {np.ndarray, torch.Tensor, list}])
         assert all([width > 0 for width in scales])
         # loss of gradients
-        x.detach().cpu()
+        x = x.detach().cpu()
 
         if len(x.shape) == 2:
             x_decomposed = torch.stack([
