@@ -1,4 +1,5 @@
 jupyter
+scikit-learn
 mne
 matplotlib
 pandas
