@@ -128,6 +128,7 @@ class CNNBaseline(pl.LightningModule):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
         x = self.wavelet_decompose(x, scales=self.wavelet_scales)  # (b w s e)
+        x.to(self.device)
 
         with profiler.record_function("cnns"):
             x = einops.rearrange(x, "b w s c -> b w c s")
@@ -149,6 +150,9 @@ class CNNBaseline(pl.LightningModule):
         assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
         assert any([isinstance(scales, t) for t in {np.ndarray, torch.Tensor, list}])
         assert all([width > 0 for width in scales])
+        # loss of gradients
+        x.detach().cpu()
+
         if len(x.shape) == 2:
             x_decomposed = torch.stack([
                 torch.as_tensor(signal.cwt(x[:, i_channel], signal.ricker, scales))
@@ -162,7 +166,7 @@ class CNNBaseline(pl.LightningModule):
         return x_decomposed.float()
 
     def training_step(self, batch, batch_idx):
-        eeg, labels = [e.to(self.device) for e in batch]  # (b s c), (b l)
+        eeg, labels = [e for e in batch]  # (b s c), (b l)
         labels_pred = self(eeg)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
