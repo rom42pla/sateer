@@ -1,10 +1,12 @@
 import math
 from typing import Union, List, Optional
 
-import julius
+# import julius
+import numpy as np
 import torch
 import torchaudio
 import torchvision.models
+from scipy import signal
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
@@ -19,6 +21,7 @@ class CNNBaseline(pl.LightningModule):
                  sampling_rate: int,
                  window_embedding_dim: int = 512,
                  learning_rate: float = 1e-3,
+                 dropout: float = 0.1,
                  device: Optional[str] = None):
         super().__init__()
         assert isinstance(in_channels, int) and in_channels >= 1
@@ -40,6 +43,7 @@ class CNNBaseline(pl.LightningModule):
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
+        self.wavelet_scales = [1, 2, 4, 8, 16, 32]
         # self.cnn = nn.Sequential(
         #     nn.Conv1d(self.in_channels, 64, kernel_size=1, stride=1),
         #
@@ -122,17 +126,17 @@ class CNNBaseline(pl.LightningModule):
         self.to(device)
         self.save_hyperparameters()
 
-    def split_in_bands(self, x):
-        x_bands = julius.split_bands(einops.rearrange(x, "b s c -> b c s").contiguous(),
-                                     sample_rate=self.eeg_sampling_rate,
-                                     cutoffs=[4, 8, 13, 30, 50])[1:]  # (n b c s)
-        x_bands = einops.rearrange(x_bands, "n b c s -> b n s c")
-        return x_bands
+    # def split_in_bands(self, x):
+    #     x_bands = julius.split_bands(einops.rearrange(x, "b s c -> b c s").contiguous(),
+    #                                  sample_rate=self.eeg_sampling_rate,
+    #                                  cutoffs=[4, 8, 13, 30, 50])[1:]  # (n b c s)
+    #     x_bands = einops.rearrange(x_bands, "n b c s -> b n s c")
+    #     return x_bands
 
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
-        x = self.split_in_bands(x)  # (b n s c)
+        x = self.wavelet_decompose(x, scales=self.wavelet_scales)
 
         with profiler.record_function("cnns"):
             x = einops.rearrange(x, "b n s c -> b c s n")
@@ -148,6 +152,23 @@ class CNNBaseline(pl.LightningModule):
             assert labels_pred.shape[1] == len(self.labels)
 
         return labels_pred
+
+    @staticmethod
+    def wavelet_decompose(x, scales):
+        assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
+        assert any([isinstance(scales, t) for t in {np.ndarray, torch.Tensor, list}])
+        assert all([width > 0 for width in scales])
+        if len(x.shape) == 2:
+            x_decomposed = torch.stack([
+                torch.as_tensor(signal.cwt(x[:, i_channel], signal.ricker, scales))
+                for i_channel in range(x.shape[-1])], dim=-1)  # (w, s, e)
+        else:
+            x_decomposed = torch.stack([
+                torch.stack([
+                    torch.as_tensor(signal.cwt(x[i_batch, :, i_channel], signal.ricker, scales))
+                    for i_channel in range(x.shape[-1])], dim=-1)
+                for i_batch in range(x.shape[0])], dim=0)  # (b, w, s, e)
+        return x_decomposed.float()
 
     def training_step(self, batch, batch_idx):
         eeg, labels = [e.to(self.device) for e in batch]  # (b s c), (b l)
