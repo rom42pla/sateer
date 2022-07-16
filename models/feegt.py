@@ -323,7 +323,7 @@ class FNetEncoderBlock(nn.Module):
                                         for s in range(x.shape[1])],
                                        dim=1)
         x = x + x_feed_forwarded
-        x = nn.LayerNorm(x.shape[-1])(x)
+        x = nn.LayerNorm(x.shape[-1], device=self.device)(x)
         return x
 
 
