@@ -206,7 +206,7 @@ class EEGT(pl.LightningModule):
                                        for i_label, net in enumerate(self.classification)],
                                       dim=1)  # (b l d)
             assert labels_pred.shape[1] == len(self.labels)
-            assert len(labels_pred) == 3
+            assert len(labels_pred.shape) == 3
 
         return labels_pred
 
