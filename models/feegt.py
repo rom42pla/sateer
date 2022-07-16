@@ -317,7 +317,7 @@ class FNetEncoderBlock(nn.Module):
     def forward(self, x):
         x_mixed = self.fourier_layer(x)
         x = x + x_mixed
-        x = nn.LayerNorm(x.shape[-1])(x)
+        x = nn.LayerNorm(x.shape[-1], device=self.device)(x)
 
         x_feed_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
                                         for s in range(x.shape[1])],
