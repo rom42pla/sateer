@@ -10,3 +10,4 @@ torch
 pytorch-lightning
 torchmetrics
 librosa
+functorch
