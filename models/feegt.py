@@ -15,6 +15,7 @@ import torch.autograd.profiler as profiler
 from torch.profiler import profile, record_function, ProfilerActivity
 from torchaudio import transforms
 
+
 class FEEGT(pl.LightningModule):
     def __init__(self, in_channels: int, labels: Union[int, List[str]],
                  sampling_rate: int, windows_length: float = 0.1,
@@ -79,21 +80,21 @@ class FEEGT(pl.LightningModule):
         )
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
-            nn.Conv2d(self.in_channels, 64, kernel_size=(9, self.mels), stride=1, padding="same"),
+            nn.Conv2d(self.in_channels, 64, kernel_size=9, stride=1, padding="same"),
 
-            nn.Conv2d(64, 128, kernel_size=(7, self.mels), stride=1,
+            nn.Conv2d(64, 128, kernel_size=7, stride=1,
                       padding="same"),
             nn.ReLU(),
             # nn.BatchNorm1d(num_features=128),
             nn.Dropout(p=self.dropout),
 
-            nn.Conv2d(128, 256, kernel_size=(5, self.mels), stride=1,
+            nn.Conv2d(128, 256, kernel_size=5, stride=1,
                       padding="same"),
             nn.ReLU(),
             # nn.BatchNorm1d(num_features=256),
             nn.Dropout(p=self.dropout),
 
-            nn.Conv2d(256, self.window_embedding_dim, kernel_size=(3, self.mels), stride=1,
+            nn.Conv2d(256, self.window_embedding_dim, kernel_size=3, stride=1,
                       padding="same"),
             nn.ReLU(),
             # nn.BatchNorm1d(num_features=512),
@@ -102,6 +103,17 @@ class FEEGT(pl.LightningModule):
 
             nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
             nn.Flatten(start_dim=2),
+        )
+        self.bands_reduction = nn.Sequential(
+            nn.Flatten(start_dim=1),
+
+            nn.Linear(in_features=self.window_embedding_dim * self.mels, out_features=1024),
+            nn.ReLU(),
+            nn.Dropout(p=self.dropout),
+
+            nn.Linear(in_features=1024, out_features=self.window_embedding_dim),
+            nn.ReLU(),
+            nn.Dropout(p=self.dropout),
         )
 
         self.fnet_encoders = nn.Sequential(
@@ -113,14 +125,6 @@ class FEEGT(pl.LightningModule):
             for i_token, token in enumerate(["start", "end", "mask"])
         }
         self.tokens_embedder = nn.Embedding(len(self.special_tokens), self.window_embedding_dim)
-
-        self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=self.window_embedding_dim, nhead=8, batch_first=True),
-            num_layers=self.num_encoders)
-        self.transformer_decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(d_model=self.window_embedding_dim, nhead=8, batch_first=True),
-            num_layers=self.num_decoders)
-        self.target_embedder = nn.Embedding(len(self.labels), self.window_embedding_dim)
 
         self.classification = nn.ModuleList()
         for label in self.labels:
@@ -155,16 +159,16 @@ class FEEGT(pl.LightningModule):
                                          window_size=9, window_stride=5)  # (b s c m)
 
         with profiler.record_function("preparation"):
-            x = self.normalization(x)
-            x = self.cnn_merge(x)  # (b n d)
+            x = self.normalization(x)  # (b s c m)
+            x = self.cnn_merge(x)
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
-            start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
-                self.special_tokens["start"],
-                self.special_tokens["end"],
-                self.special_tokens["mask"],
-            ], device=self.device))
+            # start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
+            #     self.special_tokens["start"],
+            #     self.special_tokens["end"],
+            #     self.special_tokens["mask"],
+            # ], device=self.device))
             # if self.training:
             #     # masks a percentage of tokens
             #     for i_batch, batch in enumerate(x):
@@ -173,9 +177,9 @@ class FEEGT(pl.LightningModule):
             #         mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
             #         x[i_batch, mask_ixs] = mask_token
             # adds start and end token
-            x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
-                           x,
-                           end_token.repeat(x.shape[0], 1, 1)], dim=1)
+            # x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
+            #                x,
+            #                end_token.repeat(x.shape[0], 1, 1)], dim=1)
             # adds positional embeddings
             x += self.get_positional_encodings(length=x.shape[1])
             # x = self.add_positional_encodings(x)
