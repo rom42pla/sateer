@@ -19,9 +19,8 @@ from torchaudio import transforms
 class FEEGT(pl.LightningModule):
     def __init__(self, in_channels: int, labels: Union[int, List[str]],
                  sampling_rate: int, windows_length: float = 0.1,
-                 max_sequence_length: int = 5000,
                  mask_perc_min: float = 0.05, mask_perc_max: float = 0.15,
-                 num_encoders: int = 4, num_decoders: int = 4,
+                 num_encoders: int = 4,
                  window_embedding_dim: int = 512,
                  learning_rate: float = 1e-3,
                  dropout: float = 0.1,
@@ -43,9 +42,6 @@ class FEEGT(pl.LightningModule):
         assert windows_length > 0
         self.windows_length = math.floor(self.eeg_sampling_rate * windows_length)
 
-        assert isinstance(max_sequence_length, int) and max_sequence_length >= 1
-        self.max_sequence_length = max_sequence_length
-
         assert isinstance(mask_perc_min, float) and 0 <= mask_perc_min < 1
         self.mask_perc_min = mask_perc_min
 
@@ -54,9 +50,6 @@ class FEEGT(pl.LightningModule):
 
         assert isinstance(num_encoders, int) and num_encoders >= 1
         self.num_encoders = num_encoders
-
-        assert isinstance(num_decoders, int) and num_decoders >= 1
-        self.num_decoders = num_decoders
 
         assert isinstance(window_embedding_dim, int) and window_embedding_dim >= 1
         self.window_embedding_dim = window_embedding_dim
@@ -106,8 +99,8 @@ class FEEGT(pl.LightningModule):
         )
 
         self.fnet_encoders = nn.Sequential(
-            FNetEncoderBlock(d_in=512, d_hidden=512, d_out=512),
-            FNetEncoderBlock(d_in=512, d_hidden=512, d_out=512),
+            *[FNetEncoderBlock(d_in=512, d_hidden=512, d_out=512)
+              for i in range(self.num_encoders)],
         )
         self.special_tokens = {
             token: i_token
@@ -149,11 +142,7 @@ class FEEGT(pl.LightningModule):
             # print(x.max(), x.min())
         with profiler.record_function("preparation"):
             x = self.normalization(x)  # (b s c m)
-            # print(x.max(), x.min(), x[0, 0, :4])
-            # print(x.max(), x.min())
             x = self.cnn_merge(x)
-            # print(x.max(), x.min())
-            # exit()
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens

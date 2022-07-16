@@ -71,11 +71,7 @@ def get_training_args():
     parser.add_argument("--num_encoders",
                         default=2,
                         type=int,
-                        help="Number of encoders in EEGT")
-    parser.add_argument("--num_decoders",
-                        default=2,
-                        type=int,
-                        help="Number of decoders in EEGT")
+                        help="Number of encoders in FEEGT")
     parser.add_argument("--window_embedding_dim",
                         default=512,
                         type=int,
@@ -108,7 +104,6 @@ def get_training_args():
         args.seed = random.randint(0, 1000000)
 
     assert args.num_encoders >= 1
-    assert args.num_decoders >= 1
     assert args.learning_rate > 0
 
     return args
