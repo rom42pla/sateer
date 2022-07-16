@@ -146,7 +146,7 @@ elif args.setting == "within_subject":
                                                       labels=dataset.labels_to_use,
                                                       sampling_rate=dataset.sampling_rate,
                                                       windows_length=dataset.window_size,
-                                                      num_encoders=args.num_encoders, num_decoders=args.num_decoders,
+                                                      num_encoders=args.num_encoders,
                                                       window_embedding_dim=args.window_embedding_dim,
                                                       learning_rate=args.learning_rate,
                                                       mask_perc_min=0.05, mask_perc_max=0.2)
