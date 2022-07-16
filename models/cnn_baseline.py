@@ -2,7 +2,6 @@ import math
 from typing import Union, List, Optional
 
 # import julius
-import librosa
 import numpy as np
 import torch
 import torchaudio
