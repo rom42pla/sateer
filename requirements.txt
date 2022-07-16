@@ -2,6 +2,7 @@ jupyter
 scikit-learn
 mne
 matplotlib
+seaborn
 pandas
 numpy
 einops
