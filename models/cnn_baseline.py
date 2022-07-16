@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torchaudio
 import torchvision.models
+from einops.layers.torch import Rearrange
 from scipy import signal
 from torch import nn
 from torch.nn import functional as F
@@ -14,11 +15,13 @@ import torchmetrics
 import einops
 import torch.autograd.profiler as profiler
 from torch.profiler import profile, record_function, ProfilerActivity
+from torchaudio import transforms
 
 
 class CNNBaseline(pl.LightningModule):
     def __init__(self, in_channels: int, labels: Union[int, List[str]],
                  sampling_rate: int,
+                 mels: int = 8,
                  window_embedding_dim: int = 512,
                  learning_rate: float = 1e-3,
                  dropout: float = 0.1,
@@ -46,28 +49,31 @@ class CNNBaseline(pl.LightningModule):
         assert 0 <= dropout < 1
         self.dropout = dropout
 
-        self.wavelet_scales = [1, 2, 4, 8, 16, 32]
+        assert isinstance(mels, int) and mels >= 1
+        self.mels = 8
 
         self.cnn_bands = nn.ModuleList()
-        for i_band in range(len(self.wavelet_scales)):
+        for i_band in range(self.mels):
             self.cnn_bands.add_module(f"band_{i_band}",
                                       nn.Sequential(
+                                          nn.LayerNorm(self.in_channels),
+                                          Rearrange("b s c -> b c s"),
+
                                           nn.Conv1d(self.in_channels, 64, kernel_size=1, stride=1),
-                                          nn.Dropout(p=self.dropout),
 
                                           nn.Conv1d(64, 128, kernel_size=1, stride=2),
                                           nn.ReLU(),
-                                          nn.BatchNorm1d(num_features=128),
+                                          # nn.BatchNorm1d(num_features=128),
                                           nn.Dropout(p=self.dropout),
 
                                           nn.Conv1d(128, 256, kernel_size=1, stride=2),
                                           nn.ReLU(),
-                                          nn.BatchNorm1d(num_features=256),
+                                          # nn.BatchNorm1d(num_features=256),
                                           nn.Dropout(p=self.dropout),
 
                                           nn.Conv1d(256, self.window_embedding_dim, kernel_size=1, stride=2),
                                           nn.ReLU(),
-                                          nn.BatchNorm1d(num_features=512),
+                                          # nn.BatchNorm1d(num_features=512),
                                           nn.Dropout(p=self.dropout),
 
                                           nn.AdaptiveAvgPool1d(output_size=(1,)),
@@ -76,7 +82,7 @@ class CNNBaseline(pl.LightningModule):
         self.bands_reduction = nn.Sequential(
             nn.Flatten(start_dim=1),
 
-            nn.Linear(in_features=self.window_embedding_dim * len(self.wavelet_scales), out_features=1024),
+            nn.Linear(in_features=self.window_embedding_dim * self.mels, out_features=1024),
             nn.ReLU(),
             nn.Dropout(p=self.dropout),
 
@@ -127,13 +133,16 @@ class CNNBaseline(pl.LightningModule):
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
-        x = self.wavelet_decompose(x, scales=self.wavelet_scales)  # (b w s e)
-        x = x.to(self.device)
+
+        with profiler.record_function("decomposition"):
+            x = self.get_mel_spectrogram(x, sampling_rate=self.eeg_sampling_rate,
+                                         mels=self.mels,
+                                         window_size=9, window_stride=5)  # (b s c m)
+            # self.plot_mel_spectrogram(x[0])
 
         with profiler.record_function("cnns"):
-            x = einops.rearrange(x, "b w s c -> b w c s")
-            x = torch.stack([net(x[:, i_band, :, :])
-                             for i_band, net in enumerate(self.cnn_bands)],
+            x = torch.stack([net(x[:, :, :, i_mel])
+                             for i_mel, net in enumerate(self.cnn_bands)],
                             dim=1)  # (b n d)
             x = self.bands_reduction(x)
 
@@ -144,6 +153,49 @@ class CNNBaseline(pl.LightningModule):
             assert labels_pred.shape[1] == len(self.labels)
 
         return labels_pred
+
+    @staticmethod
+    def get_mel_spectrogram(x, sampling_rate: Union[int, float], mels: int,
+                            window_size: Optional[int] = None, window_stride: int = 1):
+        assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
+        assert sampling_rate > 0
+        assert window_size is None or isinstance(window_size, int) and window_size >= 1
+        if window_size is None:
+            window_size = sampling_rate // 2
+        assert isinstance(window_stride, int) and window_stride >= 1
+        mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=3, f_max=100, n_mels=mels, center=True,
+                                           n_fft=x.shape[-1],
+                                           win_length=window_size, hop_length=window_stride)
+        mel_spectrogram = mel_fn(
+            einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
+        mel_spectrogram = einops.rearrange(mel_spectrogram, "b c m s -> b s c m")
+        return mel_spectrogram
+
+    @staticmethod
+    def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
+        assert len(spectrogram.shape) == 3  # s c m
+        import matplotlib.pyplot as plt
+        from matplotlib import cm
+        import seaborn as sns
+        lines = int(np.ceil(np.sqrt(spectrogram.shape[1])))
+        fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
+                                tight_layout=True)
+        for i_ax, ax in enumerate(axs.flat):
+            if i_ax < spectrogram.shape[1]:
+                sns.heatmap(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
+                            vmin=0, vmax=spectrogram.max(),
+                            ax=ax)
+                ax.set_title(f"Electrode {i_ax}")
+                ax.set_xlabel("time")
+                ax.set_ylabel("frequency")
+            else:
+                ax.set_visible(False)
+        # axs.set_ylabel(ylabel)
+        # axs.set_xlabel("frame")
+        #     im = axs.flat[i_channel].imshow(einops.rearrange(spectrogram[:, i_channel, :], "s m -> m s"), origin="lower", aspect="auto")
+        # fig.colorbar(im)
+        # fig.colorbar(im, ax=axs)
+        plt.show(block=False)
 
     @staticmethod
     def wavelet_decompose(x, scales):
@@ -259,7 +311,7 @@ class ResidualBlock(nn.Module):
 
 if __name__ == "__main__":
     model = CNNBaseline(in_channels=32, labels=4, sampling_rate=128)
-    x = torch.randn(64, 128, 32)
+    x = torch.randn(64, 128, 32) * 1e-6
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
             out = model(x)
