@@ -162,32 +162,20 @@ class FEEGT(pl.LightningModule):
                 self.special_tokens["end"],
                 self.special_tokens["mask"],
             ], device=self.device))
-            # if self.training:
-            #     # masks a percentage of tokens
-            #     for i_batch, batch in enumerate(x):
-            #         masked_no = int(((self.mask_perc_min - self.mask_perc_max) * torch.rand(1) + self.mask_perc_max) \
-            #                         * batch.shape[0])
-            #         mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
-            #         x[i_batch, mask_ixs] = mask_token
+            if self.training:
+                # masks a percentage of tokens
+                for i_batch, batch in enumerate(x):
+                    masked_no = int(((self.mask_perc_min - self.mask_perc_max) * torch.rand(1) + self.mask_perc_max) \
+                                    * batch.shape[0])
+                    mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
+                    x[i_batch, mask_ixs] = mask_token
             # adds start and end token
             x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
                            x,
                            end_token.repeat(x.shape[0], 1, 1)], dim=1)
             # adds positional embeddings
             x += self.get_positional_encodings(length=x.shape[1])
-            # x = self.add_positional_encodings(x)
-            # encoder_mask = self.generate_square_subsequent_mask(sequence_length=x.shape[1])
-            # encoder_mask = torch.zeros((x.shape[1], x.shape[1]), device=self.device, requires_grad=False)
-            # print(self.training, x.shape, encoder_mask.shape)
-            # x = self.transformer_encoder(x, encoder_mask)
-            # x = self.transformer_encoder(x)
             x = self.fnet_encoders(x)
-
-        # with profiler.record_function("transformer decoder"):
-        #     # transformer decoder
-        #     e = self.target_embedder(torch.arange(len(self.labels), device=self.device, dtype=torch.int)) \
-        #         .repeat(x.shape[0], 1, 1)
-        #     x = self.transformer_decoder(e, x)
 
         with profiler.record_function("predictions"):
             labels_pred = torch.stack([net(x[:, 0, :])
