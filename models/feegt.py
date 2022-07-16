@@ -104,17 +104,6 @@ class FEEGT(pl.LightningModule):
             nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
             nn.Flatten(start_dim=2),
         )
-        self.bands_reduction = nn.Sequential(
-            nn.Flatten(start_dim=1),
-
-            nn.Linear(in_features=self.window_embedding_dim * self.mels, out_features=1024),
-            nn.ReLU(),
-            nn.Dropout(p=self.dropout),
-
-            nn.Linear(in_features=1024, out_features=self.window_embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=self.dropout),
-        )
 
         self.fnet_encoders = nn.Sequential(
             FNetEncoderBlock(d_in=512, d_hidden=512, d_out=512),
@@ -157,10 +146,14 @@ class FEEGT(pl.LightningModule):
             x = self.get_mel_spectrogram(x, sampling_rate=self.eeg_sampling_rate,
                                          mels=self.mels,
                                          window_size=9, window_stride=5)  # (b s c m)
-
+            # print(x.max(), x.min())
         with profiler.record_function("preparation"):
             x = self.normalization(x)  # (b s c m)
+            # print(x.max(), x.min(), x[0, 0, :4])
+            # print(x.max(), x.min())
             x = self.cnn_merge(x)
+            # print(x.max(), x.min())
+            # exit()
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
@@ -298,10 +291,10 @@ class FourierTransformLayer(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        # out = functorch.vmap(torch.fft.fftn)(x).real
-        out = torch.stack([torch.fft.fftn(x[b, :, :]).real
-                           for b in range(x.shape[0])],
-                          dim=0)
+        out = functorch.vmap(torch.fft.fftn)(x).real
+        # out = torch.stack([torch.fft.fftn(x[b, :, :]).real
+        #                    for b in range(x.shape[0])],
+        #                   dim=0)
         return out
 
 
