@@ -15,8 +15,7 @@ import torch.autograd.profiler as profiler
 from torch.profiler import profile, record_function, ProfilerActivity
 from torchaudio import transforms
 
-
-class EEGT(pl.LightningModule):
+class FEEGT(pl.LightningModule):
     def __init__(self, in_channels: int, labels: Union[int, List[str]],
                  sampling_rate: int, windows_length: float = 0.1,
                  max_sequence_length: int = 5000,
@@ -105,6 +104,10 @@ class EEGT(pl.LightningModule):
             nn.Flatten(start_dim=2),
         )
 
+        self.fnet_encoders = nn.Sequential(
+            FNetEncoderBlock(d_in=512, d_hidden=512, d_out=512),
+            FNetEncoderBlock(d_in=512, d_hidden=512, d_out=512),
+        )
         self.special_tokens = {
             token: i_token
             for i_token, token in enumerate(["start", "end", "mask"])
@@ -151,22 +154,8 @@ class EEGT(pl.LightningModule):
                                          mels=self.mels,
                                          window_size=9, window_stride=5)  # (b s c m)
 
-        # with profiler.record_function("cnns"):
-        #     timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length // 2))
-        #     if timestamps[-1] != x.shape[1]:
-        #         timestamps += [x.shape[1]]
-        #     x = einops.rearrange(x, "b s c -> b c s")  # (b c s)
-        #     latent_representations = []
-        #     for t in timestamps:
-        #         latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
-        #     x = torch.stack(latent_representations, dim=1)
-
-        with profiler.record_function("cnns"):
+        with profiler.record_function("preparation"):
             x = self.normalization(x)
-            # x = torch.stack([net(x[:, :, :, i_mel])
-            #                  for i_mel, net in enumerate(self.cnn_bands)],
-            #                 dim=-1)  # (b n d)
-            # x = self.bands_reduction(x)
             x = self.cnn_merge(x)  # (b n d)
 
         with profiler.record_function("transformer encoder"):
@@ -176,34 +165,38 @@ class EEGT(pl.LightningModule):
                 self.special_tokens["end"],
                 self.special_tokens["mask"],
             ], device=self.device))
-            if self.training:
-                # masks a percentage of tokens
-                for i_batch, batch in enumerate(x):
-                    masked_no = int(((self.mask_perc_min - self.mask_perc_max) * torch.rand(1) + self.mask_perc_max) \
-                                    * batch.shape[0])
-                    mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
-                    x[i_batch, mask_ixs] = mask_token
+            # if self.training:
+            #     # masks a percentage of tokens
+            #     for i_batch, batch in enumerate(x):
+            #         masked_no = int(((self.mask_perc_min - self.mask_perc_max) * torch.rand(1) + self.mask_perc_max) \
+            #                         * batch.shape[0])
+            #         mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
+            #         x[i_batch, mask_ixs] = mask_token
             # adds start and end token
             x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
                            x,
                            end_token.repeat(x.shape[0], 1, 1)], dim=1)
             # adds positional embeddings
-            x = self.add_positional_encodings(x)
+            x += self.get_positional_encodings(length=x.shape[1])
+            # x = self.add_positional_encodings(x)
             # encoder_mask = self.generate_square_subsequent_mask(sequence_length=x.shape[1])
             # encoder_mask = torch.zeros((x.shape[1], x.shape[1]), device=self.device, requires_grad=False)
             # print(self.training, x.shape, encoder_mask.shape)
             # x = self.transformer_encoder(x, encoder_mask)
-            x = self.transformer_encoder(x)
+            # x = self.transformer_encoder(x)
+            print(x.shape)
+            x = self.fnet_encoders(x)
+            print(x.shape)
 
-        with profiler.record_function("transformer decoder"):
-            # transformer decoder
-            e = self.target_embedder(torch.arange(len(self.labels), device=self.device, dtype=torch.int)) \
-                .repeat(x.shape[0], 1, 1)
-            x = self.transformer_decoder(e, x)
+        # with profiler.record_function("transformer decoder"):
+        #     # transformer decoder
+        #     e = self.target_embedder(torch.arange(len(self.labels), device=self.device, dtype=torch.int)) \
+        #         .repeat(x.shape[0], 1, 1)
+        #     x = self.transformer_decoder(e, x)
 
         with profiler.record_function("predictions"):
-            labels_pred = torch.stack([net(x[:, i_label, :])
-                                       for i_label, net in enumerate(self.classification)],
+            labels_pred = torch.stack([net(x[:, 0, :])
+                                       for net in self.classification],
                                       dim=1)  # (b l d)
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
@@ -250,31 +243,15 @@ class EEGT(pl.LightningModule):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optimizer
 
-    def generate_square_subsequent_mask(self, sequence_length: int):
-        assert isinstance(sequence_length, int) and sequence_length >= 1
-        # mask = torch.triu(torch.full((sequence_length, sequence_length), float('-inf'),
-        #                              device=self.device, dtype=torch.float32),
-        #                   diagonal=1)
-        mask = torch.triu(torch.full((sequence_length, sequence_length), float("-inf"),
-                                     device=self.device, dtype=torch.float32),
-                          diagonal=1)
-        # mask = mask < 0
-        return mask
+    def get_positional_encodings(self, length: int):
+        pe = torch.zeros(length, self.window_embedding_dim, device=self.device)
+        position = torch.arange(0, length, device=self.device).unsqueeze(1)
+        div_term = torch.exp((torch.arange(0, self.window_embedding_dim, 2, dtype=torch.float, device=self.device) *
+                              -(math.log(10000.0) / self.window_embedding_dim)))
+        pe[:, 0::2] = torch.sin(position.float() * div_term)
+        pe[:, 1::2] = torch.cos(position.float() * div_term)
 
-    def add_positional_encodings(self, x):
-        position = torch.arange(self.max_sequence_length, device=self.device).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, x.shape[-1], 2, device=self.device, dtype=torch.float32)
-                             * (-math.log(10000.0) / x.shape[-1]))
-        pe = torch.zeros(self.max_sequence_length, 1, x.shape[-1], device=self.device, dtype=torch.float32)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-
-        x = einops.rearrange(x, "b s e -> s b e")
-        x = x + pe[:x.size(0)]
-        x = einops.rearrange(x, "s b e -> b s e")
-        if self.training:
-            x = nn.Dropout(p=0.1)(x)
-        return x
+        return pe
 
     @staticmethod
     def get_mel_spectrogram(x, sampling_rate: Union[int, float], mels: int,
@@ -319,62 +296,40 @@ class FourierTransformLayer(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        out = functorch.vmap(torch.fft.fftn)(x).real
+        # out = functorch.vmap(torch.fft.fftn)(x).real
+        out = torch.stack([torch.fft.fftn(x[b, :, :]).real
+                           for b in range(x.shape[0])],
+                          dim=0)
         return out
-    
 
-class ResidualBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: Optional[int] = None,
-                 reduce_output: bool = False):
-        super(ResidualBlock, self).__init__()
-        assert isinstance(in_channels, int) and in_channels >= 1
-        self.in_channels = in_channels
 
-        assert out_channels is None or (isinstance(in_channels, int) and in_channels >= 1)
-        if out_channels is None:
-            self.out_channels = self.in_channels
-        else:
-            self.out_channels = out_channels
-
-        assert isinstance(reduce_output, bool)
-        self.reduce_output = reduce_output
-
-        self.reduction_stream = nn.Sequential(
-            nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
-                      kernel_size=1, stride=1),
-            nn.BatchNorm1d(num_features=self.in_channels),
-            nn.ReLU(),
-
-            nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
-                      kernel_size=3, stride=2 if self.reduce_output else 1, padding=1),
-            nn.BatchNorm1d(num_features=self.in_channels),
-            nn.ReLU(),
-
-            nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
-                      kernel_size=1, stride=1),
-            nn.BatchNorm1d(num_features=self.out_channels),
-        )
-        self.projection_stream = nn.Sequential(
-            nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
-                      kernel_size=1, stride=2 if self.reduce_output else 1),
-            nn.BatchNorm1d(num_features=self.out_channels),
-        )
-        self.normalization_stream = nn.Sequential(
-            nn.ReLU()
+class FNetEncoderBlock(nn.Module):
+    def __init__(self, d_in, d_hidden, d_out):
+        super().__init__()
+        self.fourier_layer = FourierTransformLayer()
+        self.feed_forward_layer = nn.Sequential(
+            nn.Linear(d_in, d_hidden),
+            nn.GELU(),
+            nn.Linear(d_hidden, d_out),
+            nn.Dropout(p=0.1),
         )
 
     def forward(self, x):
-        x_transformed = self.reduction_stream(x)
-        if self.in_channels != self.out_channels or self.reduce_output:
-            x = self.projection_stream(x)
-        x = x_transformed + x
-        out = self.normalization_stream(x)
-        return out
+        x_mixed = self.fourier_layer(x)
+        x = x + x_mixed
+        x = nn.LayerNorm(x.shape[-1])(x)
+
+        x_feed_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
+                                        for s in range(x.shape[1])],
+                                       dim=1)
+        x = x + x_feed_forwarded
+        x = nn.LayerNorm(x.shape[-1])(x)
+        return x
 
 
 if __name__ == "__main__":
-    eegt = EEGT(in_channels=32, labels=4, sampling_rate=128, windows_length=0.1,
-                mask_perc_min=0.1, mask_perc_max=0.3)
+    eegt = FEEGT(in_channels=32, labels=4, sampling_rate=128, windows_length=0.1,
+                 mask_perc_min=0.1, mask_perc_max=0.3)
     x = torch.randn(64, 128, 32)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):

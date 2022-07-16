@@ -22,10 +22,13 @@ from datasets.dreamer import DREAMERDataset
 from models.cnn_baseline import CNNBaseline
 from models.eegt import EEGT
 import pytorch_lightning as pl
+# torch.autograd.set_detect_anomaly(True)
 
 import warnings
 
 # suppresses some warnings
+from models.feegt import FEEGT
+
 warnings.filterwarnings("ignore", category=LightningDeprecationWarning)
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
@@ -138,6 +141,15 @@ elif args.setting == "within_subject":
                                                      window_embedding_dim=args.window_embedding_dim,
                                                      learning_rate=args.learning_rate,
                                                      mask_perc_min=0.05, mask_perc_max=0.2)
+                elif args.model == "feegt":
+                    model: pl.LightningModule = FEEGT(in_channels=len(dataset.electrodes),
+                                                      labels=dataset.labels_to_use,
+                                                      sampling_rate=dataset.sampling_rate,
+                                                      windows_length=dataset.window_size,
+                                                      num_encoders=args.num_encoders, num_decoders=args.num_decoders,
+                                                      window_embedding_dim=args.window_embedding_dim,
+                                                      learning_rate=args.learning_rate,
+                                                      mask_perc_min=0.05, mask_perc_max=0.2)
                 elif args.model == "cnn_baseline":
                     model: pl.LightningModule = CNNBaseline(in_channels=len(dataset.electrodes),
                                                             labels=dataset.labels_to_use,
