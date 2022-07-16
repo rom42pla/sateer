@@ -199,12 +199,14 @@ class EEGT(pl.LightningModule):
             e = self.target_embedder(torch.arange(len(self.labels), device=self.device, dtype=torch.int)) \
                 .repeat(x.shape[0], 1, 1)
             x = self.transformer_decoder(e, x)
+            print(x.shape)
 
         with profiler.record_function("predictions"):
-            labels_pred = torch.stack([net(x)
+            labels_pred = torch.stack([net(x[:, i_label, :])
                                        for i_label, net in enumerate(self.classification)],
                                       dim=1)  # (b l d)
             assert labels_pred.shape[1] == len(self.labels)
+            assert len(labels_pred) == 3
 
         return labels_pred
 
