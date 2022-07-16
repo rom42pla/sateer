@@ -56,7 +56,7 @@ class CNNBaseline(pl.LightningModule):
         for i_band in range(self.mels):
             self.cnn_bands.add_module(f"band_{i_band}",
                                       nn.Sequential(
-                                          nn.LayerNorm(self.in_channels),
+                                          # nn.LayerNorm(self.in_channels),
                                           Rearrange("b s c -> b c s"),
 
                                           nn.Conv1d(self.in_channels, 64, kernel_size=9, stride=1),
