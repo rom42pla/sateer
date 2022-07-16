@@ -100,6 +100,8 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
         self.normalize_eegs: bool = normalize_eegs
 
         self.eegs_data, self.labels_data, self.subject_ids_data = self.load_data()
+        assert len(self.eegs_data) == len(self.labels_data) == len(self.subject_ids_data)
+        assert all([e.shape[-1] == len(self.electrodes) for e in self.eegs_data])
         self.setup_data()
 
         # sets up k-fold

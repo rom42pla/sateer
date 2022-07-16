@@ -17,7 +17,7 @@ from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
 from tqdm.autonotebook import tqdm
 
 from arg_parsers import get_training_args
-from datasets.deap_preprocessed import DEAPDataset
+from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
 from models.cnn_baseline import CNNBaseline
 from models.eegt import EEGT
