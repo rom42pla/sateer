@@ -157,11 +157,11 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
-            # start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
-            #     self.special_tokens["start"],
-            #     self.special_tokens["end"],
-            #     self.special_tokens["mask"],
-            # ], device=self.device))
+            start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
+                self.special_tokens["start"],
+                self.special_tokens["end"],
+                self.special_tokens["mask"],
+            ], device=self.device))
             # if self.training:
             #     # masks a percentage of tokens
             #     for i_batch, batch in enumerate(x):
@@ -170,9 +170,9 @@ class FEEGT(pl.LightningModule):
             #         mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
             #         x[i_batch, mask_ixs] = mask_token
             # adds start and end token
-            # x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
-            #                x,
-            #                end_token.repeat(x.shape[0], 1, 1)], dim=1)
+            x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
+                           x,
+                           end_token.repeat(x.shape[0], 1, 1)], dim=1)
             # adds positional embeddings
             x += self.get_positional_encodings(length=x.shape[1])
             # x = self.add_positional_encodings(x)
