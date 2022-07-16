@@ -171,8 +171,6 @@ class CNNBaseline(pl.LightningModule):
         mel_spectrogram = mel_fn(
             einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
         mel_spectrogram = einops.rearrange(mel_spectrogram, "b c m s -> b s c m")
-        # mel_spectrogram = 10 * torch.log10(mel_spectrogram/1)
-        # mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=1, amin=1e-10, top_db=80.0)
         return mel_spectrogram
 
     @staticmethod
@@ -193,32 +191,27 @@ class CNNBaseline(pl.LightningModule):
                 ax.set_ylabel("frequency")
             else:
                 ax.set_visible(False)
-        # axs.set_ylabel(ylabel)
-        # axs.set_xlabel("frame")
-        #     im = axs.flat[i_channel].imshow(einops.rearrange(spectrogram[:, i_channel, :], "s m -> m s"), origin="lower", aspect="auto")
-        # fig.colorbar(im)
-        # fig.colorbar(im, ax=axs)
         plt.show(block=False)
 
-    @staticmethod
-    def wavelet_decompose(x, scales):
-        assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
-        assert any([isinstance(scales, t) for t in {np.ndarray, torch.Tensor, list}])
-        assert all([width > 0 for width in scales])
-        # loss of gradients
-        x = x.detach().cpu()
-
-        if len(x.shape) == 2:
-            x_decomposed = torch.stack([
-                torch.as_tensor(signal.cwt(x[:, i_channel], signal.ricker, scales))
-                for i_channel in range(x.shape[-1])], dim=-1)  # (w, s, e)
-        else:
-            x_decomposed = torch.stack([
-                torch.stack([
-                    torch.as_tensor(signal.cwt(x[i_batch, :, i_channel], signal.ricker, scales))
-                    for i_channel in range(x.shape[-1])], dim=-1)
-                for i_batch in range(x.shape[0])], dim=0)  # (b, w, s, e)
-        return x_decomposed.float()
+    # @staticmethod
+    # def wavelet_decompose(x, scales):
+    #     assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
+    #     assert any([isinstance(scales, t) for t in {np.ndarray, torch.Tensor, list}])
+    #     assert all([width > 0 for width in scales])
+    #     # loss of gradients
+    #     x = x.detach().cpu()
+    #
+    #     if len(x.shape) == 2:
+    #         x_decomposed = torch.stack([
+    #             torch.as_tensor(signal.cwt(x[:, i_channel], signal.ricker, scales))
+    #             for i_channel in range(x.shape[-1])], dim=-1)  # (w, s, e)
+    #     else:
+    #         x_decomposed = torch.stack([
+    #             torch.stack([
+    #                 torch.as_tensor(signal.cwt(x[i_batch, :, i_channel], signal.ricker, scales))
+    #                 for i_channel in range(x.shape[-1])], dim=-1)
+    #             for i_batch in range(x.shape[0])], dim=0)  # (b, w, s, e)
+    #     return x_decomposed.float()
 
     def training_step(self, batch, batch_idx):
         eeg, labels = [e for e in batch]  # (b s c), (b l)

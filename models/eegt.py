@@ -1,7 +1,9 @@
 import math
 from typing import Union, List, Optional, Dict, Any
 
+import numpy as np
 import torch
+from einops.layers.torch import Rearrange
 from pytorch_lightning.utilities.types import EPOCH_OUTPUT
 from torch import nn
 from torch.nn import functional as F
@@ -10,6 +12,7 @@ import torchmetrics
 import einops
 import torch.autograd.profiler as profiler
 from torch.profiler import profile, record_function, ProfilerActivity
+from torchaudio import transforms
 
 
 class EEGT(pl.LightningModule):
@@ -20,6 +23,8 @@ class EEGT(pl.LightningModule):
                  num_encoders: int = 4, num_decoders: int = 4,
                  window_embedding_dim: int = 512,
                  learning_rate: float = 1e-3,
+                 dropout: float = 0.1,
+                 mels: int = 4,
                  device: Optional[str] = None):
         super().__init__()
         assert isinstance(in_channels, int) and in_channels >= 1
@@ -58,26 +63,47 @@ class EEGT(pl.LightningModule):
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
-        self.cnn = nn.Sequential(
-            ResidualBlock(in_channels=self.in_channels, out_channels=256, reduce_output=True),
-            # ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
-            ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
+        assert 0 <= dropout < 1
+        self.dropout = dropout
+
+        assert isinstance(mels, int) and mels >= 1
+        self.mels = mels
+
+        self.cnn_bands = nn.ModuleList()
+        self.normalization = nn.Sequential(
+            Rearrange("b s c m -> b c s m"),
+            nn.Conv2d(self.in_channels, self.in_channels, kernel_size=(1, 1), stride=(1, 1)),
+            Rearrange("b c s m -> b s m c"),
+            nn.LayerNorm(self.in_channels),
+            Rearrange("b s m c -> b s c m"),
         )
-        self.cnn_pre = nn.Sequential(
-            # ResidualBlock(in_channels=self.in_channels, out_channels=64, reduce_output=True),
-            # ResidualBlock(in_channels=64, out_channels=256, reduce_output=True),
-            # ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
-            ResidualBlock(in_channels=self.in_channels, out_channels=self.window_embedding_dim, reduce_output=True),
-            nn.AdaptiveMaxPool1d(output_size=(1,)),
-            nn.Flatten(start_dim=1),
+        self.cnn_merge = nn.Sequential(
+            Rearrange("b s c m -> b c s m"),
+            nn.Conv2d(self.in_channels, 64, kernel_size=(9, self.mels), stride=1, padding="same"),
+
+            nn.Conv2d(64, 128, kernel_size=(7, self.mels), stride=1,
+                      padding="same"),
+            nn.ReLU(),
+            # nn.BatchNorm1d(num_features=128),
+            nn.Dropout(p=self.dropout),
+
+            nn.Conv2d(128, 256, kernel_size=(5, self.mels), stride=1,
+                      padding="same"),
+            nn.ReLU(),
+            # nn.BatchNorm1d(num_features=256),
+            nn.Dropout(p=self.dropout),
+
+            nn.Conv2d(256, self.window_embedding_dim, kernel_size=(3, self.mels), stride=1,
+                      padding="same"),
+            nn.ReLU(),
+            # nn.BatchNorm1d(num_features=512),
+            nn.Dropout(p=self.dropout),
+            Rearrange("b c s m -> b s c m"),
+
+            nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
+            nn.Flatten(start_dim=2),
         )
-        # self.linear_pre = nn.Sequential(
-        #     nn.Flatten(start_dim=1),
-        #     nn.Linear(in_features=self.windows_length * self.in_channels, out_features=1024),
-        #     nn.ReLU(),
-        #     nn.BatchNorm1d(num_features=1024),
-        #     nn.Linear(in_features=1024, out_features=512),
-        # )
+
         self.special_tokens = {
             token: i_token
             for i_token, token in enumerate(["start", "end", "mask"])
@@ -96,7 +122,15 @@ class EEGT(pl.LightningModule):
         for label in self.labels:
             self.classification.add_module(label,
                                            nn.Sequential(
-                                               nn.Linear(in_features=self.window_embedding_dim, out_features=2),
+                                               nn.Linear(in_features=self.window_embedding_dim, out_features=1024),
+                                               nn.ReLU(),
+                                               nn.Dropout(p=self.dropout),
+
+                                               nn.Linear(in_features=1024, out_features=128),
+                                               nn.ReLU(),
+                                               nn.Dropout(p=self.dropout),
+
+                                               nn.Linear(in_features=128, out_features=2),
                                            ))
         self.float()
         assert device is None or device in {"cuda", "cpu"}
@@ -107,17 +141,32 @@ class EEGT(pl.LightningModule):
 
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
-        # eeg *= 1e5
         x = eeg  # (b s c)
+        # cast from microvolts to volts
+        x *= 1e6
+
+        with profiler.record_function("decomposition"):
+            x = self.get_mel_spectrogram(x, sampling_rate=self.eeg_sampling_rate,
+                                         mels=self.mels,
+                                         window_size=9, window_stride=5)  # (b s c m)
+
+        # with profiler.record_function("cnns"):
+        #     timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length // 2))
+        #     if timestamps[-1] != x.shape[1]:
+        #         timestamps += [x.shape[1]]
+        #     x = einops.rearrange(x, "b s c -> b c s")  # (b c s)
+        #     latent_representations = []
+        #     for t in timestamps:
+        #         latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
+        #     x = torch.stack(latent_representations, dim=1)
+
         with profiler.record_function("cnns"):
-            timestamps = list(range(self.windows_length, x.shape[1] + 1, self.windows_length // 2))
-            if timestamps[-1] != x.shape[1]:
-                timestamps += [x.shape[1]]
-            x = einops.rearrange(x, "b s c -> b c s")  # (b c s)
-            latent_representations = []
-            for t in timestamps:
-                latent_representations += [self.cnn_pre(x[:, :, t - self.windows_length:t])]
-            x = torch.stack(latent_representations, dim=1)
+            x = self.normalization(x)
+            # x = torch.stack([net(x[:, :, :, i_mel])
+            #                  for i_mel, net in enumerate(self.cnn_bands)],
+            #                 dim=-1)  # (b n d)
+            # x = self.bands_reduction(x)
+            x = self.cnn_merge(x)  # (b n d)
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
@@ -152,12 +201,9 @@ class EEGT(pl.LightningModule):
             x = self.transformer_decoder(e, x)
 
         with profiler.record_function("predictions"):
-            labels_pred = torch.stack([net(x[:, i_label, :])
+            labels_pred = torch.stack([net(x)
                                        for i_label, net in enumerate(self.classification)],
                                       dim=1)  # (b l d)
-            # labels_pred = torch.cat([net(x[:, i_label, :])
-            #                          for i_label, net in enumerate(self.classification)],
-            #                         dim=-1)  # (b l)
             assert labels_pred.shape[1] == len(self.labels)
 
         return labels_pred
@@ -202,11 +248,6 @@ class EEGT(pl.LightningModule):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optimizer
 
-    def training_epoch_end(self, outputs: Dict[str, Any]) -> None:
-        # print(outputs)
-        # exit()
-        pass
-
     def generate_square_subsequent_mask(self, sequence_length: int):
         assert isinstance(sequence_length, int) and sequence_length >= 1
         # mask = torch.triu(torch.full((sequence_length, sequence_length), float('-inf'),
@@ -232,6 +273,43 @@ class EEGT(pl.LightningModule):
         if self.training:
             x = nn.Dropout(p=0.1)(x)
         return x
+
+    @staticmethod
+    def get_mel_spectrogram(x, sampling_rate: Union[int, float], mels: int,
+                            window_size: Optional[int] = None, window_stride: int = 1):
+        assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
+        assert sampling_rate > 0
+        assert window_size is None or isinstance(window_size, int) and window_size >= 1
+        if window_size is None:
+            window_size = sampling_rate // 2
+        assert isinstance(window_stride, int) and window_stride >= 1
+        mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=0, f_max=100, n_mels=mels, center=True,
+                                           n_fft=x.shape[-1], normalized=True, power=1,
+                                           win_length=window_size, hop_length=window_stride).to(x.device)
+        mel_spectrogram = mel_fn(
+            einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
+        mel_spectrogram = einops.rearrange(mel_spectrogram, "b c m s -> b s c m")
+        return mel_spectrogram
+
+    @staticmethod
+    def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
+        assert len(spectrogram.shape) == 3  # s c m
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        lines = int(np.ceil(np.sqrt(spectrogram.shape[1])))
+        fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
+                                tight_layout=True)
+        for i_ax, ax in enumerate(axs.flat):
+            if i_ax < spectrogram.shape[1]:
+                sns.heatmap(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
+                            vmin=0, vmax=spectrogram.max(),
+                            ax=ax)
+                ax.set_title(f"Electrode {i_ax}")
+                ax.set_xlabel("time")
+                ax.set_ylabel("frequency")
+            else:
+                ax.set_visible(False)
+        plt.show(block=False)
 
 
 class ResidualBlock(nn.Module):
