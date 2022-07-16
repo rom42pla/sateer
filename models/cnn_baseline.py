@@ -59,19 +59,19 @@ class CNNBaseline(pl.LightningModule):
                                           nn.LayerNorm(self.in_channels),
                                           Rearrange("b s c -> b c s"),
 
-                                          nn.Conv1d(self.in_channels, 64, kernel_size=1, stride=1),
+                                          nn.Conv1d(self.in_channels, 64, kernel_size=9, stride=1),
 
-                                          nn.Conv1d(64, 128, kernel_size=1, stride=2),
+                                          nn.Conv1d(64, 128, kernel_size=7, stride=1),
                                           nn.ReLU(),
                                           # nn.BatchNorm1d(num_features=128),
                                           nn.Dropout(p=self.dropout),
 
-                                          nn.Conv1d(128, 256, kernel_size=1, stride=2),
+                                          nn.Conv1d(128, 256, kernel_size=5, stride=1),
                                           nn.ReLU(),
                                           # nn.BatchNorm1d(num_features=256),
                                           nn.Dropout(p=self.dropout),
 
-                                          nn.Conv1d(256, self.window_embedding_dim, kernel_size=1, stride=2),
+                                          nn.Conv1d(256, self.window_embedding_dim, kernel_size=3, stride=1),
                                           nn.ReLU(),
                                           # nn.BatchNorm1d(num_features=512),
                                           nn.Dropout(p=self.dropout),
@@ -88,15 +88,6 @@ class CNNBaseline(pl.LightningModule):
 
             nn.Linear(in_features=1024, out_features=self.window_embedding_dim),
             nn.ReLU(),
-            nn.Dropout(p=self.dropout),
-        )
-
-        self.special_tokens = {
-            token: i_token
-            for i_token, token in enumerate(["mask"])
-        }
-        self.tokens_embedder = nn.Sequential(
-            nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
             nn.Dropout(p=self.dropout),
         )
 
