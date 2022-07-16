@@ -73,14 +73,14 @@ class FEEGT(pl.LightningModule):
         self.cnn_bands = nn.ModuleList()
         self.normalization = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
-            nn.Conv2d(self.in_channels, self.in_channels, kernel_size=(1, 1), stride=(1, 1)),
+            nn.Conv2d(self.in_channels, self.in_channels, kernel_size=(1, self.mels), stride=(1, 1)),
             Rearrange("b c s m -> b s m c"),
             nn.LayerNorm(self.in_channels),
             Rearrange("b s m c -> b s c m"),
         )
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
-            nn.Conv2d(self.in_channels, 64, kernel_size=9, stride=1, padding="same"),
+            nn.Conv2d(self.in_channels, 64, kernel_size=(9, self.mels), stride=1, padding="same"),
 
             nn.Conv2d(64, 128, kernel_size=7, stride=1,
                       padding="same"),
@@ -88,13 +88,13 @@ class FEEGT(pl.LightningModule):
             # nn.BatchNorm1d(num_features=128),
             nn.Dropout(p=self.dropout),
 
-            nn.Conv2d(128, 256, kernel_size=5, stride=1,
+            nn.Conv2d(128, 256, kernel_size=(5, self.mels), stride=1,
                       padding="same"),
             nn.ReLU(),
             # nn.BatchNorm1d(num_features=256),
             nn.Dropout(p=self.dropout),
 
-            nn.Conv2d(256, self.window_embedding_dim, kernel_size=3, stride=1,
+            nn.Conv2d(256, self.window_embedding_dim, kernel_size=(3, self.mels), stride=1,
                       padding="same"),
             nn.ReLU(),
             # nn.BatchNorm1d(num_features=512),
