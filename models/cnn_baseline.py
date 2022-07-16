@@ -2,6 +2,7 @@ import math
 from typing import Union, List, Optional
 
 # import julius
+import librosa
 import numpy as np
 import torch
 import torchaudio
@@ -50,15 +51,21 @@ class CNNBaseline(pl.LightningModule):
         self.dropout = dropout
 
         assert isinstance(mels, int) and mels >= 1
-        self.mels = 8
+        self.mels = 4
 
         self.cnn_bands = nn.ModuleList()
+        self.normalization = nn.Sequential(
+            Rearrange("b s c m -> b c s m"),
+            nn.Conv2d(self.in_channels, self.in_channels, kernel_size=(1, 1), stride=(1, 1)),
+            Rearrange("b c s m -> b s m c"),
+            nn.LayerNorm(self.in_channels),
+            Rearrange("b s m c -> b s c m"),
+        )
         for i_band in range(self.mels):
             self.cnn_bands.add_module(f"band_{i_band}",
                                       nn.Sequential(
                                           # nn.LayerNorm(self.in_channels),
                                           Rearrange("b s c -> b c s"),
-
                                           nn.Conv1d(self.in_channels, 64, kernel_size=9, stride=1),
 
                                           nn.Conv1d(64, 128, kernel_size=7, stride=1),
@@ -124,6 +131,8 @@ class CNNBaseline(pl.LightningModule):
     def forward(self, eeg):
         assert eeg.shape[-1] == self.in_channels
         x = eeg  # (b s c)
+        # cast from microvolts to volts
+        x *= 1e6
 
         with profiler.record_function("decomposition"):
             x = self.get_mel_spectrogram(x, sampling_rate=self.eeg_sampling_rate,
@@ -132,6 +141,9 @@ class CNNBaseline(pl.LightningModule):
             # self.plot_mel_spectrogram(x[0])
 
         with profiler.record_function("cnns"):
+            # print(x.shape, x[0, 0, :4])
+            x = self.normalization(x)
+            # print(x.shape, x[0, 0, :4])
             x = torch.stack([net(x[:, :, :, i_mel])
                              for i_mel, net in enumerate(self.cnn_bands)],
                             dim=1)  # (b n d)
@@ -154,19 +166,20 @@ class CNNBaseline(pl.LightningModule):
         if window_size is None:
             window_size = sampling_rate // 2
         assert isinstance(window_stride, int) and window_stride >= 1
-        mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=3, f_max=100, n_mels=mels, center=True,
-                                           n_fft=x.shape[-1],
+        mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=0, f_max=100, n_mels=mels, center=True,
+                                           n_fft=x.shape[-1], normalized=True, power=1,
                                            win_length=window_size, hop_length=window_stride).to(x.device)
         mel_spectrogram = mel_fn(
             einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
         mel_spectrogram = einops.rearrange(mel_spectrogram, "b c m s -> b s c m")
+        # mel_spectrogram = 10 * torch.log10(mel_spectrogram/1)
+        # mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=1, amin=1e-10, top_db=80.0)
         return mel_spectrogram
 
     @staticmethod
     def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
         assert len(spectrogram.shape) == 3  # s c m
         import matplotlib.pyplot as plt
-        from matplotlib import cm
         import seaborn as sns
         lines = int(np.ceil(np.sqrt(spectrogram.shape[1])))
         fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
