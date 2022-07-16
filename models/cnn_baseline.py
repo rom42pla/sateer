@@ -165,7 +165,7 @@ class CNNBaseline(pl.LightningModule):
         assert isinstance(window_stride, int) and window_stride >= 1
         mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=3, f_max=100, n_mels=mels, center=True,
                                            n_fft=x.shape[-1],
-                                           win_length=window_size, hop_length=window_stride)
+                                           win_length=window_size, hop_length=window_stride).to(x.device)
         mel_spectrogram = mel_fn(
             einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
         mel_spectrogram = einops.rearrange(mel_spectrogram, "b c m s -> b s c m")
