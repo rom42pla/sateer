@@ -184,9 +184,7 @@ class FEEGT(pl.LightningModule):
             # print(self.training, x.shape, encoder_mask.shape)
             # x = self.transformer_encoder(x, encoder_mask)
             # x = self.transformer_encoder(x)
-            print(x.shape)
             x = self.fnet_encoders(x)
-            print(x.shape)
 
         # with profiler.record_function("transformer decoder"):
         #     # transformer decoder
