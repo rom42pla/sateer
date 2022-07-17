@@ -76,16 +76,16 @@ class FEEGT(pl.LightningModule):
         self.learning_rate = learning_rate
 
         # layers
-        # self.normalization = nn.Sequential(OrderedDict([
-        #     ("reshaping_1", Rearrange("b s c m -> b c s m")),
-        #     ("conv", nn.Conv2d(self.in_channels, self.in_channels,
-        #                        kernel_size=(1, self.mels * 2 + 1), stride=1, padding=(0, self.mels))),
-        #     ("activation", nn.GELU()),
-        #     ("reshaping_2", Rearrange("b c s m -> b s m c")),
-        #     ("normalization", nn.LayerNorm(self.in_channels)),
-        #     ("reshaping_3", Rearrange("b s m c -> b s c m")),
-        # ]))
-        self.scale = nn.Parameter(torch.ones(1))
+        self.normalization = nn.Sequential(OrderedDict([
+            ("reshaping_1", Rearrange("b s c m -> b c s m")),
+            ("conv", nn.Conv2d(self.in_channels, self.in_channels,
+                               kernel_size=(1, self.mels * 2 + 1), stride=1, padding=(0, self.mels))),
+            ("activation", nn.GELU()),
+            ("reshaping_2", Rearrange("b c s m -> b s m c")),
+            ("normalization", nn.LayerNorm(self.in_channels)),
+            ("reshaping_3", Rearrange("b s m c -> b s c m")),
+        ]))
+        # self.scale = nn.Parameter(torch.ones(1))
 
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
@@ -160,8 +160,8 @@ class FEEGT(pl.LightningModule):
                                          window_size=0.1, window_stride=None)  # (b s c m)
 
         with profiler.record_function("preparation"):
-            # x = self.normalization(x)  # (b s c m)
-            x = x * self.scale
+            x = self.normalization(x)  # (b s c m)
+            # x = x * self.scale
             x = self.cnn_merge(x)
 
         with profiler.record_function("transformer encoder"):
