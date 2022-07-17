@@ -193,7 +193,6 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("predictions"):
             labels_pred = self.classification(x[:, 0, :])
-            print(labels_pred.shape)
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
         return labels_pred
