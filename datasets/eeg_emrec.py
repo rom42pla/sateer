@@ -127,10 +127,15 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
     def __len__(self) -> int:
         return len(self.eegs_data)
 
-    def __getitem__(self, idx) -> Tuple[torch.FloatTensor, torch.LongTensor]:
-        return self.eegs_data[idx], self.labels_data[idx,
-                                                     [v for k, v in self.labels.items()
-                                                      if k in self.labels_to_use]]
+    def __getitem__(self, i: int) -> Dict[str, Union[int, torch.Tensor]]:
+        return {
+            "sampling_rates": self.sampling_rate,
+            # "subject_id": self.subject_ids_data[i],
+            "eegs": self.eegs_data[i],
+            "labels": self.labels_data[i,
+                                       [v for k, v in self.labels.items()
+                                        if k in self.labels_to_use]],
+        }
 
     @abstractmethod
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray], List[str]]:

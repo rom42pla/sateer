@@ -75,9 +75,13 @@ def get_training_args():
     parser.add_argument("--window_embedding_dim",
                         default=512,
                         type=int,
-                        help="Dimension of the internal windows embedding in EEGT")
+                        help="Dimension of the internal windows embedding in FEEGT")
+    parser.add_argument("--disable_masking",
+                        default=False,
+                        action="store_true",
+                        help="Whether not to mask a percentage of embeddings during training of FEEGT")
     parser.add_argument("--learning_rate",
-                        default=1e-3,
+                        default=1e-4,
                         type=float,
                         help="Learning rate of the model")
 
