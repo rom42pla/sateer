@@ -29,7 +29,9 @@ class FEEGT(pl.LightningModule):
 
                  learning_rate: float = 1e-3,
 
-                 use_masking: bool = True, mask_perc_min: float = 0.05, mask_perc_max: float = 0.15,
+                 use_masking: bool = True,
+                 mask_perc_min: float = 0.05,
+                 mask_perc_max: float = 0.15,
 
                  mels: int = 16,
 
@@ -87,39 +89,38 @@ class FEEGT(pl.LightningModule):
         ]))
         # self.scale = nn.Parameter(torch.ones(1))
 
-        self.cnn_merge = nn.Sequential(
-            Rearrange("b s c m -> b c s m"),
-            ResidualBlock(in_channels=self.in_channels, out_channels=256, reduce_output=True),
-            ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
-
-            # nn.Conv2d(self.in_channels, 64,
-            #           kernel_size=(9, self.mels // 2 + 1), stride=(2, 1), padding=(4, self.mels // 4)),
-            #
-            # nn.Conv2d(64, 128,
-            #           kernel_size=(7, self.mels // 2 + 1), stride=(2, 1), padding=(3, self.mels // 4)),
-            # nn.ReLU(),
-            # nn.Dropout(p=self.dropout),
-            #
-            # nn.Conv2d(128, 256,
-            #           kernel_size=(5, self.mels // 2 + 1), stride=(2, 1), padding=(2, self.mels // 4)),
-            # nn.ReLU(),
-            # nn.Dropout(p=self.dropout),
-            #
-            # nn.Conv2d(256, self.window_embedding_dim,
-            #           kernel_size=(3, self.mels // 2 + 1), stride=(2, 1), padding=(1, self.mels // 4)),
-            # nn.ReLU(),
-            # nn.Dropout(p=self.dropout),
-            Rearrange("b c s m -> b s c m"),
-
-            nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
-            nn.Flatten(start_dim=2),
-        )
+        # self.cnn_merge = nn.Sequential(
+        #     Rearrange("b s c m -> b c s m"),
+        #     ResidualBlock(in_channels=self.in_channels, out_channels=256, reduce_output=True),
+        #     ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
+        #
+        #     # nn.Conv2d(self.in_channels, 64,
+        #     #           kernel_size=(9, self.mels // 2 + 1), stride=(2, 1), padding=(4, self.mels // 4)),
+        #     #
+        #     # nn.Conv2d(64, 128,
+        #     #           kernel_size=(7, self.mels // 2 + 1), stride=(2, 1), padding=(3, self.mels // 4)),
+        #     # nn.ReLU(),
+        #     # nn.Dropout(p=self.dropout),
+        #     #
+        #     # nn.Conv2d(128, 256,
+        #     #           kernel_size=(5, self.mels // 2 + 1), stride=(2, 1), padding=(2, self.mels // 4)),
+        #     # nn.ReLU(),
+        #     # nn.Dropout(p=self.dropout),
+        #     #
+        #     # nn.Conv2d(256, self.window_embedding_dim,
+        #     #           kernel_size=(3, self.mels // 2 + 1), stride=(2, 1), padding=(1, self.mels // 4)),
+        #     # nn.ReLU(),
+        #     # nn.Dropout(p=self.dropout),
+        #     Rearrange("b c s m -> b s c m"),
+        #
+        #     nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
+        #     nn.Flatten(start_dim=2),
+        # )
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b s (c m)"),
             FeedForwardLayer(in_features=self.in_channels * self.mels,
                              mid_features=self.window_embedding_dim,
                              out_features=self.window_embedding_dim),
-
         )
 
         self.fnet_encoders = nn.Sequential(OrderedDict([
@@ -134,20 +135,18 @@ class FEEGT(pl.LightningModule):
         }
         self.tokens_embedder = nn.Embedding(len(self.special_tokens), self.window_embedding_dim)
 
-        self.classification = nn.ModuleList()
-        for label in self.labels:
-            self.classification.add_module(label,
-                                           nn.Sequential(
-                                               nn.Linear(in_features=self.window_embedding_dim, out_features=1024),
-                                               nn.ReLU(),
-                                               nn.Dropout(p=self.dropout),
-
-                                               nn.Linear(in_features=1024, out_features=128),
-                                               nn.ReLU(),
-                                               nn.Dropout(p=self.dropout),
-
-                                               nn.Linear(in_features=128, out_features=2),
-                                           ))
+        # self.classification = nn.ModuleList()
+        # for label in self.labels:
+        #     self.classification.add_module(label,
+        #                                    nn.Sequential(OrderedDict([
+        #                                        ("linear", nn.Linear(in_features=self.window_embedding_dim,
+        #                                                             out_features=2))
+        #                                    ])))
+        self.classification = nn.Sequential(OrderedDict([
+            ("linear", nn.Linear(in_features=self.window_embedding_dim,
+                                 out_features=len(self.labels) * 2)),
+            ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
+        ]))
         self.float()
         assert device is None or device in {"cuda", "cpu"}
         if device is None:
@@ -193,9 +192,8 @@ class FEEGT(pl.LightningModule):
             x = self.fnet_encoders(x)
 
         with profiler.record_function("predictions"):
-            labels_pred = torch.stack([net(x[:, 0, :])
-                                       for net in self.classification],
-                                      dim=1)  # (b l d)
+            labels_pred = self.classification(x[:, 0, :])
+            print(labels_pred.shape)
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
         return labels_pred
