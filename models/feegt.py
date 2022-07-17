@@ -89,26 +89,26 @@ class FEEGT(pl.LightningModule):
 
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
-            nn.Conv2d(self.in_channels, 64,
-                      kernel_size=(9, self.mels * 2 + 1), stride=1, padding=(4, self.mels)),
+            ResidualBlock(in_channels=self.in_channels, out_channels=256, reduce_output=True),
+            ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
 
-            nn.Conv2d(64, 128,
-                      kernel_size=(7, self.mels * 2 + 1), stride=1, padding=(3, self.mels)),
-            nn.ReLU(),
-            # nn.BatchNorm1d(num_features=128),
-            nn.Dropout(p=self.dropout),
-
-            nn.Conv2d(128, 256,
-                      kernel_size=(5, self.mels * 2 + 1), stride=1, padding=(2, self.mels)),
-            nn.ReLU(),
-            # nn.BatchNorm1d(num_features=256),
-            nn.Dropout(p=self.dropout),
-
-            nn.Conv2d(256, self.window_embedding_dim,
-                      kernel_size=(3, self.mels * 2 + 1), stride=1, padding=(1, self.mels)),
-            nn.ReLU(),
-            # nn.BatchNorm1d(num_features=512),
-            nn.Dropout(p=self.dropout),
+            # nn.Conv2d(self.in_channels, 64,
+            #           kernel_size=(9, self.mels // 2 + 1), stride=(2, 1), padding=(4, self.mels // 4)),
+            #
+            # nn.Conv2d(64, 128,
+            #           kernel_size=(7, self.mels // 2 + 1), stride=(2, 1), padding=(3, self.mels // 4)),
+            # nn.ReLU(),
+            # nn.Dropout(p=self.dropout),
+            #
+            # nn.Conv2d(128, 256,
+            #           kernel_size=(5, self.mels // 2 + 1), stride=(2, 1), padding=(2, self.mels // 4)),
+            # nn.ReLU(),
+            # nn.Dropout(p=self.dropout),
+            #
+            # nn.Conv2d(256, self.window_embedding_dim,
+            #           kernel_size=(3, self.mels // 2 + 1), stride=(2, 1), padding=(1, self.mels // 4)),
+            # nn.ReLU(),
+            # nn.Dropout(p=self.dropout),
             Rearrange("b c s m -> b s c m"),
 
             nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
@@ -157,7 +157,7 @@ class FEEGT(pl.LightningModule):
         with profiler.record_function("decomposition"):
             x = self.get_mel_spectrogram(x, sampling_rate=sampling_rates,
                                          mels=self.mels,
-                                         window_size=0.1, window_stride=0.05)  # (b s c m)
+                                         window_size=0.1, window_stride=None)  # (b s c m)
 
         with profiler.record_function("preparation"):
             # x = self.normalization(x)  # (b s c m)
@@ -254,7 +254,7 @@ class FEEGT(pl.LightningModule):
     @staticmethod
     def get_mel_spectrogram(x, sampling_rate: Union[int, float, torch.Tensor], mels: int,
                             window_size: Union[int, float] = 1,
-                            window_stride: Union[int, float] = 1):
+                            window_stride: Optional[Union[int, float]] = None):
         assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
         assert any([isinstance(sampling_rate, t) for t in (int, float, torch.Tensor)])
         # sets the sampling rate
@@ -264,9 +264,12 @@ class FEEGT(pl.LightningModule):
             sampling_rate = sampling_rate[0].item()
         # sets the window
         assert window_size > 0
-        assert window_stride > 0
         window_size = math.floor(window_size * sampling_rate)
-        window_stride = math.floor(window_stride * sampling_rate)
+        assert window_stride is None or window_stride > 0
+        if window_stride is not None:
+            window_stride = math.floor(window_stride * sampling_rate)
+        else:
+            window_stride = 1
         mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=0, f_max=50, n_mels=mels, center=True,
                                            n_fft=x.shape[-1], normalized=True, power=2,
                                            win_length=window_size, hop_length=window_stride).to(x.device)
@@ -315,24 +318,24 @@ class ResidualBlock(nn.Module):
         self.reduce_output = reduce_output
 
         self.reduction_stream = nn.Sequential(
-            nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
-                      kernel_size=1, stride=1),
-            nn.BatchNorm1d(num_features=self.in_channels),
+            nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
+                      kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(num_features=self.in_channels),
             nn.GELU(),
 
-            nn.Conv1d(in_channels=self.in_channels, out_channels=self.in_channels,
-                      kernel_size=3, stride=2 if self.reduce_output else 1, padding=1),
-            nn.BatchNorm1d(num_features=self.in_channels),
+            nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
+                      kernel_size=7, stride=2 if self.reduce_output else 1, padding=3),
+            nn.BatchNorm2d(num_features=self.in_channels),
             nn.GELU(),
 
-            nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
-                      kernel_size=1, stride=1),
-            nn.BatchNorm1d(num_features=self.out_channels),
+            nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels,
+                      kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(num_features=self.out_channels),
         )
         self.projection_stream = nn.Sequential(
-            nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels,
-                      kernel_size=1, stride=2 if self.reduce_output else 1),
-            nn.BatchNorm1d(num_features=self.out_channels),
+            nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels,
+                      kernel_size=3, stride=2 if self.reduce_output else 1, padding=1),
+            nn.BatchNorm2d(num_features=self.out_channels),
         )
         self.normalization_stream = nn.Sequential(
             nn.GELU()
@@ -408,11 +411,12 @@ class FeedForwardLayer(nn.Module):
 
 
 if __name__ == "__main__":
-    model = FEEGT(in_channels=32, labels=4, sampling_rate=128, windows_length=0.1,
+    model = FEEGT(in_channels=32, labels=4,
                   mask_perc_min=0.1, mask_perc_max=0.3)
     print(model)
-    x = torch.randn(64, 128, 32)
+    eegs = torch.randn(256, 128, 32)
+    sampling_rates = torch.zeros(256) + 128
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
-            out = model(x)
-    print(prof.key_averages().table(sort_by="cpu_time", row_limit=5))
+            out = model(eegs, sampling_rates)
+    print(prof.key_averages().table(sort_by="cpu_time", row_limit=10))
