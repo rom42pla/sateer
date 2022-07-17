@@ -114,6 +114,13 @@ class FEEGT(pl.LightningModule):
             nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
             nn.Flatten(start_dim=2),
         )
+        self.cnn_merge = nn.Sequential(
+            Rearrange("b s c m -> b s (c m)"),
+            FeedForwardLayer(in_features=self.in_channels * self.mels,
+                             mid_features=self.window_embedding_dim,
+                             out_features=self.window_embedding_dim),
+
+        )
 
         self.fnet_encoders = nn.Sequential(OrderedDict([
             (f"encoder_{i}", FNetEncoderBlock(in_features=self.window_embedding_dim,
@@ -161,7 +168,6 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("preparation"):
             x = self.normalization(x)  # (b s c m)
-            # x = x * self.scale
             x = self.cnn_merge(x)
 
         with profiler.record_function("transformer encoder"):
