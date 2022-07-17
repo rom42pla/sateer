@@ -206,6 +206,7 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
                     i for i in range(len(self))
                     if self.subject_ids_data[i] == self.subjects_ids_indices[self.current_loso_index]
                 ]
+            assert set(train_indices).isdisjoint(set(test_indices))
             self.train_split, self.val_split = Subset(self, train_indices), \
                                                Subset(self, test_indices)
 
