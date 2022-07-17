@@ -163,7 +163,7 @@ class FEEGT(pl.LightningModule):
         with profiler.record_function("decomposition"):
             x = self.get_mel_spectrogram(x, sampling_rate=sampling_rates,
                                          mels=self.mels,
-                                         window_size=0.1, window_stride=None)  # (b s c m)
+                                         window_size=0.25, window_stride=0.1)  # (b s c m)
 
         with profiler.record_function("preparation"):
             x = self.normalization(x)  # (b s c m)
