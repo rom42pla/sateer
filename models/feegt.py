@@ -187,7 +187,7 @@ class FEEGT(pl.LightningModule):
             #                                        mels=self.mels,
             #                                        window_size=1, window_stride=0.1)  # (b s c m)
             spectrogram = Spectrogram(sampling_rate=sampling_rates,
-                                      min_freq=0, max_freq=50, mels=self.mels,
+                                      min_freq=0, max_freq=40, mels=self.mels,
                                       window_size=0.5, window_stride=0.25)(eegs)
             # print(self.spectrogram.window_size_scale)
         # self.plot_mel_spectrogram(spectrogram[0])
