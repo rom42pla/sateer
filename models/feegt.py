@@ -193,7 +193,7 @@ class FEEGT(pl.LightningModule):
         # self.plot_mel_spectrogram(spectrogram[0])
 
         with profiler.record_function("preparation"):
-            print("spectrogram", spectrogram.shape)
+            # print("spectrogram", spectrogram.shape)
             # x = self.normalization(x)  # (b s c m)
             x = self.cnn_merge(spectrogram)  # (b s c m)
 
