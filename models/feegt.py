@@ -215,7 +215,7 @@ class FEEGT(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(),
-                                      lr=self.learning_rate, amsgrad=True)
+                                      lr=self.learning_rate, amsgrad=False)
         return optimizer
 
     def get_positional_encodings(self, length: int):
