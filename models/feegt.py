@@ -335,9 +335,10 @@ class FNetEncoderBlock(nn.Module):
         x = F.layer_norm(x + x_fourier,
                          (x.shape[-1],))
         # fc pass
-        x_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
-                                   for s in range(x.shape[1])],
-                                  dim=1)
+        # x_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
+        #                            for s in range(x.shape[1])],
+        #                           dim=1)
+        x_forwarded = self.feed_forward_layer(x)
         x = x_forwarded if self.in_features != self.out_features else (x + x_forwarded)
         x = F.layer_norm(x, (x.shape[-1],))
         return x
