@@ -201,7 +201,7 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("preparation"):
             # print("spectrogram", spectrogram.shape)
-            spectrogram = self.normalization(spectrogram)  # (b s c m)
+            # spectrogram = self.normalization(spectrogram)  # (b s c m)
             x = self.cnn_merge(spectrogram)  # (b s c m)
             # print("sequence", x.shape)
 
