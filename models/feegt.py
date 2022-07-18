@@ -6,6 +6,7 @@ from typing import Union, List, Optional, Dict, Any
 import functorch
 import numpy as np
 import torch
+import torchvision
 from einops.layers.torch import Rearrange
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import nn
@@ -80,14 +81,14 @@ class FEEGT(pl.LightningModule):
         # layers
         self.normalization = nn.Sequential(OrderedDict([
             ("reshaping_1", Rearrange("b s c m -> b c s m")),
-            ("conv", nn.Conv2d(self.in_channels, self.in_channels,
+            ("conv", nn.Conv2d(self.in_channels, self.in_channels, bias=False,
                                kernel_size=(1, self.mels * 2 + 1), stride=1, padding=(0, self.mels))),
+            # ("reshaping_2", Rearrange("b c s m -> b s m c")),
+            ("norm", nn.LayerNorm(self.mels)),
             ("activation", nn.GELU()),
-            ("reshaping_2", Rearrange("b c s m -> b s m c")),
-            ("normalization", nn.LayerNorm(self.in_channels)),
-            ("reshaping_3", Rearrange("b s m c -> b s c m")),
+            # ("reshaping_3", Rearrange("b s m c -> b s c m")),
+            ("reshaping_3", Rearrange("b c s m -> b s c m")),
         ]))
-        # self.scale = nn.Parameter(torch.ones(1))
 
         # self.cnn_merge = nn.Sequential(
         #     Rearrange("b s c m -> b c s m"),
@@ -118,10 +119,12 @@ class FEEGT(pl.LightningModule):
         # )
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
-            nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim,
-                      kernel_size=(7, self.mels), stride=3, padding=(3, 0)),
+            nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=False,
+                      kernel_size=(7, self.mels), stride=4, padding=(4, 0)),
             Rearrange("b c s m -> b s c m"),
-            nn.Flatten(start_dim=2)
+            nn.Flatten(start_dim=2),
+            nn.LayerNorm(self.window_embedding_dim),
+            nn.GELU(),
             # FeedForwardLayer(in_features=self.in_channels * self.mels,
             #                  mid_features=self.window_embedding_dim,
             #                  out_features=self.window_embedding_dim),
@@ -425,13 +428,15 @@ class FeedForwardLayer(nn.Module):
 
 
 if __name__ == "__main__":
-    torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.benchmark = True
     model = FEEGT(in_channels=32, labels=4,
                   mask_perc_min=0.1, mask_perc_max=0.3)
     print(model)
-    eegs = torch.randn(1024, 64, 32)
+    eegs = torch.randn(2048, 64, 32)
     sampling_rates = torch.zeros(256) + 128
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
             out = model(eegs, sampling_rates)
     print(prof.key_averages().table(sort_by="cpu_time", row_limit=10))
+
+    # print(torchvision.models.resnet18())
