@@ -146,11 +146,11 @@ class FEEGT(pl.LightningModule):
             self.special_tokens["end"],
             self.special_tokens["mask"],
         ], device=self.device))
-        # if self.training and self.use_masking:
-        #     with profiler.record_function("masking"):
-        #         mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=self.device)
-        #         mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
-        #         x[mask] = mask_token
+        if self.training and self.use_masking:
+            with profiler.record_function("masking"):
+                mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=self.device)
+                mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
+                x[mask] = mask_token
         # adds start and end token
         x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
                        x,
