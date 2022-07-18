@@ -83,10 +83,6 @@ class FEEGT(pl.LightningModule):
             (f"encoder", FNetEncoderBlock(in_features=self.in_channels * self.mels,
                                           mid_features=self.window_embedding_dim,
                                           out_features=self.window_embedding_dim))
-            # ("reshape_c", Rearrange("b s c -> b c s")),
-            # ("conv", nn.Conv1d(in_channels=self.in_channels * self.mels, out_channels=self.window_embedding_dim,
-            #                    kernel_size=3, stride=1, padding=1)),
-            # ("reshape_o", Rearrange("b c s -> b s c")),
         ]))
 
         self.fnet_encoders = nn.Sequential(OrderedDict([
@@ -127,7 +123,7 @@ class FEEGT(pl.LightningModule):
         with profiler.record_function("spectrogram"):
             spectrogram = Spectrogram(sampling_rate=sampling_rates,
                                       min_freq=0, max_freq=40, mels=self.mels,
-                                      window_size=1, window_stride=0.1)(eegs)
+                                      window_size=1, window_stride=None)(eegs)
             # print(self.spectrogram.window_size_scale)
         # self.plot_mel_spectrogram(spectrogram[0])
 
