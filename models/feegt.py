@@ -117,24 +117,30 @@ class FEEGT(pl.LightningModule):
         #     nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
         #     nn.Flatten(start_dim=2),
         # )
+        # self.cnn_merge = nn.Sequential(
+        #     Rearrange("b s c m -> b c s m"),
+        #     nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=True,
+        #               kernel_size=(7, self.mels), stride=1, padding=(3, 0)),
+        #     Rearrange("b c s m -> b s c m"),
+        #     nn.LayerNorm([self.window_embedding_dim, 1]),
+        #     # Rearrange("b s c m -> b s (c m)"),
+        #     # Rearrange("b s c -> b c s"),
+        #     # nn.Conv1d(in_channels=self.in_channels * self.mels, out_channels=self.window_embedding_dim, bias=False,
+        #     #           kernel_size=7, stride=4, padding=3),
+        #     # Rearrange("b c s -> b s c"),
+        #     # nn.LayerNorm(self.window_embedding_dim),
+        #     nn.GELU(),
+        #     nn.Flatten(start_dim=2),
+        #
+        #     # FeedForwardLayer(in_features=self.in_channels * self.mels,
+        #     #                  mid_features=self.window_embedding_dim,
+        #     #                  out_features=self.window_embedding_dim),
+        # )
         self.cnn_merge = nn.Sequential(
-            Rearrange("b s c m -> b c s m"),
-            nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=True,
-                      kernel_size=(7, self.mels), stride=1, padding=(3, 0)),
-            Rearrange("b c s m -> b s c m"),
-            nn.LayerNorm([self.window_embedding_dim, 1]),
-            # Rearrange("b s c m -> b s (c m)"),
-            # Rearrange("b s c -> b c s"),
-            # nn.Conv1d(in_channels=self.in_channels * self.mels, out_channels=self.window_embedding_dim, bias=False,
-            #           kernel_size=7, stride=4, padding=3),
-            # Rearrange("b c s -> b s c"),
-            # nn.LayerNorm(self.window_embedding_dim),
-            nn.GELU(),
-            nn.Flatten(start_dim=2),
-
-            # FeedForwardLayer(in_features=self.in_channels * self.mels,
-            #                  mid_features=self.window_embedding_dim,
-            #                  out_features=self.window_embedding_dim),
+            Residual(in_channels=self.in_channels, out_channels=self.window_embedding_dim,
+                     reduce_size=True, kernel_size=5),
+            nn.AdaptiveMaxPool2d(output_size=(self.window_embedding_dim, 1)),
+            Rearrange("b s c m -> b s (c m)"),
         )
 
         self.fnet_encoders = nn.Sequential(OrderedDict([
@@ -187,15 +193,15 @@ class FEEGT(pl.LightningModule):
             #                                        window_size=1, window_stride=0.1)  # (b s c m)
             spectrogram = Spectrogram(sampling_rate=sampling_rates,
                                       min_freq=0, max_freq=40, mels=self.mels,
-                                      window_size=0.5, window_stride=0.2)(eegs)
+                                      window_size=0.5, window_stride=0.25)(eegs)
             # print(self.spectrogram.window_size_scale)
         # self.plot_mel_spectrogram(spectrogram[0])
 
         with profiler.record_function("preparation"):
-            # print("spectrogram", spectrogram.shape)
+            print("spectrogram", spectrogram.shape)
             # spectrogram = self.normalization(spectrogram)  # (b s c m)
             x = self.cnn_merge(spectrogram)  # (b s c m)
-            # print(x.shape)
+            print("sequence", x.shape)
 
         # adds special tokens
         start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
@@ -285,33 +291,6 @@ class FEEGT(pl.LightningModule):
 
         return pe
 
-    # @staticmethod
-    # def get_mel_spectrogram(x, sampling_rate: Union[int, float, torch.Tensor], mels: int,
-    #                         window_size: Union[int, float] = 1,
-    #                         window_stride: Optional[Union[int, float]] = None):
-    #     assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
-    #     assert any([isinstance(sampling_rate, t) for t in (int, float, torch.Tensor)])
-    #     # sets the sampling rate
-    #     if isinstance(sampling_rate, torch.Tensor):
-    #         if not torch.allclose(sampling_rate, sampling_rate[0]):
-    #             raise NotImplementedError(f"all the elements in a batch must have the same sampling rate")
-    #         sampling_rate = sampling_rate[0].detach().item()
-    #     # sets the window
-    #     assert window_size > 0
-    #     window_size = min(math.floor(window_size * sampling_rate), x.shape[-1])
-    #     assert window_stride is None or window_stride > 0
-    #     if window_stride is not None:
-    #         window_stride = math.floor(window_stride * sampling_rate)
-    #     else:
-    #         window_stride = 1
-    #     mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=0, f_max=50, n_mels=mels, center=True,
-    #                                        n_fft=x.shape[-1] + 1, normalized=False, power=2,
-    #                                        win_length=window_size, hop_length=window_stride).to(x.device)
-    #     mel_spectrogram = mel_fn(
-    #         einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
-    #     mel_spectrogram = einops.rearrange(mel_spectrogram, "b c m s -> b s c m")
-    #     return mel_spectrogram
-
     @staticmethod
     def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
         assert len(spectrogram.shape) == 3  # s c m
@@ -335,6 +314,48 @@ class FEEGT(pl.LightningModule):
             else:
                 ax.set_visible(False)
         plt.show(block=False)
+
+
+class Residual(nn.Module):
+    def __init__(self,
+                 in_channels: int, out_channels: int, kernel_size: int,
+                 reduce_size: bool = False):
+        super().__init__()
+        self.prepare_input = nn.Sequential(
+            Rearrange("b s c m -> b c s m")
+        )
+        self.branch1 = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                      kernel_size=kernel_size, padding=kernel_size//2,
+                      stride=1 if reduce_size is False else 2,
+                      bias=False),
+            nn.BatchNorm2d(num_features=out_channels),
+            nn.GELU(),
+            nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
+                      kernel_size=kernel_size, padding=kernel_size//2,
+                      stride=1,
+                      bias=False),
+            nn.BatchNorm2d(num_features=out_channels),
+        )
+        self.prepare_output = nn.Sequential(
+            nn.GELU(),
+            Rearrange("b c s m -> b s c m")
+        )
+
+        self.branch2 = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                      kernel_size=kernel_size, padding=kernel_size//2,
+                      stride=1 if reduce_size is False else 2,
+                      bias=False),
+            nn.BatchNorm2d(num_features=out_channels),
+        )
+
+    def forward(self, x):
+        x = self.prepare_input(x)
+        x1, x2 = self.branch1(x), self.branch2(x)
+        x = x1 + x2
+        x = self.prepare_output(x)
+        return x
 
 
 class Spectrogram(nn.Module):
