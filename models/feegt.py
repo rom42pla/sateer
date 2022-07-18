@@ -330,15 +330,9 @@ class Residual(nn.Module):
                       stride=1 if reduce_size is False else 2,
                       bias=False),
             nn.BatchNorm2d(num_features=out_channels),
-            nn.GELU(),
-            # nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
-            #           kernel_size=kernel_size, padding=kernel_size // 2,
-            #           stride=1,
-            #           bias=False),
-            # nn.BatchNorm2d(num_features=out_channels),
         )
         self.prepare_output = nn.Sequential(
-            nn.GELU(),
+            nn.ReLU(),
             Rearrange("b c s m -> b s c m")
         )
 
