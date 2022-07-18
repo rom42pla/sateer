@@ -23,7 +23,7 @@ from models.cnn_baseline import CNNBaseline
 from models.eegt import EEGT
 import pytorch_lightning as pl
 # torch.autograd.set_detect_anomaly(True)
-
+torch.backends.cudnn.benchmark = True
 import warnings
 
 # suppresses some warnings

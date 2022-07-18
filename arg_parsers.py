@@ -43,6 +43,10 @@ def get_training_args():
                         default=64,
                         type=int,
                         help="Type of validation algorithm ('kfold' or 'loso')")
+    parser.add_argument("--min_epochs",
+                        default=5,
+                        type=int,
+                        help="Minimum number of epochs")
     parser.add_argument("--max_epochs",
                         default=100,
                         type=int,
@@ -61,7 +65,11 @@ def get_training_args():
                         type=str,
                         choices={"cross_subject", "within_subject"},
                         help="The setting of the experiment, whether cross- or within-subject")
-
+    parser.add_argument("--precision",
+                        default=16,
+                        type=int,
+                        choices={16, 32},
+                        help="Whether to use 32- ore 16-bit precision")
     # model args
     parser.add_argument("--model",
                         default="cnn_baseline",
@@ -93,7 +101,8 @@ def get_training_args():
         makedirs(args.checkpoints_path)
     assert args.windows_size is None or args.windows_size > 0
     assert args.batch_size >= 1
-    assert args.max_epochs >= 1
+    assert args.min_epochs >= 1
+    assert args.max_epochs >= 1 and args.max_epochs >= args.min_epochs
     if args.validation == "k_fold":
         assert args.k_folds >= 2
     assert args.limit_train_batches is None or \

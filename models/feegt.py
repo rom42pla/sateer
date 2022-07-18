@@ -245,6 +245,9 @@ class FEEGT(pl.LightningModule):
             "loss": loss,
         }
 
+    def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
+        optimizer.zero_grad(set_to_none=True)
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optimizer
@@ -269,7 +272,7 @@ class FEEGT(pl.LightningModule):
         if isinstance(sampling_rate, torch.Tensor):
             if not torch.allclose(sampling_rate, sampling_rate[0]):
                 raise NotImplementedError(f"all the elements in a batch must have the same sampling rate")
-            sampling_rate = sampling_rate[0].item()
+            sampling_rate = sampling_rate[0].detach().item()
         # sets the window
         assert window_size > 0
         window_size = min(math.floor(window_size * sampling_rate), x.shape[-1])
@@ -311,53 +314,53 @@ class FEEGT(pl.LightningModule):
         plt.show(block=False)
 
 
-class ResidualBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: Optional[int] = None,
-                 reduce_output: bool = False):
-        super(ResidualBlock, self).__init__()
-        assert isinstance(in_channels, int) and in_channels >= 1
-        self.in_channels = in_channels
-
-        assert out_channels is None or (isinstance(in_channels, int) and in_channels >= 1)
-        if out_channels is None:
-            self.out_channels = self.in_channels
-        else:
-            self.out_channels = out_channels
-
-        assert isinstance(reduce_output, bool)
-        self.reduce_output = reduce_output
-
-        self.reduction_stream = nn.Sequential(
-            nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
-                      kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(num_features=self.in_channels),
-            nn.GELU(),
-
-            nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
-                      kernel_size=7, stride=2 if self.reduce_output else 1, padding=3),
-            nn.BatchNorm2d(num_features=self.in_channels),
-            nn.GELU(),
-
-            nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels,
-                      kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(num_features=self.out_channels),
-        )
-        self.projection_stream = nn.Sequential(
-            nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels,
-                      kernel_size=3, stride=2 if self.reduce_output else 1, padding=1),
-            nn.BatchNorm2d(num_features=self.out_channels),
-        )
-        self.normalization_stream = nn.Sequential(
-            nn.GELU()
-        )
-
-    def forward(self, x):
-        x_transformed = self.reduction_stream(x)
-        if self.in_channels != self.out_channels or self.reduce_output:
-            x = self.projection_stream(x)
-        x = x_transformed + x
-        out = self.normalization_stream(x)
-        return out
+# class ResidualBlock(nn.Module):
+#     def __init__(self, in_channels: int, out_channels: Optional[int] = None,
+#                  reduce_output: bool = False):
+#         super(ResidualBlock, self).__init__()
+#         assert isinstance(in_channels, int) and in_channels >= 1
+#         self.in_channels = in_channels
+#
+#         assert out_channels is None or (isinstance(in_channels, int) and in_channels >= 1)
+#         if out_channels is None:
+#             self.out_channels = self.in_channels
+#         else:
+#             self.out_channels = out_channels
+#
+#         assert isinstance(reduce_output, bool)
+#         self.reduce_output = reduce_output
+#
+#         self.reduction_stream = nn.Sequential(
+#             nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
+#                       kernel_size=3, stride=1, padding=1),
+#             nn.BatchNorm2d(num_features=self.in_channels),
+#             nn.GELU(),
+#
+#             nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
+#                       kernel_size=7, stride=2 if self.reduce_output else 1, padding=3),
+#             nn.BatchNorm2d(num_features=self.in_channels),
+#             nn.GELU(),
+#
+#             nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels,
+#                       kernel_size=3, stride=1, padding=1),
+#             nn.BatchNorm2d(num_features=self.out_channels),
+#         )
+#         self.projection_stream = nn.Sequential(
+#             nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels,
+#                       kernel_size=3, stride=2 if self.reduce_output else 1, padding=1),
+#             nn.BatchNorm2d(num_features=self.out_channels),
+#         )
+#         self.normalization_stream = nn.Sequential(
+#             nn.GELU()
+#         )
+#
+#     def forward(self, x):
+#         x_transformed = self.reduction_stream(x)
+#         if self.in_channels != self.out_channels or self.reduce_output:
+#             x = self.projection_stream(x)
+#         x = x_transformed + x
+#         out = self.normalization_stream(x)
+#         return out
 
 
 class FNetEncoderBlock(nn.Module):
@@ -422,10 +425,11 @@ class FeedForwardLayer(nn.Module):
 
 
 if __name__ == "__main__":
+    torch.backends.cudnn.benchmark = True
     model = FEEGT(in_channels=32, labels=4,
                   mask_perc_min=0.1, mask_perc_max=0.3)
     print(model)
-    eegs = torch.randn(256, 64, 32)
+    eegs = torch.randn(1024, 64, 32)
     sampling_rates = torch.zeros(256) + 128
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
