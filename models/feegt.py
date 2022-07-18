@@ -1,4 +1,5 @@
 import math
+import time
 from collections import OrderedDict
 from pprint import pprint
 from typing import Union, List, Optional, Dict, Any
@@ -174,19 +175,20 @@ class FEEGT(pl.LightningModule):
 
     def forward(self, eegs: torch.Tensor, sampling_rates: Union[float, int, torch.Tensor]):
         assert eegs.shape[-1] == self.in_channels
-        x = eegs.to(self.device)  # (b s c)
+        if eegs.device != self.device:
+            eegs = eegs.to(self.device)  # (b s c)
         # cast from microvolts to volts
-        x *= 1e6
+        eegs *= 1e6
 
         with profiler.record_function("spectrogram"):
-            x = self.get_mel_spectrogram(x, sampling_rate=sampling_rates,
-                                         mels=self.mels,
-                                         window_size=1, window_stride=None)  # (b s c m)
+            spectrogram = self.get_mel_spectrogram(eegs, sampling_rate=sampling_rates,
+                                                   mels=self.mels,
+                                                   window_size=1, window_stride=None)  # (b s c m)
         # self.plot_mel_spectrogram(x[0])
         # exit()
         with profiler.record_function("preparation"):
             # x = self.normalization(x)  # (b s c m)
-            x = self.cnn_merge(x)  # (b s c m)
+            x = self.cnn_merge(spectrogram)  # (b s c m)
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
@@ -296,7 +298,7 @@ class FEEGT(pl.LightningModule):
         else:
             window_stride = 1
         mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=0, f_max=50, n_mels=mels, center=True,
-                                           n_fft=x.shape[-1] + 1, normalized=True, power=2,
+                                           n_fft=x.shape[-1] + 1, normalized=False, power=2,
                                            win_length=window_size, hop_length=window_stride).to(x.device)
         mel_spectrogram = mel_fn(
             einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
@@ -326,55 +328,6 @@ class FEEGT(pl.LightningModule):
             else:
                 ax.set_visible(False)
         plt.show(block=False)
-
-
-# class ResidualBlock(nn.Module):
-#     def __init__(self, in_channels: int, out_channels: Optional[int] = None,
-#                  reduce_output: bool = False):
-#         super(ResidualBlock, self).__init__()
-#         assert isinstance(in_channels, int) and in_channels >= 1
-#         self.in_channels = in_channels
-#
-#         assert out_channels is None or (isinstance(in_channels, int) and in_channels >= 1)
-#         if out_channels is None:
-#             self.out_channels = self.in_channels
-#         else:
-#             self.out_channels = out_channels
-#
-#         assert isinstance(reduce_output, bool)
-#         self.reduce_output = reduce_output
-#
-#         self.reduction_stream = nn.Sequential(
-#             nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
-#                       kernel_size=3, stride=1, padding=1),
-#             nn.BatchNorm2d(num_features=self.in_channels),
-#             nn.GELU(),
-#
-#             nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
-#                       kernel_size=7, stride=2 if self.reduce_output else 1, padding=3),
-#             nn.BatchNorm2d(num_features=self.in_channels),
-#             nn.GELU(),
-#
-#             nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels,
-#                       kernel_size=3, stride=1, padding=1),
-#             nn.BatchNorm2d(num_features=self.out_channels),
-#         )
-#         self.projection_stream = nn.Sequential(
-#             nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels,
-#                       kernel_size=3, stride=2 if self.reduce_output else 1, padding=1),
-#             nn.BatchNorm2d(num_features=self.out_channels),
-#         )
-#         self.normalization_stream = nn.Sequential(
-#             nn.GELU()
-#         )
-#
-#     def forward(self, x):
-#         x_transformed = self.reduction_stream(x)
-#         if self.in_channels != self.out_channels or self.reduce_output:
-#             x = self.projection_stream(x)
-#         x = x_transformed + x
-#         out = self.normalization_stream(x)
-#         return out
 
 
 class FNetEncoderBlock(nn.Module):
@@ -433,21 +386,29 @@ class FeedForwardLayer(nn.Module):
         x = self.linear_1(x)
         x = self.activation(x)
         x = self.linear_2(x)
-        x = self.activation(x)
+        # x = self.activation(x)
         x = self.dropout(x)
         return x
 
 
 if __name__ == "__main__":
     # torch.backends.cudnn.benchmark = True
-    model = FEEGT(in_channels=32, labels=4,
+    model = FEEGT(in_channels=32, labels=4, window_embedding_dim=128,
+                  num_encoders=1, use_masking=True,
                   mask_perc_min=0.1, mask_perc_max=0.3)
-    eegs = torch.randn(2048, 64, 32)
-    sampling_rates = torch.zeros(256) + 128
-    print(model)
+    batch_size = 2048
+    batch = {
+        "eegs": torch.randn(batch_size, 64, 32, dtype=torch.float32),
+        "labels": torch.ones(batch_size, 4, dtype=torch.long),
+        "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + 128,
+    }
+    # model.training_step(batch, 0)
+
+    # print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
-            out = model(eegs, sampling_rates)
-    print(prof.key_averages().table(sort_by="cpu_time", row_limit=10))
+            # out = model(batch["eegs"], batch["sampling_rates"])
+            model.training_step(batch, 0)
+    print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=10))
 
     # print(torchvision.models.resnet18())
