@@ -133,7 +133,7 @@ class FEEGT(pl.LightningModule):
             spectrogram = Spectrogram(sampling_rate=sampling_rates,
                                       min_freq=0, max_freq=40, mels=self.mels,
                                       window_size=1, window_stride=0.1)(eegs)
-        self.plot_mel_spectrogram(spectrogram[0])
+        # self.plot_mel_spectrogram(spectrogram[0])
 
         with profiler.record_function("preparation"):
             x = self.normalize(spectrogram)
