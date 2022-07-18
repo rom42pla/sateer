@@ -81,7 +81,7 @@ class FEEGT(pl.LightningModule):
         # layers
         self.normalization = nn.Sequential(OrderedDict([
             ("reshaping_1", Rearrange("b s c m -> b c s m")),
-            ("conv", nn.Conv2d(self.in_channels, self.in_channels, bias=False,
+            ("conv", nn.Conv2d(self.in_channels, self.in_channels, bias=True,
                                kernel_size=(1, self.mels * 2 + 1), stride=1, padding=(0, self.mels))),
             # ("reshaping_2", Rearrange("b c s m -> b s m c")),
             ("norm", nn.LayerNorm(self.mels)),
@@ -119,7 +119,7 @@ class FEEGT(pl.LightningModule):
         # )
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
-            nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=False,
+            nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=True,
                       kernel_size=(7, self.mels), stride=1, padding=(3, 0)),
             Rearrange("b c s m -> b s c m"),
             nn.LayerNorm([self.window_embedding_dim, 1]),
@@ -197,24 +197,25 @@ class FEEGT(pl.LightningModule):
             x = self.cnn_merge(spectrogram)  # (b s c m)
             # print(x.shape)
 
+        # adds special tokens
+        start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
+            self.special_tokens["start"],
+            self.special_tokens["end"],
+            self.special_tokens["mask"],
+        ], device=self.device))
+        if self.training and self.use_masking:
+            with profiler.record_function("masking"):
+                mask_rand = torch.rand(x.shape[:2], device=self.device)
+                mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
+                x[mask] = mask_token
+        # adds start and end token
+        x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
+                       x,
+                       end_token.repeat(x.shape[0], 1, 1)], dim=1)
+        # adds positional embeddings
+        x += self.get_positional_encodings(length=x.shape[1])
+
         with profiler.record_function("transformer encoder"):
-            # adds special tokens
-            start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
-                self.special_tokens["start"],
-                self.special_tokens["end"],
-                self.special_tokens["mask"],
-            ], device=self.device))
-            if self.training and self.use_masking:
-                with profiler.record_function("masking"):
-                    mask_rand = torch.rand(x.shape[:2], device=self.device)
-                    mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
-                    x[mask] = mask_token
-            # adds start and end token
-            x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
-                           x,
-                           end_token.repeat(x.shape[0], 1, 1)], dim=1)
-            # adds positional embeddings
-            x += self.get_positional_encodings(length=x.shape[1])
             x = self.fnet_encoders(x)
 
         with profiler.record_function("predictions"):
@@ -442,8 +443,9 @@ class FeedForwardLayer(nn.Module):
     def forward(self, x):
         x = self.linear_1(x)
         x = self.activation(x)
+        x = self.dropout(x)
         x = self.linear_2(x)
-        # x = self.activation(x)
+        x = self.activation(x)
         x = self.dropout(x)
         return x
 
