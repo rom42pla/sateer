@@ -4,7 +4,6 @@ from pprint import pprint
 from typing import Union, List, Optional, Dict, Any
 
 import functorch
-import numpy as np
 import torch
 import torchvision
 from einops.layers.torch import Rearrange
@@ -309,7 +308,7 @@ class FEEGT(pl.LightningModule):
     def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
         assert len(spectrogram.shape) == 3  # s c m
         import matplotlib.pyplot as plt
-        lines = int(np.ceil(np.sqrt(spectrogram.shape[1])))
+        lines = int(math.ceil(math.sqrt(spectrogram.shape[1])))
         fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
                                 tight_layout=True)
         min_value, max_value = spectrogram.min(), spectrogram.max()
