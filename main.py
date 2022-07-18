@@ -145,6 +145,7 @@ elif args.setting == "within_subject":
                                                       labels=dataset.labels_to_use,
                                                       num_encoders=args.num_encoders,
                                                       window_embedding_dim=args.window_embedding_dim,
+                                                      mels=args.mels,
                                                       use_masking=not args.disable_masking,
                                                       learning_rate=args.learning_rate)
                 elif args.model == "cnn_baseline":

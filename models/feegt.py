@@ -78,6 +78,15 @@ class FEEGT(pl.LightningModule):
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
+        self.normalize = nn.Sequential(OrderedDict([
+            ("reshape1", Rearrange("b s c m -> b c s m")),
+            ("conv", nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
+                               kernel_size=1, stride=1, padding=0, bias=False)),
+            ("bn", nn.BatchNorm2d(num_features=self.in_channels)),
+            ("activation", nn.GELU()),
+            ("reshape2", Rearrange("b c s m -> b s c m")),
+        ]))
+
         self.merge_mels = nn.Sequential(OrderedDict([
             ("reshape", Rearrange("b s c m -> b s (c m)")),
             (f"encoder", FNetEncoderBlock(in_features=self.in_channels * self.mels,
@@ -123,13 +132,12 @@ class FEEGT(pl.LightningModule):
         with profiler.record_function("spectrogram"):
             spectrogram = Spectrogram(sampling_rate=sampling_rates,
                                       min_freq=0, max_freq=40, mels=self.mels,
-                                      window_size=1, window_stride=None)(eegs)
-            # print(self.spectrogram.window_size_scale)
-        # self.plot_mel_spectrogram(spectrogram[0])
+                                      window_size=1, window_stride=0.1)(eegs)
+        self.plot_mel_spectrogram(spectrogram[0])
 
         with profiler.record_function("preparation"):
-            # print("spectrogram", spectrogram.shape)
-            x = self.merge_mels(spectrogram)  # (b s c)
+            x = self.normalize(spectrogram)
+            x = self.merge_mels(x)  # (b s c)
             # print("sequence", x.shape)
 
         # generates special tokens
@@ -250,7 +258,7 @@ class Spectrogram(nn.Module):
                  window_size: Union[int, float] = 1,
                  window_stride: Optional[Union[int, float]] = None,
                  min_freq: int = 0,
-                 max_freq: int = 100,
+                 max_freq: int = 50,
                  mels: int = 8,
                  ):
         super().__init__()
@@ -282,14 +290,17 @@ class Spectrogram(nn.Module):
     def forward(self, eegs: torch.Tensor):
         assert isinstance(eegs, torch.Tensor) and len(eegs.shape) in {2, 3}
         eegs = einops.rearrange(eegs, "s c -> c s" if len(eegs.shape) == 2 else "b s c -> b c s")
-        mel_fn = transforms.MelSpectrogram(sample_rate=self.sampling_rate,
-                                           f_min=self.min_freq, f_max=self.max_freq,
-                                           n_mels=self.mels, center=True,
-                                           n_fft=min(300, eegs.shape[-1]),
-                                           normalized=True, power=2,
-                                           win_length=self.window_size,
-                                           hop_length=self.window_stride,
-                                           pad=self.window_stride // 2).to(eegs.device)
+        mel_fn = transforms.MelSpectrogram(
+            sample_rate=self.sampling_rate,
+            f_min=self.min_freq, f_max=self.max_freq,
+            n_mels=self.mels, center=True,
+            n_fft=eegs.shape[-1],
+            normalized=True, power=2,
+            win_length=self.window_size,
+            hop_length=self.window_stride,
+            # pad=self.window_stride // 2,
+            pad=0,
+        ).to(eegs.device)
         spectrogram = mel_fn(eegs)  # (b c m s)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
