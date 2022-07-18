@@ -175,7 +175,7 @@ elif args.setting == "within_subject":
                                                        verbose=False, check_on_train_epoch_end=False, strict=True),
                                      ] if args.checkpoints_path is not None else [])
                 trainer.fit(model, datamodule=dataset)
-                del trainer, model
+                del trainer, model, dataset
             subject_metrics_dfs = []
             for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
                              if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))

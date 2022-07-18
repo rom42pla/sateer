@@ -83,6 +83,10 @@ class FEEGT(pl.LightningModule):
             (f"encoder", FNetEncoderBlock(in_features=self.in_channels * self.mels,
                                           mid_features=self.window_embedding_dim,
                                           out_features=self.window_embedding_dim))
+            # ("reshape_c", Rearrange("b s c -> b c s")),
+            # ("conv", nn.Conv1d(in_channels=self.in_channels * self.mels, out_channels=self.window_embedding_dim,
+            #                    kernel_size=3, stride=1, padding=1)),
+            # ("reshape_o", Rearrange("b c s -> b s c")),
         ]))
 
         self.fnet_encoders = nn.Sequential(OrderedDict([
@@ -98,17 +102,7 @@ class FEEGT(pl.LightningModule):
         self.tokens_embedder = nn.Sequential(
             nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
         )
-        self.electrodes_embedder = nn.Sequential(
-            nn.Embedding(self.in_channels, self.window_embedding_dim)
-        )
 
-        # self.classification = nn.ModuleList()
-        # for label in self.labels:
-        #     self.classification.add_module(label,
-        #                                    nn.Sequential(OrderedDict([
-        #                                        ("linear", nn.Linear(in_features=self.window_embedding_dim,
-        #                                                             out_features=2))
-        #                                    ])))
         self.classification = nn.Sequential(OrderedDict([
             ("linear", nn.Linear(in_features=self.window_embedding_dim,
                                  out_features=len(self.labels) * 2)),
@@ -131,9 +125,6 @@ class FEEGT(pl.LightningModule):
         eegs *= 1e6
 
         with profiler.record_function("spectrogram"):
-            # spectrogram = self.get_mel_spectrogram(eegs, sampling_rate=sampling_rates,
-            #                                        mels=self.mels,
-            #                                        window_size=1, window_stride=0.1)  # (b s c m)
             spectrogram = Spectrogram(sampling_rate=sampling_rates,
                                       min_freq=0, max_freq=40, mels=self.mels,
                                       window_size=1, window_stride=0.1)(eegs)
@@ -151,17 +142,17 @@ class FEEGT(pl.LightningModule):
             self.special_tokens["end"],
             self.special_tokens["mask"],
         ], device=self.device))
-        if self.training and self.use_masking:
-            with profiler.record_function("masking"):
-                mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=self.device)
-                mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
-                x[mask] = mask_token
+        # if self.training and self.use_masking:
+        #     with profiler.record_function("masking"):
+        #         mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=self.device)
+        #         mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
+        #         x[mask] = mask_token
         # adds start and end token
         x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
                        x,
                        end_token.repeat(x.shape[0], 1, 1)], dim=1)
         # adds positional embeddings
-        x = self.add_positional_encodings(x)
+        x += self.get_positional_encodings(length=x.shape[1])
 
         with profiler.record_function("transformer encoder"):
             x = self.fnet_encoders(x)
@@ -223,16 +214,14 @@ class FEEGT(pl.LightningModule):
                                       lr=self.learning_rate, amsgrad=True)
         return optimizer
 
-    def add_positional_encodings(self, x):
-        length = x.shape[1]
+    def get_positional_encodings(self, length: int):
         pe = torch.zeros(length, self.window_embedding_dim, device=self.device)
         position = torch.arange(0, length, device=self.device).unsqueeze(1)
         div_term = torch.exp((torch.arange(0, self.window_embedding_dim, 2, dtype=torch.float, device=self.device) *
                               -(math.log(10000.0) / self.window_embedding_dim)))
         pe[:, 0::2] = torch.sin(position.float() * div_term)
         pe[:, 1::2] = torch.cos(position.float() * div_term)
-        x += pe
-        return x
+        return pe
 
     @staticmethod
     def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
@@ -257,27 +246,6 @@ class FEEGT(pl.LightningModule):
             else:
                 ax.set_visible(False)
         plt.show(block=False)
-
-
-class MelSpectrogramMerger(nn.Module):
-    def __init__(self, channels: int, mels: int):
-        super().__init__()
-        self.channels: int = channels
-        self.mels: int = mels
-
-        self.reducer = nn.Sequential(
-            Rearrange("b s c m -> b s (c m)"),
-            FNetEncoderBlock(in_features=self.channels * self.mels, mid_features=512, out_features=self.channels),
-        )
-
-    def forward(self, x):
-        """
-
-        :param x: of shape (batch sequence channels mels)
-        :return: of shape (batch sequence channels)
-        """
-        x = self.reducer(x)
-        return x
 
 
 class Spectrogram(nn.Module):
@@ -352,14 +320,14 @@ class FNetEncoderBlock(nn.Module):
                                                    dropout_p=dropout_p)
 
     def forward(self, x):
-        x += self.fourier_layer(x)
+        x = x + self.fourier_layer(x)
         x = F.layer_norm(x, (x.shape[-1],))
 
         x_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
                                    for s in range(x.shape[1])],
                                   dim=1)
         if self.in_features == self.out_features:
-            x += x_forwarded
+            x = x + x_forwarded
         else:
             x = x_forwarded
         x = F.layer_norm(x, (x.shape[-1],))
