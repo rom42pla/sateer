@@ -198,10 +198,10 @@ class FEEGT(pl.LightningModule):
         # self.plot_mel_spectrogram(spectrogram[0])
 
         with profiler.record_function("preparation"):
-            print("spectrogram", spectrogram.shape)
+            # print("spectrogram", spectrogram.shape)
             # spectrogram = self.normalization(spectrogram)  # (b s c m)
             x = self.cnn_merge(spectrogram)  # (b s c m)
-            print("sequence", x.shape)
+            # print("sequence", x.shape)
 
         # adds special tokens
         start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
