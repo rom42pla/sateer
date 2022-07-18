@@ -101,7 +101,7 @@ class FEEGT(pl.LightningModule):
                                                           for i in range(self.num_encoders)],
                                                         ("pooler", nn.Linear(in_features=self.window_embedding_dim,
                                                                              out_features=self.window_embedding_dim)),
-                                                        ("activation", nn.Tanh()),
+                                                        ("activation", nn.GELU()),
                                                         ]))
         self.special_tokens = {
             token: i_token
