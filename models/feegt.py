@@ -331,11 +331,11 @@ class Residual(nn.Module):
                       bias=False),
             nn.BatchNorm2d(num_features=out_channels),
             nn.GELU(),
-            nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
-                      kernel_size=kernel_size, padding=kernel_size // 2,
-                      stride=1,
-                      bias=False),
-            nn.BatchNorm2d(num_features=out_channels),
+            # nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
+            #           kernel_size=kernel_size, padding=kernel_size // 2,
+            #           stride=1,
+            #           bias=False),
+            # nn.BatchNorm2d(num_features=out_channels),
         )
         self.prepare_output = nn.Sequential(
             nn.GELU(),
