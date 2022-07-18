@@ -92,6 +92,10 @@ def get_training_args():
                         default=1e-4,
                         type=float,
                         help="Learning rate of the model")
+    parser.add_argument("--mels",
+                        default=8,
+                        type=int,
+                        help="Number of mel banks")
 
     args = parser.parse_args()
 
@@ -118,5 +122,6 @@ def get_training_args():
 
     assert args.num_encoders >= 1
     assert args.learning_rate > 0
+    assert args.mels > 0
 
     return args

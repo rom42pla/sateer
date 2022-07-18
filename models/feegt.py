@@ -2,7 +2,7 @@ import math
 import time
 from collections import OrderedDict
 from pprint import pprint
-from typing import Union, List, Optional, Dict, Any
+from typing import Union, List, Optional, Dict, Any, Tuple
 
 import functorch
 import torch
@@ -34,7 +34,7 @@ class FEEGT(pl.LightningModule):
                  mask_perc_min: float = 0.05,
                  mask_perc_max: float = 0.15,
 
-                 mels: int = 16,
+                 mels: int = 8,
 
                  device: Optional[str] = None):
         super().__init__()
@@ -173,7 +173,9 @@ class FEEGT(pl.LightningModule):
         self.to(device)
         self.save_hyperparameters()
 
-    def forward(self, eegs: torch.Tensor, sampling_rates: Union[float, int, torch.Tensor]):
+    def forward(self,
+                eegs: torch.Tensor,
+                sampling_rates: Union[float, int, torch.Tensor]):
         assert eegs.shape[-1] == self.in_channels
         if eegs.device != self.device:
             eegs = eegs.to(self.device)  # (b s c)
@@ -181,12 +183,17 @@ class FEEGT(pl.LightningModule):
         eegs *= 1e6
 
         with profiler.record_function("spectrogram"):
-            spectrogram = self.get_mel_spectrogram(eegs, sampling_rate=sampling_rates,
-                                                   mels=self.mels,
-                                                   window_size=1, window_stride=None)  # (b s c m)
-        # self.plot_mel_spectrogram(x[0])
-        # exit()
+            # spectrogram = self.get_mel_spectrogram(eegs, sampling_rate=sampling_rates,
+            #                                        mels=self.mels,
+            #                                        window_size=1, window_stride=0.1)  # (b s c m)
+            spectrogram = Spectrogram(sampling_rate=sampling_rates,
+                                      min_freq=0, max_freq=50, mels=self.mels,
+                                      window_size=0.5, window_stride=0.25)(eegs)
+            # print(self.spectrogram.window_size_scale)
+        # self.plot_mel_spectrogram(spectrogram[0])
+
         with profiler.record_function("preparation"):
+            print("spectrogram", spectrogram.shape)
             # x = self.normalization(x)  # (b s c m)
             x = self.cnn_merge(spectrogram)  # (b s c m)
 
@@ -197,13 +204,13 @@ class FEEGT(pl.LightningModule):
                 self.special_tokens["end"],
                 self.special_tokens["mask"],
             ], device=self.device))
-            if self.training and self.use_masking:
-                # masks a percentage of tokens
-                for i_batch, batch in enumerate(x):
-                    masked_no = int(((self.mask_perc_min - self.mask_perc_max) * torch.rand(1) + self.mask_perc_max) \
-                                    * batch.shape[0])
-                    mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
-                    x[i_batch, mask_ixs] = mask_token
+            # if self.training and self.use_masking:
+            #     # masks a percentage of tokens
+            #     for i_batch, batch in enumerate(x):
+            #         masked_no = int(((self.mask_perc_min - self.mask_perc_max) * torch.rand(1) + self.mask_perc_max) \
+            #                         * batch.shape[0])
+            #         mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
+            #         x[i_batch, mask_ixs] = mask_token
             # adds start and end token
             x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
                            x,
@@ -279,32 +286,32 @@ class FEEGT(pl.LightningModule):
 
         return pe
 
-    @staticmethod
-    def get_mel_spectrogram(x, sampling_rate: Union[int, float, torch.Tensor], mels: int,
-                            window_size: Union[int, float] = 1,
-                            window_stride: Optional[Union[int, float]] = None):
-        assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
-        assert any([isinstance(sampling_rate, t) for t in (int, float, torch.Tensor)])
-        # sets the sampling rate
-        if isinstance(sampling_rate, torch.Tensor):
-            if not torch.allclose(sampling_rate, sampling_rate[0]):
-                raise NotImplementedError(f"all the elements in a batch must have the same sampling rate")
-            sampling_rate = sampling_rate[0].detach().item()
-        # sets the window
-        assert window_size > 0
-        window_size = min(math.floor(window_size * sampling_rate), x.shape[-1])
-        assert window_stride is None or window_stride > 0
-        if window_stride is not None:
-            window_stride = math.floor(window_stride * sampling_rate)
-        else:
-            window_stride = 1
-        mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=0, f_max=50, n_mels=mels, center=True,
-                                           n_fft=x.shape[-1] + 1, normalized=False, power=2,
-                                           win_length=window_size, hop_length=window_stride).to(x.device)
-        mel_spectrogram = mel_fn(
-            einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
-        mel_spectrogram = einops.rearrange(mel_spectrogram, "b c m s -> b s c m")
-        return mel_spectrogram
+    # @staticmethod
+    # def get_mel_spectrogram(x, sampling_rate: Union[int, float, torch.Tensor], mels: int,
+    #                         window_size: Union[int, float] = 1,
+    #                         window_stride: Optional[Union[int, float]] = None):
+    #     assert isinstance(x, torch.Tensor) and len(x.shape) in {2, 3}
+    #     assert any([isinstance(sampling_rate, t) for t in (int, float, torch.Tensor)])
+    #     # sets the sampling rate
+    #     if isinstance(sampling_rate, torch.Tensor):
+    #         if not torch.allclose(sampling_rate, sampling_rate[0]):
+    #             raise NotImplementedError(f"all the elements in a batch must have the same sampling rate")
+    #         sampling_rate = sampling_rate[0].detach().item()
+    #     # sets the window
+    #     assert window_size > 0
+    #     window_size = min(math.floor(window_size * sampling_rate), x.shape[-1])
+    #     assert window_stride is None or window_stride > 0
+    #     if window_stride is not None:
+    #         window_stride = math.floor(window_stride * sampling_rate)
+    #     else:
+    #         window_stride = 1
+    #     mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=0, f_max=50, n_mels=mels, center=True,
+    #                                        n_fft=x.shape[-1] + 1, normalized=False, power=2,
+    #                                        win_length=window_size, hop_length=window_stride).to(x.device)
+    #     mel_spectrogram = mel_fn(
+    #         einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
+    #     mel_spectrogram = einops.rearrange(mel_spectrogram, "b c m s -> b s c m")
+    #     return mel_spectrogram
 
     @staticmethod
     def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
@@ -329,6 +336,57 @@ class FEEGT(pl.LightningModule):
             else:
                 ax.set_visible(False)
         plt.show(block=False)
+
+
+class Spectrogram(nn.Module):
+    def __init__(self,
+                 sampling_rate: Union[int, float, torch.Tensor],
+                 window_size: Union[int, float] = 1,
+                 window_stride: Optional[Union[int, float]] = None,
+                 min_freq: int = 0,
+                 max_freq: int = 100,
+                 mels: int = 8,
+                 ):
+        super().__init__()
+        # sampling rate
+        assert any([isinstance(sampling_rate, t) for t in (int, float, torch.Tensor)])
+        if isinstance(sampling_rate, torch.Tensor):
+            if not torch.allclose(sampling_rate, sampling_rate[0]):
+                raise NotImplementedError(f"all the elements in a batch must have the same sampling rate")
+            sampling_rate = sampling_rate[0].detach().item()
+        self.sampling_rate = sampling_rate
+        # frequencies
+        assert isinstance(min_freq, int) and isinstance(max_freq, int) and \
+               0 <= min_freq <= max_freq
+        self.min_freq: int = min_freq
+        self.max_freq: int = max_freq
+        assert isinstance(mels, int) \
+               and mels > 0
+        self.mels = mels
+
+        # window
+        assert window_size > 0
+        self.window_size = math.floor(window_size * self.sampling_rate)
+        assert window_stride is None or window_stride > 0
+        if window_stride is not None:
+            self.window_stride = math.floor(window_stride * self.sampling_rate)
+        else:
+            self.window_stride = 1
+
+    def forward(self, eegs: torch.Tensor):
+        assert isinstance(eegs, torch.Tensor) and len(eegs.shape) in {2, 3}
+        eegs = einops.rearrange(eegs, "s c -> c s" if len(eegs.shape) == 2 else "b s c -> b c s")
+        mel_fn = transforms.MelSpectrogram(sample_rate=self.sampling_rate,
+                                           f_min=self.min_freq, f_max=self.max_freq,
+                                           n_mels=self.mels, center=True,
+                                           n_fft=min(300, eegs.shape[-1]),
+                                           normalized=True, power=2,
+                                           win_length=self.window_size,
+                                           hop_length=self.window_stride,
+                                           pad=self.window_stride // 2)
+        spectrogram = mel_fn(eegs)  # (b c m s)
+        spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
+        return spectrogram
 
 
 class FNetEncoderBlock(nn.Module):
