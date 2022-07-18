@@ -94,12 +94,15 @@ class FEEGT(pl.LightningModule):
                                           out_features=self.window_embedding_dim))
         ]))
 
-        self.fnet_encoders = nn.Sequential(OrderedDict([
-            (f"encoder_{i}", FNetEncoderBlock(in_features=self.window_embedding_dim,
-                                              mid_features=self.window_embedding_dim,
-                                              out_features=self.window_embedding_dim))
-            for i in range(self.num_encoders)
-        ]))
+        self.fnet_encoders = nn.Sequential(OrderedDict([*[(f"encoder_{i}",
+                                                           FNetEncoderBlock(in_features=self.window_embedding_dim,
+                                                                            mid_features=self.window_embedding_dim,
+                                                                            out_features=self.window_embedding_dim))
+                                                          for i in range(self.num_encoders)],
+                                                        ("pooler", nn.Linear(in_features=self.window_embedding_dim,
+                                                                             out_features=self.window_embedding_dim)),
+                                                        ("activation", nn.Tanh()),
+                                                        ]))
         self.special_tokens = {
             token: i_token
             for i_token, token in enumerate(["start", "end", "mask"])
@@ -335,10 +338,8 @@ class FNetEncoderBlock(nn.Module):
         x_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
                                    for s in range(x.shape[1])],
                                   dim=1)
-        x = F.layer_norm(x_forwarded
-                         if self.in_features != self.out_features
-                         else x + x_forwarded,
-                         (x.shape[-1],))
+        x = x_forwarded if self.in_features != self.out_features else (x + x_forwarded)
+        x = F.layer_norm(x, (x.shape[-1],))
         return x
 
 
@@ -374,7 +375,7 @@ class FeedForwardLayer(nn.Module):
         x = self.activation(x)
         x = self.dropout(x)
         x = self.linear_2(x)
-        x = self.activation(x)
+        # x = self.activation(x)
         x = self.dropout(x)
         return x
 
@@ -399,5 +400,5 @@ if __name__ == "__main__":
             # out = model(batch["eegs"], batch["sampling_rates"])
             model.training_step(batch, 0)
     print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=10))
-    print(model)
+    # print(model)
     # print(torchvision.models.resnet18())
