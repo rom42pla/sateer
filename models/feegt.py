@@ -81,7 +81,7 @@ class FEEGT(pl.LightningModule):
         # layers
         self.normalization = nn.Sequential(OrderedDict([
             ("reshaping_1", Rearrange("b s c m -> b c s m")),
-            ("conv", nn.Conv2d(self.in_channels, self.in_channels, bias=True,
+            ("conv", nn.Conv2d(self.in_channels, self.in_channels, bias=False,
                                kernel_size=(1, self.mels * 2 + 1), stride=1, padding=(0, self.mels))),
             # ("reshaping_2", Rearrange("b c s m -> b s m c")),
             ("norm", nn.LayerNorm(self.mels)),
@@ -137,6 +137,8 @@ class FEEGT(pl.LightningModule):
         #     #                  out_features=self.window_embedding_dim),
         # )
         self.cnn_merge = nn.Sequential(
+            Residual(in_channels=self.in_channels, out_channels=self.in_channels,
+                     reduce_size=False, kernel_size=1),
             Residual(in_channels=self.in_channels, out_channels=self.window_embedding_dim,
                      reduce_size=True, kernel_size=5),
             nn.AdaptiveMaxPool2d(output_size=(self.window_embedding_dim, 1)),
@@ -199,7 +201,7 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("preparation"):
             # print("spectrogram", spectrogram.shape)
-            # spectrogram = self.normalization(spectrogram)  # (b s c m)
+            spectrogram = self.normalization(spectrogram)  # (b s c m)
             x = self.cnn_merge(spectrogram)  # (b s c m)
             # print("sequence", x.shape)
 
@@ -321,6 +323,10 @@ class Residual(nn.Module):
                  in_channels: int, out_channels: int, kernel_size: int,
                  reduce_size: bool = False):
         super().__init__()
+        self.in_channels: int = in_channels
+        self.out_channels: int = out_channels
+        self.reduce_size: bool = reduce_size
+
         self.prepare_input = nn.Sequential(
             Rearrange("b s c m -> b c s m")
         )
@@ -336,17 +342,26 @@ class Residual(nn.Module):
             Rearrange("b c s m -> b s c m")
         )
 
-        self.branch2 = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                      kernel_size=kernel_size, padding=kernel_size // 2,
-                      stride=1 if reduce_size is False else 2,
-                      bias=False),
-            nn.BatchNorm2d(num_features=out_channels),
-        )
+        if self.in_channels != self.out_channels:
+            self.branch2 = nn.Sequential(
+                nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                          kernel_size=kernel_size, padding=kernel_size // 2,
+                          stride=1 if reduce_size is False else 2,
+                          bias=False),
+                nn.BatchNorm2d(num_features=out_channels),
+            )
+        elif reduce_size:
+            self.branch2 = nn.Sequential(
+                nn.AvgPool2d(kernel_size=kernel_size, padding=kernel_size // 2,
+                             stride=2),
+            )
+        else:
+            self.branch2 = nn.Sequential()
 
     def forward(self, x):
         x = self.prepare_input(x)
-        x1, x2 = self.branch1(x), self.branch2(x)
+        x1 = self.branch1(x)
+        x2 = self.branch2(x)
         x = x1 + x2
         x = self.prepare_output(x)
         return x
