@@ -7,7 +7,7 @@ import functorch
 import numpy as np
 import torch
 from einops.layers.torch import Rearrange
-from pytorch_lightning.utilities.types import EPOCH_OUTPUT
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
@@ -117,10 +117,14 @@ class FEEGT(pl.LightningModule):
         #     nn.Flatten(start_dim=2),
         # )
         self.cnn_merge = nn.Sequential(
-            Rearrange("b s c m -> b s (c m)"),
-            FeedForwardLayer(in_features=self.in_channels * self.mels,
-                             mid_features=self.window_embedding_dim,
-                             out_features=self.window_embedding_dim),
+            Rearrange("b s c m -> b c s m"),
+            nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim,
+                      kernel_size=(7, self.mels), stride=3, padding=(3, 0)),
+            Rearrange("b c s m -> b s c m"),
+            nn.Flatten(start_dim=2)
+            # FeedForwardLayer(in_features=self.in_channels * self.mels,
+            #                  mid_features=self.window_embedding_dim,
+            #                  out_features=self.window_embedding_dim),
         )
 
         self.fnet_encoders = nn.Sequential(OrderedDict([
@@ -160,11 +164,12 @@ class FEEGT(pl.LightningModule):
         # cast from microvolts to volts
         x *= 1e6
 
-        with profiler.record_function("decomposition"):
+        with profiler.record_function("spectrogram"):
             x = self.get_mel_spectrogram(x, sampling_rate=sampling_rates,
                                          mels=self.mels,
-                                         window_size=0.25, window_stride=0.1)  # (b s c m)
-
+                                         window_size=1, window_stride=None)  # (b s c m)
+        # self.plot_mel_spectrogram(x[0])
+            # exit()
         with profiler.record_function("preparation"):
             x = self.normalization(x)  # (b s c m)
             x = self.cnn_merge(x)
@@ -267,14 +272,14 @@ class FEEGT(pl.LightningModule):
             sampling_rate = sampling_rate[0].item()
         # sets the window
         assert window_size > 0
-        window_size = math.floor(window_size * sampling_rate)
+        window_size = min(math.floor(window_size * sampling_rate), x.shape[-1])
         assert window_stride is None or window_stride > 0
         if window_stride is not None:
             window_stride = math.floor(window_stride * sampling_rate)
         else:
             window_stride = 1
         mel_fn = transforms.MelSpectrogram(sample_rate=sampling_rate, f_min=0, f_max=50, n_mels=mels, center=True,
-                                           n_fft=x.shape[-1], normalized=True, power=2,
+                                           n_fft=x.shape[-1] + 1, normalized=True, power=2,
                                            win_length=window_size, hop_length=window_stride).to(x.device)
         mel_spectrogram = mel_fn(
             einops.rearrange(x, "s c -> c s" if len(x.shape) == 2 else "b s c -> b c s"))  # (b c m s)
@@ -285,19 +290,21 @@ class FEEGT(pl.LightningModule):
     def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
         assert len(spectrogram.shape) == 3  # s c m
         import matplotlib.pyplot as plt
-        import seaborn as sns
         lines = int(np.ceil(np.sqrt(spectrogram.shape[1])))
         fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
                                 tight_layout=True)
         min_value, max_value = spectrogram.min(), spectrogram.max()
+
         for i_ax, ax in enumerate(axs.flat):
             if i_ax < spectrogram.shape[1]:
-                sns.heatmap(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
-                            vmin=min_value, vmax=max_value,
-                            ax=ax)
-                ax.set_title(f"Electrode {i_ax}")
-                ax.set_xlabel("time")
-                ax.set_ylabel("mel")
+                im = ax.imshow(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
+                               vmin=min_value, vmax=max_value, aspect="auto", cmap=plt.get_cmap("hot"))
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                fig.colorbar(im, cax=cax, orientation="vertical")
+                ax.set_title(f"electrode {i_ax}")
+                ax.set_xlabel("sample")
+                ax.set_ylabel("mels")
                 ax.invert_yaxis()
             else:
                 ax.set_visible(False)
@@ -418,7 +425,7 @@ if __name__ == "__main__":
     model = FEEGT(in_channels=32, labels=4,
                   mask_perc_min=0.1, mask_perc_max=0.3)
     print(model)
-    eegs = torch.randn(256, 128, 32)
+    eegs = torch.randn(256, 64, 32)
     sampling_rates = torch.zeros(256) + 128
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
