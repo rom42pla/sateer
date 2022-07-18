@@ -204,13 +204,11 @@ class FEEGT(pl.LightningModule):
                 self.special_tokens["end"],
                 self.special_tokens["mask"],
             ], device=self.device))
-            # if self.training and self.use_masking:
-            #     # masks a percentage of tokens
-            #     for i_batch, batch in enumerate(x):
-            #         masked_no = int(((self.mask_perc_min - self.mask_perc_max) * torch.rand(1) + self.mask_perc_max) \
-            #                         * batch.shape[0])
-            #         mask_ixs = torch.randperm(batch.shape[0])[:int(masked_no)]
-            #         x[i_batch, mask_ixs] = mask_token
+            if self.training and self.use_masking:
+                with profiler.record_function("masking"):
+                    mask_rand = torch.rand(x.shape[:2], device=self.device)
+                    mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
+                    x[mask] = mask_token
             # adds start and end token
             x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
                            x,
@@ -463,6 +461,7 @@ if __name__ == "__main__":
         "labels": torch.ones(batch_size, 4, dtype=torch.long),
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
+    model.training = True
     # model.training_step(batch, 0)
 
     # print(model)
