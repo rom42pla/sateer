@@ -120,11 +120,20 @@ class FEEGT(pl.LightningModule):
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
             nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=False,
-                      kernel_size=(7, self.mels), stride=4, padding=(4, 0)),
+                      kernel_size=(17, self.mels), stride=8, padding=(7, 0)),
             Rearrange("b c s m -> b s c m"),
-            nn.Flatten(start_dim=2),
-            nn.LayerNorm(self.window_embedding_dim),
+            nn.LayerNorm([self.window_embedding_dim, 1]),
             nn.GELU(),
+
+            # Rearrange("b s c m -> b c s m"),
+            # nn.Conv2d(in_channels=self.window_embedding_dim//2, out_channels=self.window_embedding_dim, bias=False,
+            #           kernel_size=(7, self.mels), stride=4, padding=(3, 0)),
+            # Rearrange("b c s m -> b s c m"),
+            # nn.LayerNorm([self.window_embedding_dim, 1]),
+            # nn.GELU(),
+
+            nn.Flatten(start_dim=2),
+
             # FeedForwardLayer(in_features=self.in_channels * self.mels,
             #                  mid_features=self.window_embedding_dim,
             #                  out_features=self.window_embedding_dim),
@@ -140,7 +149,11 @@ class FEEGT(pl.LightningModule):
             token: i_token
             for i_token, token in enumerate(["start", "end", "mask"])
         }
-        self.tokens_embedder = nn.Embedding(len(self.special_tokens), self.window_embedding_dim)
+        self.tokens_embedder = nn.Sequential(
+            nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
+            nn.LayerNorm(self.window_embedding_dim),
+            nn.GELU(),
+        )
 
         # self.classification = nn.ModuleList()
         # for label in self.labels:
@@ -431,9 +444,9 @@ if __name__ == "__main__":
     # torch.backends.cudnn.benchmark = True
     model = FEEGT(in_channels=32, labels=4,
                   mask_perc_min=0.1, mask_perc_max=0.3)
-    print(model)
     eegs = torch.randn(2048, 64, 32)
     sampling_rates = torch.zeros(256) + 128
+    print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
             out = model(eegs, sampling_rates)
