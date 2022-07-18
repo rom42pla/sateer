@@ -236,7 +236,7 @@ class FEEGT(pl.LightningModule):
         labels: torch.Tensor = batch["labels"]
         sampling_rates: torch.Tensor = batch["sampling_rates"]
         labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
+        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label], label_smoothing=0.1)
                   for i_label in range(labels.shape[-1])]
         accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
                                                  labels[:, i_label], average="micro")
@@ -258,7 +258,7 @@ class FEEGT(pl.LightningModule):
         labels: torch.Tensor = batch["labels"]
         sampling_rates: torch.Tensor = batch["sampling_rates"]
         labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
+        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label], label_smoothing=0.1)
                   for i_label in range(labels.shape[-1])]
         accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
                                                  labels[:, i_label], average="micro")
@@ -326,13 +326,13 @@ class Residual(nn.Module):
         )
         self.branch1 = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                      kernel_size=kernel_size, padding=kernel_size//2,
+                      kernel_size=kernel_size, padding=kernel_size // 2,
                       stride=1 if reduce_size is False else 2,
                       bias=False),
             nn.BatchNorm2d(num_features=out_channels),
             nn.GELU(),
             nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
-                      kernel_size=kernel_size, padding=kernel_size//2,
+                      kernel_size=kernel_size, padding=kernel_size // 2,
                       stride=1,
                       bias=False),
             nn.BatchNorm2d(num_features=out_channels),
@@ -344,7 +344,7 @@ class Residual(nn.Module):
 
         self.branch2 = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                      kernel_size=kernel_size, padding=kernel_size//2,
+                      kernel_size=kernel_size, padding=kernel_size // 2,
                       stride=1 if reduce_size is False else 2,
                       bias=False),
             nn.BatchNorm2d(num_features=out_channels),
