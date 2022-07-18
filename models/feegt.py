@@ -176,7 +176,7 @@ class FEEGT(pl.LightningModule):
         labels: torch.Tensor = batch["labels"]
         sampling_rates: torch.Tensor = batch["sampling_rates"]
         labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label], label_smoothing=0.1)
+        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
         accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
                                                  labels[:, i_label], average="micro")
