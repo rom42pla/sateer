@@ -383,7 +383,7 @@ class Spectrogram(nn.Module):
                                            normalized=True, power=2,
                                            win_length=self.window_size,
                                            hop_length=self.window_stride,
-                                           pad=self.window_stride // 2)
+                                           pad=self.window_stride // 2).to(eegs.device)
         spectrogram = mel_fn(eegs)  # (b c m s)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
