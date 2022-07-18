@@ -78,72 +78,12 @@ class FEEGT(pl.LightningModule):
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
-        # layers
-        self.normalization = nn.Sequential(OrderedDict([
-            ("reshaping_1", Rearrange("b s c m -> b c s m")),
-            ("conv", nn.Conv2d(self.in_channels, self.in_channels, bias=False,
-                               kernel_size=(1, self.mels * 2 + 1), stride=1, padding=(0, self.mels))),
-            # ("reshaping_2", Rearrange("b c s m -> b s m c")),
-            ("norm", nn.LayerNorm(self.mels)),
-            ("activation", nn.GELU()),
-            # ("reshaping_3", Rearrange("b s m c -> b s c m")),
-            ("reshaping_3", Rearrange("b c s m -> b s c m")),
+        self.merge_mels = nn.Sequential(OrderedDict([
+            ("reshape", Rearrange("b s c m -> b s (c m)")),
+            (f"encoder", FNetEncoderBlock(in_features=self.in_channels * self.mels,
+                                          mid_features=self.window_embedding_dim,
+                                          out_features=self.window_embedding_dim))
         ]))
-
-        # self.cnn_merge = nn.Sequential(
-        #     Rearrange("b s c m -> b c s m"),
-        #     ResidualBlock(in_channels=self.in_channels, out_channels=256, reduce_output=True),
-        #     ResidualBlock(in_channels=256, out_channels=self.window_embedding_dim, reduce_output=True),
-        #
-        #     # nn.Conv2d(self.in_channels, 64,
-        #     #           kernel_size=(9, self.mels // 2 + 1), stride=(2, 1), padding=(4, self.mels // 4)),
-        #     #
-        #     # nn.Conv2d(64, 128,
-        #     #           kernel_size=(7, self.mels // 2 + 1), stride=(2, 1), padding=(3, self.mels // 4)),
-        #     # nn.ReLU(),
-        #     # nn.Dropout(p=self.dropout),
-        #     #
-        #     # nn.Conv2d(128, 256,
-        #     #           kernel_size=(5, self.mels // 2 + 1), stride=(2, 1), padding=(2, self.mels // 4)),
-        #     # nn.ReLU(),
-        #     # nn.Dropout(p=self.dropout),
-        #     #
-        #     # nn.Conv2d(256, self.window_embedding_dim,
-        #     #           kernel_size=(3, self.mels // 2 + 1), stride=(2, 1), padding=(1, self.mels // 4)),
-        #     # nn.ReLU(),
-        #     # nn.Dropout(p=self.dropout),
-        #     Rearrange("b c s m -> b s c m"),
-        #
-        #     nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
-        #     nn.Flatten(start_dim=2),
-        # )
-        # self.cnn_merge = nn.Sequential(
-        #     Rearrange("b s c m -> b c s m"),
-        #     nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=True,
-        #               kernel_size=(7, self.mels), stride=1, padding=(3, 0)),
-        #     Rearrange("b c s m -> b s c m"),
-        #     nn.LayerNorm([self.window_embedding_dim, 1]),
-        #     # Rearrange("b s c m -> b s (c m)"),
-        #     # Rearrange("b s c -> b c s"),
-        #     # nn.Conv1d(in_channels=self.in_channels * self.mels, out_channels=self.window_embedding_dim, bias=False,
-        #     #           kernel_size=7, stride=4, padding=3),
-        #     # Rearrange("b c s -> b s c"),
-        #     # nn.LayerNorm(self.window_embedding_dim),
-        #     nn.GELU(),
-        #     nn.Flatten(start_dim=2),
-        #
-        #     # FeedForwardLayer(in_features=self.in_channels * self.mels,
-        #     #                  mid_features=self.window_embedding_dim,
-        #     #                  out_features=self.window_embedding_dim),
-        # )
-        self.cnn_merge = nn.Sequential(
-            Residual(in_channels=self.in_channels, out_channels=self.in_channels,
-                     reduce_size=False, kernel_size=1),
-            Residual(in_channels=self.in_channels, out_channels=self.window_embedding_dim,
-                     reduce_size=True, kernel_size=5),
-            nn.AdaptiveMaxPool2d(output_size=(self.window_embedding_dim, 1)),
-            Rearrange("b s c m -> b s (c m)"),
-        )
 
         self.fnet_encoders = nn.Sequential(OrderedDict([
             (f"encoder_{i}", FNetEncoderBlock(in_features=self.window_embedding_dim,
@@ -157,8 +97,9 @@ class FEEGT(pl.LightningModule):
         }
         self.tokens_embedder = nn.Sequential(
             nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
-            nn.LayerNorm(self.window_embedding_dim),
-            nn.GELU(),
+        )
+        self.electrodes_embedder = nn.Sequential(
+            nn.Embedding(self.in_channels, self.window_embedding_dim)
         )
 
         # self.classification = nn.ModuleList()
@@ -201,16 +142,15 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("preparation"):
             # print("spectrogram", spectrogram.shape)
-            # spectrogram = self.normalization(spectrogram)  # (b s c m)
-            x = self.cnn_merge(spectrogram)  # (b s c m)
+            x = self.merge_mels(spectrogram)  # (b s c)
             # print("sequence", x.shape)
 
-        # adds special tokens
+        # generates special tokens
         start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
             self.special_tokens["start"],
             self.special_tokens["end"],
             self.special_tokens["mask"],
-        ], device=self.device)).type(x.dtype)
+        ], device=self.device))
         if self.training and self.use_masking:
             with profiler.record_function("masking"):
                 mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=self.device)
@@ -221,7 +161,7 @@ class FEEGT(pl.LightningModule):
                        x,
                        end_token.repeat(x.shape[0], 1, 1)], dim=1)
         # adds positional embeddings
-        x += self.get_positional_encodings(length=x.shape[1])
+        x = self.add_positional_encodings(x)
 
         with profiler.record_function("transformer encoder"):
             x = self.fnet_encoders(x)
@@ -283,15 +223,16 @@ class FEEGT(pl.LightningModule):
                                       lr=self.learning_rate, amsgrad=True)
         return optimizer
 
-    def get_positional_encodings(self, length: int):
+    def add_positional_encodings(self, x):
+        length = x.shape[1]
         pe = torch.zeros(length, self.window_embedding_dim, device=self.device)
         position = torch.arange(0, length, device=self.device).unsqueeze(1)
         div_term = torch.exp((torch.arange(0, self.window_embedding_dim, 2, dtype=torch.float, device=self.device) *
                               -(math.log(10000.0) / self.window_embedding_dim)))
         pe[:, 0::2] = torch.sin(position.float() * div_term)
         pe[:, 1::2] = torch.cos(position.float() * div_term)
-
-        return pe
+        x += pe
+        return x
 
     @staticmethod
     def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
@@ -318,52 +259,24 @@ class FEEGT(pl.LightningModule):
         plt.show(block=False)
 
 
-class Residual(nn.Module):
-    def __init__(self,
-                 in_channels: int, out_channels: int, kernel_size: int,
-                 reduce_size: bool = False):
+class MelSpectrogramMerger(nn.Module):
+    def __init__(self, channels: int, mels: int):
         super().__init__()
-        self.in_channels: int = in_channels
-        self.out_channels: int = out_channels
-        self.reduce_size: bool = reduce_size
+        self.channels: int = channels
+        self.mels: int = mels
 
-        self.prepare_input = nn.Sequential(
-            Rearrange("b s c m -> b c s m")
+        self.reducer = nn.Sequential(
+            Rearrange("b s c m -> b s (c m)"),
+            FNetEncoderBlock(in_features=self.channels * self.mels, mid_features=512, out_features=self.channels),
         )
-        self.branch1 = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                      kernel_size=kernel_size, padding=kernel_size // 2,
-                      stride=1 if reduce_size is False else 2,
-                      bias=False),
-            nn.BatchNorm2d(num_features=out_channels),
-        )
-        self.prepare_output = nn.Sequential(
-            nn.ReLU(),
-            Rearrange("b c s m -> b s c m")
-        )
-
-        if self.in_channels != self.out_channels:
-            self.branch2 = nn.Sequential(
-                nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                          kernel_size=kernel_size, padding=kernel_size // 2,
-                          stride=1 if reduce_size is False else 2,
-                          bias=False),
-                nn.BatchNorm2d(num_features=out_channels),
-            )
-        elif reduce_size:
-            self.branch2 = nn.Sequential(
-                nn.AvgPool2d(kernel_size=kernel_size, padding=kernel_size // 2,
-                             stride=2),
-            )
-        else:
-            self.branch2 = nn.Sequential()
 
     def forward(self, x):
-        x = self.prepare_input(x)
-        x1 = self.branch1(x)
-        x2 = self.branch2(x)
-        x = x1 + x2
-        x = self.prepare_output(x)
+        """
+
+        :param x: of shape (batch sequence channels mels)
+        :return: of shape (batch sequence channels)
+        """
+        x = self.reducer(x)
         return x
 
 
@@ -423,22 +336,32 @@ class FNetEncoderBlock(nn.Module):
     def __init__(self, in_features: int, mid_features: int, out_features: int,
                  dropout_p: Union[int, float] = 0):
         super().__init__()
+        assert isinstance(in_features, int) and in_features >= 1
+        assert isinstance(mid_features, int) and mid_features >= 1
+        assert isinstance(out_features, int) and out_features >= 1
+        self.in_features = in_features
+        self.mid_features = mid_features
+        self.out_features = out_features
+        assert 0 <= dropout_p < 1
+        self.dropout_p = dropout_p
 
         self.fourier_layer = FourierTransformLayer()
-        self.feed_forward_layer = FeedForwardLayer(in_features=in_features,
-                                                   mid_features=mid_features,
-                                                   out_features=out_features,
+        self.feed_forward_layer = FeedForwardLayer(in_features=self.in_features,
+                                                   mid_features=self.mid_features,
+                                                   out_features=self.out_features,
                                                    dropout_p=dropout_p)
 
     def forward(self, x):
-        x_mixed = self.fourier_layer(x)
-        x = x + x_mixed
+        x += self.fourier_layer(x)
         x = F.layer_norm(x, (x.shape[-1],))
 
-        x_feed_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
-                                        for s in range(x.shape[1])],
-                                       dim=1)
-        x = x + x_feed_forwarded
+        x_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
+                                   for s in range(x.shape[1])],
+                                  dim=1)
+        if self.in_features == self.out_features:
+            x += x_forwarded
+        else:
+            x = x_forwarded
         x = F.layer_norm(x, (x.shape[-1],))
         return x
 
@@ -453,15 +376,15 @@ class FourierTransformLayer(nn.Module):
 
 
 class FeedForwardLayer(nn.Module):
-    def __init__(self, in_features: int, mid_features: Optional[int] = None, out_features: Optional[int] = None,
+    def __init__(self, in_features: int, mid_features: int, out_features: int,
                  dropout_p: Union[int, float] = 0.1):
         super().__init__()
         assert isinstance(in_features, int) and in_features >= 1
-        assert out_features is None or isinstance(out_features, int) and out_features >= 1
-        assert mid_features is None or isinstance(mid_features, int) and mid_features >= 1
+        assert isinstance(mid_features, int) and mid_features >= 1
+        assert isinstance(out_features, int) and out_features >= 1
         self.in_features = in_features
-        self.mid_features = mid_features if mid_features is not None else self.in_features
-        self.out_features = out_features if out_features is not None else self.in_features
+        self.mid_features = mid_features
+        self.out_features = out_features
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p
 
@@ -494,9 +417,7 @@ if __name__ == "__main__":
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
     model.training = True
-    # model.training_step(batch, 0)
 
-    # print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
             # out = model(batch["eegs"], batch["sampling_rates"])
