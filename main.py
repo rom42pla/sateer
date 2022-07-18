@@ -171,7 +171,7 @@ elif args.setting == "within_subject":
                                          #     monitor="loss_val", mode="min",
                                          #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
                                          EarlyStopping(monitor="loss_val",
-                                                       min_delta=0, patience=3,
+                                                       min_delta=1e-3, patience=3,
                                                        verbose=False, mode="min",
                                                        check_on_train_epoch_end=False, strict=True),
                                      ] if args.checkpoints_path is not None else [])
