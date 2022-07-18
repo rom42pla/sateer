@@ -120,10 +120,9 @@ class FEEGT(pl.LightningModule):
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
             nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=False,
-                      kernel_size=(7, self.mels), stride=4, padding=(3, 0)),
+                      kernel_size=(7, self.mels), stride=1, padding=(3, 0)),
             Rearrange("b c s m -> b s c m"),
             nn.LayerNorm([self.window_embedding_dim, 1]),
-            nn.GELU(),
             # Rearrange("b s c m -> b s (c m)"),
             # Rearrange("b s c -> b c s"),
             # nn.Conv1d(in_channels=self.in_channels * self.mels, out_channels=self.window_embedding_dim, bias=False,
@@ -188,14 +187,15 @@ class FEEGT(pl.LightningModule):
             #                                        window_size=1, window_stride=0.1)  # (b s c m)
             spectrogram = Spectrogram(sampling_rate=sampling_rates,
                                       min_freq=0, max_freq=40, mels=self.mels,
-                                      window_size=0.5, window_stride=0.1)(eegs)
+                                      window_size=0.5, window_stride=0.2)(eegs)
             # print(self.spectrogram.window_size_scale)
         # self.plot_mel_spectrogram(spectrogram[0])
 
         with profiler.record_function("preparation"):
-            # print("spectrogram", spectrogram.shape)
-            spectrogram = self.normalization(spectrogram)  # (b s c m)
+            print("spectrogram", spectrogram.shape)
+            # spectrogram = self.normalization(spectrogram)  # (b s c m)
             x = self.cnn_merge(spectrogram)  # (b s c m)
+            print(x.shape)
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
@@ -456,10 +456,12 @@ if __name__ == "__main__":
                   num_encoders=2, use_masking=True,
                   mask_perc_min=0.1, mask_perc_max=0.3)
     batch_size = 2048
+    sampling_rate = 128
+    seconds = 1
     batch = {
-        "eegs": torch.randn(batch_size, 64, 32, dtype=torch.float32),
+        "eegs": torch.randn(batch_size, seconds * sampling_rate, 32, dtype=torch.float32),
         "labels": torch.ones(batch_size, 4, dtype=torch.long),
-        "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + 128,
+        "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
     # model.training_step(batch, 0)
 
