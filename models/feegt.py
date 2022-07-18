@@ -327,17 +327,18 @@ class FNetEncoderBlock(nn.Module):
                                                    dropout_p=dropout_p)
 
     def forward(self, x):
-        x = x + self.fourier_layer(x)
-        x = F.layer_norm(x, (x.shape[-1],))
-
+        # fourier pass
+        x_fourier = self.fourier_layer(x)
+        x = F.layer_norm(x + x_fourier,
+                         (x.shape[-1],))
+        # fc pass
         x_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
                                    for s in range(x.shape[1])],
                                   dim=1)
-        if self.in_features == self.out_features:
-            x = x + x_forwarded
-        else:
-            x = x_forwarded
-        x = F.layer_norm(x, (x.shape[-1],))
+        x = F.layer_norm(x_forwarded
+                         if self.in_features != self.out_features
+                         else x + x_forwarded,
+                         (x.shape[-1],))
         return x
 
 
@@ -398,5 +399,5 @@ if __name__ == "__main__":
             # out = model(batch["eegs"], batch["sampling_rates"])
             model.training_step(batch, 0)
     print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=10))
-
+    print(model)
     # print(torchvision.models.resnet18())
