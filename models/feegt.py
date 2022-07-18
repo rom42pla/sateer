@@ -188,13 +188,13 @@ class FEEGT(pl.LightningModule):
             #                                        window_size=1, window_stride=0.1)  # (b s c m)
             spectrogram = Spectrogram(sampling_rate=sampling_rates,
                                       min_freq=0, max_freq=40, mels=self.mels,
-                                      window_size=0.5, window_stride=0.25)(eegs)
+                                      window_size=0.5, window_stride=0.1)(eegs)
             # print(self.spectrogram.window_size_scale)
         # self.plot_mel_spectrogram(spectrogram[0])
 
         with profiler.record_function("preparation"):
             # print("spectrogram", spectrogram.shape)
-            # x = self.normalization(x)  # (b s c m)
+            spectrogram = self.normalization(spectrogram)  # (b s c m)
             x = self.cnn_merge(spectrogram)  # (b s c m)
 
         with profiler.record_function("transformer encoder"):
@@ -452,8 +452,8 @@ class FeedForwardLayer(nn.Module):
 
 if __name__ == "__main__":
     # torch.backends.cudnn.benchmark = True
-    model = FEEGT(in_channels=32, labels=4, window_embedding_dim=128,
-                  num_encoders=1, use_masking=True,
+    model = FEEGT(in_channels=32, labels=4, window_embedding_dim=512,
+                  num_encoders=2, use_masking=True,
                   mask_perc_min=0.1, mask_perc_max=0.3)
     batch_size = 2048
     batch = {

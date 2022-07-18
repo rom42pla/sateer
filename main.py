@@ -162,7 +162,7 @@ elif args.setting == "within_subject":
                                      enable_model_summary=True if (i_subject == 0 and i_fold == 0) else False,
                                      limit_train_batches=args.limit_train_batches,
                                      limit_val_batches=args.limit_train_batches,
-                                     log_every_n_steps=5,
+                                     log_every_n_steps=1,
                                      enable_checkpointing=False,
                                      callbacks=[
                                          # ModelCheckpoint(
