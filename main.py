@@ -23,7 +23,7 @@ from models.cnn_baseline import CNNBaseline
 from models.eegt import EEGT
 import pytorch_lightning as pl
 # torch.autograd.set_detect_anomaly(True)
-torch.backends.cudnn.benchmark = True
+# torch.backends.cudnn.benchmark = True
 import warnings
 
 # suppresses some warnings
@@ -139,22 +139,21 @@ elif args.setting == "within_subject":
                                                      windows_length=dataset.window_size,
                                                      num_encoders=args.num_encoders, num_decoders=args.num_decoders,
                                                      window_embedding_dim=args.window_embedding_dim,
-                                                     learning_rate=args.learning_rate,
-                                                     mask_perc_min=0.05, mask_perc_max=0.2)
+                                                     learning_rate=args.learning_rate)
                 elif args.model == "feegt":
                     model: pl.LightningModule = FEEGT(in_channels=len(dataset.electrodes),
                                                       labels=dataset.labels_to_use,
                                                       num_encoders=args.num_encoders,
                                                       window_embedding_dim=args.window_embedding_dim,
-                                                      learning_rate=args.learning_rate,
-                                                      mask_perc_min=0.05, mask_perc_max=0.2)
+                                                      learning_rate=args.learning_rate)
                 elif args.model == "cnn_baseline":
                     model: pl.LightningModule = CNNBaseline(in_channels=len(dataset.electrodes),
                                                             labels=dataset.labels_to_use,
                                                             sampling_rate=dataset.sampling_rate,
                                                             window_embedding_dim=args.window_embedding_dim,
                                                             learning_rate=args.learning_rate)
-                trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
+                trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
+                                     precision=args.precision,
                                      max_epochs=args.max_epochs, check_val_every_n_epoch=1,
                                      num_sanity_val_steps=args.batch_size,
                                      logger=CSVLogger(args.checkpoints_path, name=experiment_name,
@@ -163,7 +162,7 @@ elif args.setting == "within_subject":
                                      enable_model_summary=True if (i_subject == 0 and i_fold == 0) else False,
                                      limit_train_batches=args.limit_train_batches,
                                      limit_val_batches=args.limit_train_batches,
-                                     log_every_n_steps=1,
+                                     log_every_n_steps=5,
                                      enable_checkpointing=False,
                                      callbacks=[
                                          # ModelCheckpoint(
@@ -171,9 +170,10 @@ elif args.setting == "within_subject":
                                          #     save_top_k=1,
                                          #     monitor="loss_val", mode="min",
                                          #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
-                                         EarlyStopping(monitor="acc_val",
-                                                       min_delta=0, patience=20,
-                                                       verbose=False, mode="max", check_on_train_epoch_end=False),
+                                         EarlyStopping(monitor="loss_val",
+                                                       min_delta=0, patience=3,
+                                                       verbose=False, mode="max",
+                                                       check_on_train_epoch_end=False, strict=True),
                                      ] if args.checkpoints_path is not None else [])
                 trainer.fit(model, datamodule=dataset)
                 del trainer, model

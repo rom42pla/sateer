@@ -66,7 +66,7 @@ def get_training_args():
                         choices={"cross_subject", "within_subject"},
                         help="The setting of the experiment, whether cross- or within-subject")
     parser.add_argument("--precision",
-                        default=16,
+                        default=32,
                         type=int,
                         choices={16, 32},
                         help="Whether to use 32- ore 16-bit precision")
