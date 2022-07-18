@@ -119,18 +119,17 @@ class FEEGT(pl.LightningModule):
         self.cnn_merge = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
             nn.Conv2d(in_channels=self.in_channels, out_channels=self.window_embedding_dim, bias=False,
-                      kernel_size=(17, self.mels), stride=8, padding=(7, 0)),
+                      kernel_size=(7, self.mels), stride=4, padding=(3, 0)),
             Rearrange("b c s m -> b s c m"),
             nn.LayerNorm([self.window_embedding_dim, 1]),
             nn.GELU(),
-
-            # Rearrange("b s c m -> b c s m"),
-            # nn.Conv2d(in_channels=self.window_embedding_dim//2, out_channels=self.window_embedding_dim, bias=False,
-            #           kernel_size=(7, self.mels), stride=4, padding=(3, 0)),
-            # Rearrange("b c s m -> b s c m"),
-            # nn.LayerNorm([self.window_embedding_dim, 1]),
-            # nn.GELU(),
-
+            # Rearrange("b s c m -> b s (c m)"),
+            # Rearrange("b s c -> b c s"),
+            # nn.Conv1d(in_channels=self.in_channels * self.mels, out_channels=self.window_embedding_dim, bias=False,
+            #           kernel_size=7, stride=4, padding=3),
+            # Rearrange("b c s -> b s c"),
+            # nn.LayerNorm(self.window_embedding_dim),
+            nn.GELU(),
             nn.Flatten(start_dim=2),
 
             # FeedForwardLayer(in_features=self.in_channels * self.mels,
@@ -184,10 +183,10 @@ class FEEGT(pl.LightningModule):
                                          mels=self.mels,
                                          window_size=1, window_stride=None)  # (b s c m)
         # self.plot_mel_spectrogram(x[0])
-            # exit()
+        # exit()
         with profiler.record_function("preparation"):
-            x = self.normalization(x)  # (b s c m)
-            x = self.cnn_merge(x)
+            # x = self.normalization(x)  # (b s c m)
+            x = self.cnn_merge(x)  # (b s c m)
 
         with profiler.record_function("transformer encoder"):
             # adds special tokens
