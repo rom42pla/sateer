@@ -130,7 +130,7 @@ def get_training_args():
         args.seed = random.randint(0, 1000000)
 
     assert args.num_encoders >= 1
-    assert 0 <= args.dropout < 1
+    assert 0 <= args.dropout_p < 1
     assert args.learning_rate > 0
     assert args.mels > 0
 
