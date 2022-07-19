@@ -87,12 +87,29 @@ class FEEGT(pl.LightningModule):
             ("reshape2", Rearrange("b c s m -> b s c m")),
         ]))
 
-        self.merge_mels = nn.Sequential(OrderedDict([
-            ("reshape", Rearrange("b s c m -> b s (c m)")),
-            (f"encoder", FNetEncoderBlock(in_features=self.in_channels * self.mels,
-                                          mid_features=self.window_embedding_dim,
-                                          out_features=self.window_embedding_dim))
-        ]))
+        # self.merge_mels = nn.Sequential(OrderedDict([
+        #     ("reshape", Rearrange("b s c m -> b s (c m)")),
+        #     (f"encoder", FNetEncoderBlock(in_features=self.in_channels * self.mels,
+        #                                   mid_features=self.window_embedding_dim,
+        #                                   out_features=self.window_embedding_dim))
+        # ]))
+        self.merge_mels = nn.Sequential(
+            Rearrange("b s c m -> b c s m"),
+            nn.Conv2d(in_channels=self.in_channels, out_channels=128,
+                      kernel_size=7, stride=2, padding=3),
+            nn.GELU(),
+
+            nn.Conv2d(in_channels=128, out_channels=256,
+                      kernel_size=5, stride=2, padding=2),
+            nn.GELU(),
+
+            nn.Conv2d(in_channels=256, out_channels=self.window_embedding_dim,
+                      kernel_size=3, stride=2, padding=1),
+            nn.GELU(),
+            Rearrange("b c s m -> b s c m"),
+            nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
+            Rearrange("b s c m -> b s (c m)"),
+        )
 
         self.fnet_encoders = nn.Sequential(OrderedDict([*[(f"encoder_{i}",
                                                            FNetEncoderBlock(in_features=self.window_embedding_dim,
@@ -146,7 +163,9 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("preparation"):
             x = self.normalize(spectrogram)
+            print(x.shape)
             x = self.merge_mels(x)  # (b s c)
+            print(x.shape)
             # print("sequence", x.shape)
 
         # generates special tokens
