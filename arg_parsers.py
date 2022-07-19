@@ -70,6 +70,11 @@ def get_training_args():
                         type=int,
                         choices={16, 32},
                         help="Whether to use 32- ore 16-bit precision")
+    parser.add_argument("--benchmark",
+                        default=False,
+                        action="store_true",
+                        help="Whether to test a single training")
+
     # model args
     parser.add_argument("--model",
                         default="cnn_baseline",
