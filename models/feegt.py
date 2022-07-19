@@ -116,6 +116,7 @@ class FEEGT(pl.LightningModule):
             ("linear1", nn.Linear(in_features=self.window_embedding_dim,
                                   out_features=1024)),
             ("activation1", nn.Tanh()),
+            ("dropout", nn.Dropout(p=self.dropout)),
             ("linear2", nn.Linear(in_features=1024,
                                   out_features=len(self.labels) * 2)),
             ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
