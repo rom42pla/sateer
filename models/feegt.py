@@ -1,23 +1,22 @@
 import math
-import time
 from collections import OrderedDict
-from pprint import pprint
-from typing import Union, List, Optional, Dict, Any, Tuple
+from typing import Union, List, Optional, Dict
 
 import functorch
 import torch
 import torchvision
 from einops.layers.torch import Rearrange
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from pytorch_lightning.utilities.types import EPOCH_OUTPUT
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
 import torchmetrics
 import einops
 import torch.autograd.profiler as profiler
-from torch.profiler import profile, record_function, ProfilerActivity
+from torch.profiler import profile, ProfilerActivity
 from torchaudio import transforms
+
+from models.fourieegt import FouriEncoder
 
 
 class FEEGT(pl.LightningModule):
@@ -112,24 +111,32 @@ class FEEGT(pl.LightningModule):
             Rearrange("b s c m -> b s (c m)"),
         )
 
-        self.fnet_encoders = nn.Sequential(OrderedDict([*[(f"encoder_{i}",
-                                                           FNetEncoderBlock(in_features=self.window_embedding_dim,
-                                                                            mid_features=self.window_embedding_dim,
-                                                                            out_features=self.window_embedding_dim,
-                                                                            dropout_p=self.dropout_p))
-                                                          for i in range(self.num_encoders)],
-                                                        ("pooler", nn.Linear(in_features=self.window_embedding_dim,
-                                                                             out_features=self.window_embedding_dim)),
-                                                        ("activation", nn.Tanh()),
-                                                        ]))
-
-        self.special_tokens = {
-            token: i_token
-            for i_token, token in enumerate(["start", "end", "mask"])
-        }
-        self.tokens_embedder = nn.Sequential(
-            nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
-        )
+        self.encoder = FouriEncoder(embeddings_dim=self.window_embedding_dim,
+                                    num_encoders=self.num_encoders,
+                                    dropout_p=self.dropout_p,
+                                    use_masking=self.use_masking,
+                                    mask_perc_min=self.mask_perc_min,
+                                    mask_perc_max=self.mask_perc_max,
+                                    add_positional_embeddings=True,
+                                    )
+        # self.fnet_encoders = nn.Sequential(OrderedDict([*[(f"encoder_{i}",
+        #                                                    FNetEncoderBlock(in_features=self.window_embedding_dim,
+        #                                                                     mid_features=self.window_embedding_dim,
+        #                                                                     out_features=self.window_embedding_dim,
+        #                                                                     dropout_p=self.dropout_p))
+        #                                                   for i in range(self.num_encoders)],
+        #                                                 ("pooler", nn.Linear(in_features=self.window_embedding_dim,
+        #                                                                      out_features=self.window_embedding_dim)),
+        #                                                 ("activation", nn.Tanh()),
+        #                                                 ]))
+        #
+        # self.special_tokens = {
+        #     token: i_token
+        #     for i_token, token in enumerate(["start", "end", "mask"])
+        # }
+        # self.tokens_embedder = nn.Sequential(
+        #     nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
+        # )
 
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
@@ -161,39 +168,34 @@ class FEEGT(pl.LightningModule):
         eegs *= 1e6
 
         with profiler.record_function("spectrogram"):
-            spectrogram = Spectrogram(sampling_rate=sampling_rates,
-                                      min_freq=0, max_freq=40, mels=self.mels,
-                                      window_size=1, window_stride=0.05)(eegs)
-        # self.plot_mel_spectrogram(spectrogram[0])
+            spectrogram = MelSpectrogram(sampling_rate=sampling_rates,
+                                         min_freq=0, max_freq=40, mels=self.mels,
+                                         window_size=1, window_stride=0.05)(eegs)  # (b s c m)
 
         with profiler.record_function("preparation"):
-            # x = self.normalize(spectrogram)
-            # print(x.shape)
             x = self.merge_mels(spectrogram)  # (b s c)
-            # print(x.shape)
-            # print("sequence", x.shape)
 
         # generates special tokens
-        start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
-            self.special_tokens["start"],
-            self.special_tokens["end"],
-            self.special_tokens["mask"],
-        ], device=self.device))
-        if self.training and self.use_masking:
-            with profiler.record_function("masking"):
-                mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=self.device)
-                mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
-                x[mask] = mask_token
-        # adds start and end token
-        x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
-                       x,
-                       end_token.repeat(x.shape[0], 1, 1)], dim=1)
-        # adds positional embeddings
-        x += self.get_positional_encodings(length=x.shape[1])
+        # start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
+        #     self.special_tokens["start"],
+        #     self.special_tokens["end"],
+        #     self.special_tokens["mask"],
+        # ], device=self.device))
+        # if self.training and self.use_masking:
+        #     with profiler.record_function("masking"):
+        #         mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=self.device)
+        #         mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
+        #         x[mask] = mask_token
+        # # adds start and end token
+        # x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
+        #                x,
+        #                end_token.repeat(x.shape[0], 1, 1)], dim=1)
+        # # adds positional embeddings
+        # x += self.get_positional_encodings(length=x.shape[1])
 
         with profiler.record_function("transformer encoder"):
-            x = self.fnet_encoders(x)
-
+            # x = self.fnet_encoders(x)
+            x = self.encoder(x)
         with profiler.record_function("predictions"):
             # labels_pred = self.classification(x[:, 0, :])
             labels_pred = torch.stack([net(x[:, 0, :])
@@ -314,7 +316,7 @@ class FEEGT(pl.LightningModule):
         plt.show(block=False)
 
 
-class Spectrogram(nn.Module):
+class MelSpectrogram(nn.Module):
     def __init__(self,
                  sampling_rate: Union[int, float, torch.Tensor],
                  window_size: Union[int, float] = 1,
@@ -366,6 +368,30 @@ class Spectrogram(nn.Module):
         spectrogram = mel_fn(eegs)  # (b c m s)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
+
+    @staticmethod
+    def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
+        assert len(spectrogram.shape) == 3  # s c m
+        import matplotlib.pyplot as plt
+        lines = int(math.ceil(math.sqrt(spectrogram.shape[1])))
+        fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
+                                tight_layout=True)
+        min_value, max_value = spectrogram.min(), spectrogram.max()
+
+        for i_ax, ax in enumerate(axs.flat):
+            if i_ax < spectrogram.shape[1]:
+                im = ax.imshow(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
+                               vmin=min_value, vmax=max_value, aspect="auto", cmap=plt.get_cmap("hot"))
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                fig.colorbar(im, cax=cax, orientation="vertical")
+                ax.set_title(f"electrode {i_ax}")
+                ax.set_xlabel("sample")
+                ax.set_ylabel("mels")
+                ax.invert_yaxis()
+            else:
+                ax.set_visible(False)
+        plt.show(block=False)
 
 
 class FNetEncoderBlock(nn.Module):
@@ -448,11 +474,9 @@ if __name__ == "__main__":
         "labels": torch.ones(batch_size, 4, dtype=torch.long),
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
-    for mode in {"train", "val"}:
-        model.training = True if mode == "train" else False
-        with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
-            model.training_step(batch, 0)
-        print(f"Mode {mode} stats")
-        print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=8))
-
+    model.training = True
+    with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
+        model.training_step(batch, 0)
+    print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=8))
+    print(model)
     # print(torchvision.models.resnet18())
