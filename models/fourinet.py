@@ -4,6 +4,7 @@ from typing import Union
 
 import functorch
 import torch
+from einops.layers.torch import Rearrange
 from torch import nn
 import einops
 
@@ -171,9 +172,21 @@ class FouriEEGFeedForward(nn.Module):
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p
 
-        self.linear_1 = nn.Linear(self.in_features, self.mid_features)
+        # self.linear_1 = nn.Linear(self.in_features, self.mid_features)
+        self.linear_1 = nn.Sequential(
+            Rearrange("b s c -> b c s"),
+            nn.Conv1d(in_channels=self.in_features, out_channels=self.mid_features,
+                      kernel_size=7, stride=1, padding=3),
+            Rearrange("b c s -> b s c"),
+        )
         self.activation = nn.GELU()
-        self.linear_2 = nn.Linear(self.mid_features, self.out_features)
+        # self.linear_2 = nn.Linear(self.mid_features, self.out_features)
+        self.linear_2 = nn.Sequential(
+            Rearrange("b s c -> b c s"),
+            nn.Conv1d(in_channels=self.mid_features, out_channels=self.out_features,
+                      kernel_size=5, stride=1, padding=2),
+            Rearrange("b c s -> b s c"),
+        )
         self.dropout = nn.Dropout(p=self.dropout_p)
 
     def forward(self, x):

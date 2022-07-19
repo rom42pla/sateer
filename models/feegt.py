@@ -16,7 +16,7 @@ import torch.autograd.profiler as profiler
 from torch.profiler import profile, ProfilerActivity
 from torchaudio import transforms
 
-from models.fourieegt import FouriEncoder
+from models.fourinet import FouriEncoder
 
 
 class FEEGT(pl.LightningModule):
@@ -119,24 +119,6 @@ class FEEGT(pl.LightningModule):
                                     mask_perc_max=self.mask_perc_max,
                                     add_positional_embeddings=True,
                                     )
-        # self.fnet_encoders = nn.Sequential(OrderedDict([*[(f"encoder_{i}",
-        #                                                    FNetEncoderBlock(in_features=self.window_embedding_dim,
-        #                                                                     mid_features=self.window_embedding_dim,
-        #                                                                     out_features=self.window_embedding_dim,
-        #                                                                     dropout_p=self.dropout_p))
-        #                                                   for i in range(self.num_encoders)],
-        #                                                 ("pooler", nn.Linear(in_features=self.window_embedding_dim,
-        #                                                                      out_features=self.window_embedding_dim)),
-        #                                                 ("activation", nn.Tanh()),
-        #                                                 ]))
-        #
-        # self.special_tokens = {
-        #     token: i_token
-        #     for i_token, token in enumerate(["start", "end", "mask"])
-        # }
-        # self.tokens_embedder = nn.Sequential(
-        #     nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
-        # )
 
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
@@ -169,32 +151,13 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("spectrogram"):
             spectrogram = MelSpectrogram(sampling_rate=sampling_rates,
-                                         min_freq=0, max_freq=40, mels=self.mels,
-                                         window_size=1, window_stride=0.05)(eegs)  # (b s c m)
+                                         min_freq=0, max_freq=50, mels=self.mels,
+                                         window_size=1, window_stride=0.1)(eegs)  # (b s c m)
 
         with profiler.record_function("preparation"):
             x = self.merge_mels(spectrogram)  # (b s c)
 
-        # generates special tokens
-        # start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
-        #     self.special_tokens["start"],
-        #     self.special_tokens["end"],
-        #     self.special_tokens["mask"],
-        # ], device=self.device))
-        # if self.training and self.use_masking:
-        #     with profiler.record_function("masking"):
-        #         mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=self.device)
-        #         mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
-        #         x[mask] = mask_token
-        # # adds start and end token
-        # x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
-        #                x,
-        #                end_token.repeat(x.shape[0], 1, 1)], dim=1)
-        # # adds positional embeddings
-        # x += self.get_positional_encodings(length=x.shape[1])
-
         with profiler.record_function("transformer encoder"):
-            # x = self.fnet_encoders(x)
             x = self.encoder(x)
         with profiler.record_function("predictions"):
             # labels_pred = self.classification(x[:, 0, :])
@@ -408,8 +371,9 @@ if __name__ == "__main__":
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
     model.training = True
+    print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         model.training_step(batch, 0)
     print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=8))
-    print(model)
+
     # print(torchvision.models.resnet18())
