@@ -197,23 +197,24 @@ elif args.setting == "within_subject":
             print(f"Stats for subject {subject_id}:")
             pprint(mean_performances_df.to_dict())
 
-        # logs metrics
-        metrics_df = []
-        for subject_id in [f for f in listdir(join(args.checkpoints_path, experiment_name))
-                           if isdir(join(args.checkpoints_path, experiment_name, f))]:
-            for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
-                             if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))
-                                and f.startswith("fold_")]:
-                subject_df = pd.read_csv(
-                    join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
-                subject_df["subject_id"] = subject_id
-                metrics_df += [subject_df]
-        metrics_df = pd.concat(metrics_df)
-        metrics_df.to_csv(join(args.checkpoints_path, experiment_name, "metrics.csv"), index=False)
-        mean_performances_df = metrics_df[["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
-                                           "acc_val", "subject_id"]].groupby("subject_id").max().mean()
-        # saves the mean values
-        with open(join(args.checkpoints_path, experiment_name, "mean_performances.json"), 'w') as fp:
-            json.dump(mean_performances_df.to_dict(), fp, indent=4)
-        print(f"Mean performances from all users")
-        pprint(mean_performances_df.to_dict())
+        if not args.benchmark:
+            # logs metrics
+            metrics_df = []
+            for subject_id in [f for f in listdir(join(args.checkpoints_path, experiment_name))
+                               if isdir(join(args.checkpoints_path, experiment_name, f))]:
+                for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
+                                 if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))
+                                    and f.startswith("fold_")]:
+                    subject_df = pd.read_csv(
+                        join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
+                    subject_df["subject_id"] = subject_id
+                    metrics_df += [subject_df]
+            metrics_df = pd.concat(metrics_df)
+            metrics_df.to_csv(join(args.checkpoints_path, experiment_name, "metrics.csv"), index=False)
+            mean_performances_df = metrics_df[["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
+                                               "acc_val", "subject_id"]].groupby("subject_id").max().mean()
+            # saves the mean values
+            with open(join(args.checkpoints_path, experiment_name, "mean_performances.json"), 'w') as fp:
+                json.dump(mean_performances_df.to_dict(), fp, indent=4)
+            print(f"Mean performances from all users")
+            pprint(mean_performances_df.to_dict())

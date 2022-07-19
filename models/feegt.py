@@ -242,8 +242,8 @@ class FEEGT(pl.LightningModule):
         optimizer.zero_grad(set_to_none=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self.learning_rate)
+        optimizer = torch.optim.AdamW(self.parameters(),
+                                      lr=self.learning_rate)
         return optimizer
 
     def get_positional_encodings(self, length: int):
@@ -396,9 +396,7 @@ class FeedForwardLayer(nn.Module):
     def forward(self, x):
         x = self.linear_1(x)
         x = self.activation(x)
-        x = self.dropout(x)
         x = self.linear_2(x)
-        # x = self.activation(x)
         x = self.dropout(x)
         return x
 
