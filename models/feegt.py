@@ -26,7 +26,7 @@ class FEEGT(pl.LightningModule):
 
                  window_embedding_dim: int = 512,
                  num_encoders: int = 1,
-                 dropout_p: float = 0.1,
+                 dropout_p: float = 0.2,
 
                  learning_rate: float = 1e-3,
 
