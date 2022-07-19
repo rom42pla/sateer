@@ -18,6 +18,7 @@ class FouriEncoder(nn.Module):
                  use_masking: bool = True,
                  mask_perc_min: float = 0.05,
                  mask_perc_max: float = 0.15,
+                 mask_start_index: int = 0,
 
                  add_positional_embeddings: bool = True,
                  ):
@@ -43,6 +44,8 @@ class FouriEncoder(nn.Module):
             assert isinstance(mask_perc_min, float) and 0 <= mask_perc_min < 1
             assert isinstance(mask_perc_max, float) and 0 <= mask_perc_max < 1 and mask_perc_max >= mask_perc_min
             self.mask_perc_max, self.mask_perc_min = mask_perc_max, mask_perc_min
+            assert isinstance(mask_start_index, int) and mask_start_index >= 0
+            self.mask_start_index = mask_start_index
 
         # special tokens dict
         self.special_tokens = {
@@ -51,9 +54,7 @@ class FouriEncoder(nn.Module):
         }
 
         # architecture
-        self.tokens_embedder = nn.Sequential(
-            nn.Embedding(len(self.special_tokens), self.embeddings_dim),
-        )
+        self.tokens_embedder = nn.Embedding(len(self.special_tokens), self.embeddings_dim)
         self.encoder_blocks = nn.Sequential(OrderedDict([*[(f"enc_{i}",
                                                             FouriEncoderBlock(in_features=self.embeddings_dim,
                                                                               mid_features=self.embeddings_dim,
@@ -82,8 +83,13 @@ class FouriEncoder(nn.Module):
         ], device=x.device))
         # eventually adds masking
         if self.training and self.use_masking:
-            mask_rand = torch.rand(x.shape[:2], dtype=x.dtype, device=x.device)
+            mask_rand = torch.rand((x.shape[0], x[:, self.mask_start_index:].shape[1]),
+                                   dtype=x.dtype, device=x.device)
             mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
+            if x.shape[1] != mask.shape[1]:
+                mask = torch.cat(
+                    [torch.zeros(mask.shape[0], self.mask_start_index, dtype=torch.bool, device=mask.device),
+                     mask], dim=1)
             x[mask] = mask_token
 
         # adds start and end token
@@ -172,21 +178,21 @@ class FouriEEGFeedForward(nn.Module):
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p
 
-        # self.linear_1 = nn.Linear(self.in_features, self.mid_features)
-        self.linear_1 = nn.Sequential(
-            Rearrange("b s c -> b c s"),
-            nn.Conv1d(in_channels=self.in_features, out_channels=self.mid_features,
-                      kernel_size=7, stride=1, padding=3),
-            Rearrange("b c s -> b s c"),
-        )
+        self.linear_1 = nn.Linear(self.in_features, self.mid_features)
+        # self.linear_1 = nn.Sequential(
+        #     Rearrange("b s c -> b c s"),
+        #     nn.Conv1d(in_channels=self.in_features, out_channels=self.mid_features,
+        #               kernel_size=7, stride=1, padding=3),
+        #     Rearrange("b c s -> b s c"),
+        # )
         self.activation = nn.GELU()
-        # self.linear_2 = nn.Linear(self.mid_features, self.out_features)
-        self.linear_2 = nn.Sequential(
-            Rearrange("b s c -> b c s"),
-            nn.Conv1d(in_channels=self.mid_features, out_channels=self.out_features,
-                      kernel_size=5, stride=1, padding=2),
-            Rearrange("b c s -> b s c"),
-        )
+        self.linear_2 = nn.Linear(self.mid_features, self.out_features)
+        # self.linear_2 = nn.Sequential(
+        #     Rearrange("b s c -> b c s"),
+        #     nn.Conv1d(in_channels=self.mid_features, out_channels=self.out_features,
+        #               kernel_size=5, stride=1, padding=2),
+        #     Rearrange("b c s -> b s c"),
+        # )
         self.dropout = nn.Dropout(p=self.dropout_p)
 
     def forward(self, x):

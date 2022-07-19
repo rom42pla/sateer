@@ -78,14 +78,15 @@ class FEEGT(pl.LightningModule):
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
-        self.normalize = nn.Sequential(OrderedDict([
-            ("reshape_in", Rearrange("b s c m -> b c s m")),
-            ("conv", nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
-                               kernel_size=1, stride=1, padding=0, bias=True)),
-            ("reshape_out", Rearrange("b c s m -> b s c m")),
-            ("normalization", nn.LayerNorm([self.in_channels, self.mels])),
-            ("activation", nn.GELU()),
-        ]))
+        self.labels_embedder = nn.Embedding(len(self.labels), self.window_embedding_dim)
+        # self.normalize = nn.Sequential(OrderedDict([
+        #     ("reshape_in", Rearrange("b s c m -> b c s m")),
+        #     ("conv", nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
+        #                        kernel_size=1, stride=1, padding=0, bias=True)),
+        #     ("reshape_out", Rearrange("b c s m -> b s c m")),
+        #     ("normalization", nn.LayerNorm([self.in_channels, self.mels])),
+        #     ("activation", nn.GELU()),
+        # ]))
 
         # self.merge_mels = nn.Sequential(OrderedDict([
         #     ("reshape", Rearrange("b s c m -> b s (c m)")),
@@ -117,6 +118,7 @@ class FEEGT(pl.LightningModule):
                                     use_masking=self.use_masking,
                                     mask_perc_min=self.mask_perc_min,
                                     mask_perc_max=self.mask_perc_max,
+                                    mask_start_index=len(self.labels),
                                     add_positional_embeddings=True,
                                     )
 
@@ -152,16 +154,23 @@ class FEEGT(pl.LightningModule):
         with profiler.record_function("spectrogram"):
             spectrogram = MelSpectrogram(sampling_rate=sampling_rates,
                                          min_freq=0, max_freq=50, mels=self.mels,
-                                         window_size=1, window_stride=0.1)(eegs)  # (b s c m)
+                                         window_size=1, window_stride=0.01)(eegs)  # (b s c m)
 
         with profiler.record_function("preparation"):
             x = self.merge_mels(spectrogram)  # (b s c)
 
         with profiler.record_function("transformer encoder"):
+            # adds the labels for the tokens
+            label_tokens = self.labels_embedder(
+                torch.as_tensor(list(range(len(self.labels))), device=x.device))
+            x = torch.cat([label_tokens.repeat(x.shape[0], 1, 1),
+                           x], dim=1)
+
             x = self.encoder(x)
+
         with profiler.record_function("predictions"):
             # labels_pred = self.classification(x[:, 0, :])
-            labels_pred = torch.stack([net(x[:, 0, :])
+            labels_pred = torch.stack([net(x[:, i_label, :])
                                        for i_label, net in enumerate(self.classification)],
                                       dim=1)  # (b l d)
             assert labels_pred.shape[1] == len(self.labels)
