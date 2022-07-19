@@ -270,7 +270,7 @@ class FEEGT(pl.LightningModule):
         accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1),
                                                  labels[:, i_label], average="micro")
                 for i_label in range(labels.shape[-1])]
-        self.log(f"accs_{phase}", sum(accs) / len(accs))
+        self.log(f"accs_{phase}", sum(accs) / len(accs), prog_bar=True)
 
     def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
         optimizer.zero_grad(set_to_none=True)
