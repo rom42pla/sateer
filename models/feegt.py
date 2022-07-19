@@ -101,8 +101,9 @@ class FEEGT(pl.LightningModule):
                                                           for i in range(self.num_encoders)],
                                                         ("pooler", nn.Linear(in_features=self.window_embedding_dim,
                                                                              out_features=self.window_embedding_dim)),
-                                                        ("activation", nn.GELU()),
+                                                        ("activation", nn.Tanh()),
                                                         ]))
+
         self.special_tokens = {
             token: i_token
             for i_token, token in enumerate(["start", "end", "mask"])
@@ -112,10 +113,14 @@ class FEEGT(pl.LightningModule):
         )
 
         self.classification = nn.Sequential(OrderedDict([
-            ("linear", nn.Linear(in_features=self.window_embedding_dim,
-                                 out_features=len(self.labels) * 2)),
+            ("linear1", nn.Linear(in_features=self.window_embedding_dim,
+                                  out_features=1024)),
+            ("activation1", nn.Tanh()),
+            ("linear2", nn.Linear(in_features=1024,
+                                  out_features=len(self.labels) * 2)),
             ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
         ]))
+
         self.float()
         assert device is None or device in {"cuda", "cpu"}
         if device is None:
@@ -335,9 +340,6 @@ class FNetEncoderBlock(nn.Module):
         x = F.layer_norm(x + x_fourier,
                          (x.shape[-1],))
         # fc pass
-        # x_forwarded = torch.stack([self.feed_forward_layer(x[:, s, :])
-        #                            for s in range(x.shape[1])],
-        #                           dim=1)
         x_forwarded = self.feed_forward_layer(x)
         x = x_forwarded if self.in_features != self.out_features else (x + x_forwarded)
         x = F.layer_norm(x, (x.shape[-1],))
