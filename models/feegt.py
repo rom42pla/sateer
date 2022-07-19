@@ -163,9 +163,9 @@ class FEEGT(pl.LightningModule):
 
         with profiler.record_function("preparation"):
             x = self.normalize(spectrogram)
-            print(x.shape)
+            # print(x.shape)
             x = self.merge_mels(x)  # (b s c)
-            print(x.shape)
+            # print(x.shape)
             # print("sequence", x.shape)
 
         # generates special tokens
