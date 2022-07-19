@@ -193,7 +193,7 @@ class FouriEEGFeedForward(nn.Module):
         x = self.linear_1(x)
         x = self.activation(x)
         x = self.linear_2(x)
-        x = self.dropout(x)
+        # x = self.dropout(x)
         return x
 
 
