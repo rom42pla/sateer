@@ -197,11 +197,11 @@ class FEEGT(pl.LightningModule):
             # labels_pred = self.classification(x[:, 0, :])
             labels_pred = torch.stack([net(x[:, 0, :])
                                        for i_label, net in enumerate(self.classification)],
-                                      dim=1)
+                                      dim=1) # (b l d)
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
             if self.training is False:
-                labels_pred = F.softmax(labels_pred, dim=-1)
+                labels_pred = F.softmax(labels_pred, dim=-1) # (b l d)
         return labels_pred
 
     def training_step(self, batch, batch_idx):
