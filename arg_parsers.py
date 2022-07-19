@@ -89,6 +89,10 @@ def get_training_args():
                         default=512,
                         type=int,
                         help="Dimension of the internal windows embedding in FEEGT")
+    parser.add_argument("--dropout_p",
+                        default=0.1,
+                        type=float,
+                        help="The amount of dropout to use")
     parser.add_argument("--disable_masking",
                         default=False,
                         action="store_true",
@@ -126,6 +130,7 @@ def get_training_args():
         args.seed = random.randint(0, 1000000)
 
     assert args.num_encoders >= 1
+    assert 0 <= args.dropout < 1
     assert args.learning_rate > 0
     assert args.mels > 0
 

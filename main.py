@@ -147,7 +147,8 @@ elif args.setting == "within_subject":
                                                       window_embedding_dim=args.window_embedding_dim,
                                                       mels=args.mels,
                                                       use_masking=not args.disable_masking,
-                                                      learning_rate=args.learning_rate)
+                                                      learning_rate=args.learning_rate,
+                                                      dropout_p=args.dropout_p)
                 elif args.model == "cnn_baseline":
                     model: pl.LightningModule = CNNBaseline(in_channels=len(dataset.electrodes),
                                                             labels=dataset.labels_to_use,

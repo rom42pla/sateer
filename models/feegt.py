@@ -26,7 +26,7 @@ class FEEGT(pl.LightningModule):
 
                  window_embedding_dim: int = 512,
                  num_encoders: int = 1,
-                 dropout: float = 0.1,
+                 dropout_p: float = 0.1,
 
                  learning_rate: float = 1e-3,
 
@@ -71,8 +71,8 @@ class FEEGT(pl.LightningModule):
         self.num_encoders = num_encoders
         assert isinstance(window_embedding_dim, int) and window_embedding_dim >= 1
         self.window_embedding_dim = window_embedding_dim
-        assert 0 <= dropout < 1
-        self.dropout = dropout
+        assert 0 <= dropout_p < 1
+        self.dropout_p = dropout_p
 
         # optimization
         assert isinstance(learning_rate, float) and learning_rate > 0
@@ -114,7 +114,8 @@ class FEEGT(pl.LightningModule):
         self.fnet_encoders = nn.Sequential(OrderedDict([*[(f"encoder_{i}",
                                                            FNetEncoderBlock(in_features=self.window_embedding_dim,
                                                                             mid_features=self.window_embedding_dim,
-                                                                            out_features=self.window_embedding_dim))
+                                                                            out_features=self.window_embedding_dim,
+                                                                            dropout_p=self.dropout_p))
                                                           for i in range(self.num_encoders)],
                                                         ("pooler", nn.Linear(in_features=self.window_embedding_dim,
                                                                              out_features=self.window_embedding_dim)),
@@ -134,7 +135,7 @@ class FEEGT(pl.LightningModule):
                 ("linear1", nn.Linear(in_features=self.window_embedding_dim,
                                       out_features=1024)),
                 ("activation1", nn.GELU()),
-                ("dropout", nn.Dropout(p=self.dropout)),
+                ("dropout", nn.Dropout(p=self.dropout_p)),
                 ("linear2", nn.Linear(in_features=1024,
                                       out_features=2)),
                 # ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
@@ -165,9 +166,9 @@ class FEEGT(pl.LightningModule):
         # self.plot_mel_spectrogram(spectrogram[0])
 
         with profiler.record_function("preparation"):
-            x = self.normalize(spectrogram)
+            # x = self.normalize(spectrogram)
             # print(x.shape)
-            x = self.merge_mels(x)  # (b s c)
+            x = self.merge_mels(spectrogram)  # (b s c)
             # print(x.shape)
             # print("sequence", x.shape)
 
