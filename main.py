@@ -176,6 +176,8 @@ elif args.setting == "within_subject":
                                          EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-4, patience=10,
                                                        verbose=False, check_on_train_epoch_end=False, strict=True),
                                      ] if args.checkpoints_path is not None else [])
+                if args.benchmark:
+                    print(model)
                 trainer.fit(model, datamodule=dataset)
                 del trainer, model
                 if args.benchmark:
