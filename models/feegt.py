@@ -9,6 +9,7 @@ import torch
 import torchvision
 from einops.layers.torch import Rearrange
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from pytorch_lightning.utilities.types import EPOCH_OUTPUT
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
@@ -197,11 +198,11 @@ class FEEGT(pl.LightningModule):
             # labels_pred = self.classification(x[:, 0, :])
             labels_pred = torch.stack([net(x[:, 0, :])
                                        for i_label, net in enumerate(self.classification)],
-                                      dim=1) # (b l d)
+                                      dim=1)  # (b l d)
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
             if self.training is False:
-                labels_pred = F.softmax(labels_pred, dim=-1) # (b l d)
+                labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
         return labels_pred
 
     def training_step(self, batch, batch_idx):
@@ -212,17 +213,19 @@ class FEEGT(pl.LightningModule):
         labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
-        accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
-                                                 labels[:, i_label], average="micro")
-                for i_label in range(labels.shape[-1])]
-        for i_label, label in enumerate(self.labels):
-            self.log(f"{label}_acc_train", accs[i_label], prog_bar=False)
-        loss, acc = sum(losses), (sum(accs) / len(accs))
-        self.log(f"loss", loss)
-        self.log(f"acc_train", acc, prog_bar=True, on_step=False, on_epoch=True)
-        self.log("training", 1.0, prog_bar=False, on_step=False, on_epoch=True)
+        # accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
+        #                                          labels[:, i_label], average="micro")
+        #         for i_label in range(labels.shape[-1])]
+        # for i_label, label in enumerate(self.labels):
+        #     self.log(f"{label}_acc_train", accs[i_label], prog_bar=False)
+        loss = sum(losses)
+        # self.log(f"loss", loss)
+        # self.log(f"acc_train", acc, prog_bar=True, on_step=False, on_epoch=True)
+        # self.log("training", 1.0, prog_bar=False, on_step=False, on_epoch=True)
         return {
             "loss": loss,
+            "labels": labels,
+            "labels_pred": labels_pred,
         }
 
     def validation_step(self, batch, batch_idx):
@@ -232,20 +235,42 @@ class FEEGT(pl.LightningModule):
         labels: torch.Tensor = batch["labels"]
         sampling_rates: torch.Tensor = batch["sampling_rates"]
         labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l d)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label], label_smoothing=0.1)
+        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
-        accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
-                                                 labels[:, i_label], average="micro")
-                for i_label in range(labels.shape[-1])]
-        for i_label, label in enumerate(self.labels):
-            self.log(f"{label}_acc_val", accs[i_label], prog_bar=False)
-        loss, acc = sum(losses), (sum(accs) / len(accs))
-        self.log(f"loss_val", loss, prog_bar=True, on_step=False, on_epoch=True)
-        self.log(f"acc_val", acc, prog_bar=True, on_step=False, on_epoch=True)
-        self.log("training", 0.0, prog_bar=False)
+        # accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
+        #                                          labels[:, i_label], average="micro")
+        #         for i_label in range(labels.shape[-1])]
+        # for i_label, label in enumerate(self.labels):
+        #     self.log(f"{label}_acc_val", accs[i_label], prog_bar=False)
+        loss = sum(losses)
+        # self.log(f"loss_val", loss, prog_bar=True, on_step=False, on_epoch=True)
+        # self.log(f"acc_val", acc, prog_bar=True, on_step=False, on_epoch=True)
+        # self.log("training", 0.0, prog_bar=False)
         return {
             "loss": loss,
+            "labels": labels,
+            "labels_pred": labels_pred,
         }
+
+    def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]) -> None:
+        self.log_stats(outputs)
+
+    def validation_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]) -> None:
+        self.log_stats(outputs)
+
+    def log_stats(self, outputs: List[Dict[str, torch.Tensor]]):
+        # name of the current phase
+        phase = "train" if self.training is True else "val"
+        # loss
+        losses = torch.stack([e["loss"] for e in outputs])
+        self.log(f"loss_{phase}", losses.mean(), prog_bar=True)
+        # classification metrics
+        labels, labels_pred = torch.cat([e["labels"] for e in outputs], dim=0), \
+                              torch.cat([e["labels_pred"] for e in outputs], dim=0)
+        accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1),
+                                                 labels[:, i_label], average="micro")
+                for i_label in range(labels.shape[-1])]
+        self.log(f"accs_{phase}", sum(accs) / len(accs))
 
     def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
         optimizer.zero_grad(set_to_none=True)
