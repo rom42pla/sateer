@@ -129,15 +129,18 @@ class FEEGT(pl.LightningModule):
             nn.Embedding(len(self.special_tokens), self.window_embedding_dim),
         )
 
-        self.classification = nn.Sequential(OrderedDict([
-            ("linear1", nn.Linear(in_features=self.window_embedding_dim,
-                                  out_features=1024)),
-            ("activation1", nn.Tanh()),
-            ("dropout", nn.Dropout(p=self.dropout)),
-            ("linear2", nn.Linear(in_features=1024,
-                                  out_features=len(self.labels) * 2)),
-            ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
-        ]))
+        self.classification = nn.ModuleList([
+            nn.Sequential(OrderedDict([
+                ("linear1", nn.Linear(in_features=self.window_embedding_dim,
+                                      out_features=1024)),
+                ("activation1", nn.GELU()),
+                ("dropout", nn.Dropout(p=self.dropout)),
+                ("linear2", nn.Linear(in_features=1024,
+                                      out_features=2)),
+                # ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
+            ]))
+            for i_label in range(len(self.labels))
+        ])
 
         self.float()
         assert device is None or device in {"cuda", "cpu"}
@@ -190,7 +193,10 @@ class FEEGT(pl.LightningModule):
             x = self.fnet_encoders(x)
 
         with profiler.record_function("predictions"):
-            labels_pred = self.classification(x[:, 0, :])
+            # labels_pred = self.classification(x[:, 0, :])
+            labels_pred = torch.stack([net(x[:, 0, :])
+                                       for i_label, net in enumerate(self.classification)],
+                                      dim=1)
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
         return labels_pred
@@ -415,11 +421,12 @@ if __name__ == "__main__":
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
     model.training = True
+    print(model)
 
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with record_function("model_inference"):
             # out = model(batch["eegs"], batch["sampling_rates"])
             model.training_step(batch, 0)
     print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=10))
-    # print(model)
+
     # print(torchvision.models.resnet18())
