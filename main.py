@@ -138,13 +138,13 @@ elif args.setting == "within_subject":
                                                      sampling_rate=dataset.sampling_rate,
                                                      windows_length=dataset.window_size,
                                                      num_encoders=args.num_encoders, num_decoders=args.num_decoders,
-                                                     window_embedding_dim=args.embeddings_dim,
+                                                     window_embedding_dim=args.window_embedding_dim,
                                                      learning_rate=args.learning_rate)
                 elif args.model == "feegt":
                     model: pl.LightningModule = FEEGT(in_channels=len(dataset.electrodes),
                                                       labels=dataset.labels_to_use,
                                                       num_encoders=args.num_encoders,
-                                                      window_embedding_dim=args.embeddings_dim,
+                                                      window_embedding_dim=args.window_embedding_dim,
                                                       mels=args.mels,
                                                       use_masking=not args.disable_masking,
                                                       learning_rate=args.learning_rate,
@@ -153,7 +153,7 @@ elif args.setting == "within_subject":
                     model: pl.LightningModule = CNNBaseline(in_channels=len(dataset.electrodes),
                                                             labels=dataset.labels_to_use,
                                                             sampling_rate=dataset.sampling_rate,
-                                                            window_embedding_dim=args.embeddings_dim,
+                                                            window_embedding_dim=args.window_embedding_dim,
                                                             learning_rate=args.learning_rate)
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                      precision=args.precision,
