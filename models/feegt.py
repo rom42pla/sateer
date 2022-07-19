@@ -79,12 +79,12 @@ class FEEGT(pl.LightningModule):
         self.learning_rate = learning_rate
 
         self.normalize = nn.Sequential(OrderedDict([
-            ("reshape1", Rearrange("b s c m -> b c s m")),
+            ("reshape_in", Rearrange("b s c m -> b c s m")),
             ("conv", nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
-                               kernel_size=1, stride=1, padding=0, bias=False)),
-            ("bn", nn.BatchNorm2d(num_features=self.in_channels)),
+                               kernel_size=1, stride=1, padding=0, bias=True)),
+            ("reshape_out", Rearrange("b c s m -> b s c m")),
+            ("normalization", nn.LayerNorm([self.in_channels, self.mels])),
             ("activation", nn.GELU()),
-            ("reshape2", Rearrange("b c s m -> b s c m")),
         ]))
 
         # self.merge_mels = nn.Sequential(OrderedDict([
@@ -167,7 +167,7 @@ class FEEGT(pl.LightningModule):
         with profiler.record_function("preparation"):
             x = self.normalize(spectrogram)
             # print(x.shape)
-            x = self.merge_mels(spectrogram)  # (b s c)
+            x = self.merge_mels(x)  # (b s c)
             # print(x.shape)
             # print("sequence", x.shape)
 
