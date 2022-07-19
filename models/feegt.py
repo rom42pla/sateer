@@ -200,6 +200,8 @@ class FEEGT(pl.LightningModule):
                                       dim=1)
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
+            if self.training is False:
+                labels_pred = F.softmax(labels_pred, dim=-1)
         return labels_pred
 
     def training_step(self, batch, batch_idx):
@@ -207,7 +209,7 @@ class FEEGT(pl.LightningModule):
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
         sampling_rates: torch.Tensor = batch["sampling_rates"]
-        labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l)
+        labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
         accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
@@ -229,7 +231,7 @@ class FEEGT(pl.LightningModule):
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
         sampling_rates: torch.Tensor = batch["sampling_rates"]
-        labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l)
+        labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label], label_smoothing=0.1)
                   for i_label in range(labels.shape[-1])]
         accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
@@ -421,13 +423,11 @@ if __name__ == "__main__":
         "labels": torch.ones(batch_size, 4, dtype=torch.long),
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
-    model.training = True
-    print(model)
-
-    with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
-        with record_function("model_inference"):
-            # out = model(batch["eegs"], batch["sampling_rates"])
+    for mode in {"train", "val"}:
+        model.training = True if mode == "train" else False
+        with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
             model.training_step(batch, 0)
-    print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=10))
+        print(f"Mode {mode} stats")
+        print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=8))
 
     # print(torchvision.models.resnet18())
