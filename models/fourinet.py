@@ -99,7 +99,7 @@ class FouriEncoder(nn.Module):
 
         # eventually adds positional embeddings
         if self.add_positional_embeddings:
-            x = self.add_positional_embeddings_fn(x)
+            x[:, self.mask_start_index:] = self.add_positional_embeddings_fn(x[:, self.mask_start_index:])
 
         # encoders pass
         x = self.encoder_blocks(x)[:, 1:-1]

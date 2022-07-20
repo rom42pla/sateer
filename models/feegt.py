@@ -160,29 +160,28 @@ class FEEGT(pl.LightningModule):
         eegs *= 1e6
         x = eegs
         # reduces the size of the signal
-        kernel_size = int(self.sampling_rate * 0.1)
-        stride = int(math.floor(kernel_size / 2))
-        x = einops.rearrange(x, "b s c -> b c s")
-        x = F.avg_pool1d(x, kernel_size=kernel_size, stride=stride,
-                         padding=stride)
-        x = einops.rearrange(x, "b c s -> b s c")
+        # kernel_size = int(self.sampling_rate * 0.1)
+        # stride = int(math.floor(kernel_size / 2))
+        # x = einops.rearrange(x, "b s c -> b c s")
+        # x = F.avg_pool1d(x, kernel_size=kernel_size, stride=stride,
+        #                  padding=stride)
+        # x = einops.rearrange(x, "b c s -> b s c")
 
-        # with profiler.record_function("spectrogram"):
-        #     spectrogram = MelSpectrogram(sampling_rate=sampling_rates,
-        #                                  min_freq=0, max_freq=50, mels=self.mels,
-        #                                  window_size=1, window_stride=0.01)(eegs)  # (b s c m)
-        #
-        # with profiler.record_function("preparation"):
-        #     x = self.merge_mels(spectrogram)  # (b s c)
+        with profiler.record_function("spectrogram"):
+            spectrogram = MelSpectrogram(sampling_rate=self.sampling_rate,
+                                         min_freq=0, max_freq=50, mels=self.mels,
+                                         window_size=1, window_stride=0.01)(eegs)  # (b s c m)
+
+        with profiler.record_function("preparation"):
+            x = self.merge_mels(spectrogram)  # (b s c)
 
         with profiler.record_function("transformer encoder"):
-            x = self.preprocessing(x)
+            # x = self.preprocessing(x)
             # adds the labels for the tokens
             label_tokens = self.labels_embedder(
                 torch.as_tensor(list(range(len(self.labels))), device=x.device))
             x = torch.cat([label_tokens.repeat(x.shape[0], 1, 1),
                            x], dim=1)
-
             x = self.encoder(x)
 
         with profiler.record_function("predictions"):
