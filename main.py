@@ -142,6 +142,7 @@ elif args.setting == "within_subject":
                                                      learning_rate=args.learning_rate)
                 elif args.model == "feegt":
                     model: pl.LightningModule = FEEGT(in_channels=len(dataset.electrodes),
+                                                      sampling_rate=dataset.sampling_rate,
                                                       labels=dataset.labels_to_use,
                                                       num_encoders=args.num_encoders,
                                                       window_embedding_dim=args.window_embedding_dim,

@@ -143,6 +143,12 @@ class FouriEncoderBlock(nn.Module):
                                                       mid_features=self.mid_features,
                                                       out_features=self.out_features,
                                                       dropout_p=dropout_p)
+        if self.in_features != self.out_features:
+            self.up_projection = nn.Sequential(
+                nn.Linear(in_features=self.in_features, out_features=self.mid_features),
+                nn.GELU(),
+                nn.Linear(in_features=self.mid_features, out_features=self.out_features)
+            )
         self.layer_norm_2 = nn.LayerNorm([out_features, ])
 
     def forward(self, x):
@@ -151,7 +157,9 @@ class FouriEncoderBlock(nn.Module):
         x = self.layer_norm_1(x + x_fourier)
         # fc pass
         x_forwarded = self.feed_forward_layer(x)
-        x = x_forwarded if self.in_features != self.out_features else (x + x_forwarded)
+        if self.in_features != self.out_features:
+            x = self.up_projection(x)
+        x = x + x_forwarded
         x = self.layer_norm_2(x)
         return x
 
@@ -199,7 +207,7 @@ class FouriEEGFeedForward(nn.Module):
         x = self.linear_1(x)
         x = self.activation(x)
         x = self.linear_2(x)
-        # x = self.dropout(x)
+        x = self.dropout(x)
         return x
 
 

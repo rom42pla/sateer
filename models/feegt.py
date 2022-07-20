@@ -6,6 +6,7 @@ import functorch
 import torch
 import torchvision
 from einops.layers.torch import Rearrange
+from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import nn
 from torch.nn import functional as F
@@ -16,12 +17,13 @@ import torch.autograd.profiler as profiler
 from torch.profiler import profile, ProfilerActivity
 from torchaudio import transforms
 
-from models.fourinet import FouriEncoder
+from models.fourinet import FouriEncoder, FouriEncoderBlock
 
 
 class FEEGT(pl.LightningModule):
     def __init__(self,
                  in_channels: int,
+                 sampling_rate: int,
                  labels: Union[int, List[str]],
 
                  window_embedding_dim: int = 512,
@@ -42,6 +44,8 @@ class FEEGT(pl.LightningModule):
         # metas
         assert isinstance(in_channels, int) and in_channels >= 1
         self.in_channels = in_channels
+        assert isinstance(sampling_rate, int) and sampling_rate >= 1
+        self.sampling_rate = sampling_rate
         assert isinstance(labels, int) or isinstance(labels, list), \
             f"the labels must be a list of strings or a positive integer, not {labels}"
         if isinstance(labels, list):
@@ -112,6 +116,11 @@ class FEEGT(pl.LightningModule):
             Rearrange("b s c m -> b s (c m)"),
         )
 
+        self.preprocessing = nn.Sequential(
+            FouriEncoderBlock(in_features=self.in_channels,
+                              mid_features=self.window_embedding_dim,
+                              out_features=self.window_embedding_dim),
+        )
         self.encoder = FouriEncoder(embeddings_dim=self.window_embedding_dim,
                                     num_encoders=self.num_encoders,
                                     dropout_p=self.dropout_p,
@@ -143,23 +152,32 @@ class FEEGT(pl.LightningModule):
         self.save_hyperparameters()
 
     def forward(self,
-                eegs: torch.Tensor,
-                sampling_rates: Union[float, int, torch.Tensor]):
+                eegs: torch.Tensor):
         assert eegs.shape[-1] == self.in_channels
         if eegs.device != self.device:
             eegs = eegs.to(self.device)  # (b s c)
         # cast from microvolts to volts
         eegs *= 1e6
+        x = eegs
+        # reduces the size of the signal
+        plt.plot(x[0, :, 0])
+        kernel_size = int(self.sampling_rate * 0.1)
+        stride = int(math.floor(kernel_size / 2))
+        x = einops.rearrange(x, "b s c -> b c s")
+        x = F.avg_pool1d(x, kernel_size=kernel_size, stride=stride,
+                         padding=stride)
+        x = einops.rearrange(x, "b c s -> b s c")
 
-        with profiler.record_function("spectrogram"):
-            spectrogram = MelSpectrogram(sampling_rate=sampling_rates,
-                                         min_freq=0, max_freq=50, mels=self.mels,
-                                         window_size=1, window_stride=0.01)(eegs)  # (b s c m)
-
-        with profiler.record_function("preparation"):
-            x = self.merge_mels(spectrogram)  # (b s c)
+        # with profiler.record_function("spectrogram"):
+        #     spectrogram = MelSpectrogram(sampling_rate=sampling_rates,
+        #                                  min_freq=0, max_freq=50, mels=self.mels,
+        #                                  window_size=1, window_stride=0.01)(eegs)  # (b s c m)
+        #
+        # with profiler.record_function("preparation"):
+        #     x = self.merge_mels(spectrogram)  # (b s c)
 
         with profiler.record_function("transformer encoder"):
+            x = self.preprocessing(x)
             # adds the labels for the tokens
             label_tokens = self.labels_embedder(
                 torch.as_tensor(list(range(len(self.labels))), device=x.device))
@@ -169,7 +187,6 @@ class FEEGT(pl.LightningModule):
             x = self.encoder(x)
 
         with profiler.record_function("predictions"):
-            # labels_pred = self.classification(x[:, 0, :])
             labels_pred = torch.stack([net(x[:, i_label, :])
                                        for i_label, net in enumerate(self.classification)],
                                       dim=1)  # (b l d)
@@ -183,8 +200,7 @@ class FEEGT(pl.LightningModule):
         # self.log("batch_size", float(len(batch)), prog_bar=False, on_step=True, batch_size=len(batch))
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
-        sampling_rates: torch.Tensor = batch["sampling_rates"]
-        labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l d)
+        labels_pred = self(eegs=eegs)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
         # accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
@@ -207,8 +223,7 @@ class FEEGT(pl.LightningModule):
         # eeg, labels = [e.to(self.device) for e in batch]  # (b s c), (b l)
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
-        sampling_rates: torch.Tensor = batch["sampling_rates"]
-        labels_pred = self(eegs=eegs, sampling_rates=sampling_rates)  # (b l d)
+        labels_pred = self(eegs=eegs)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
         # accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
@@ -367,18 +382,18 @@ class MelSpectrogram(nn.Module):
 
 
 if __name__ == "__main__":
-    # torch.backends.cudnn.benchmark = True
-    model = FEEGT(in_channels=32, labels=4, window_embedding_dim=512,
-                  num_encoders=2, use_masking=True,
-                  mask_perc_min=0.1, mask_perc_max=0.3)
     batch_size = 2048
     sampling_rate = 128
     seconds = 1
     batch = {
-        "eegs": torch.randn(batch_size, seconds * sampling_rate, 32, dtype=torch.float32),
+        "eegs": torch.randn(batch_size, seconds * sampling_rate, 32, dtype=torch.float32) * 1e-6,
         "labels": torch.ones(batch_size, 4, dtype=torch.long),
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
+    model = FEEGT(in_channels=32, sampling_rate=sampling_rate,
+                  labels=4, window_embedding_dim=512,
+                  num_encoders=2, use_masking=True,
+                  mask_perc_min=0.1, mask_perc_max=0.3)
     model.training = True
     print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
