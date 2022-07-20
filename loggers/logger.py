@@ -32,6 +32,7 @@ class MyLogger(LightningLoggerBase):
     def log_metrics(self, metrics, step):
         # metrics is a dictionary of metric names and values
         # your code to record metrics goes here
+        print(metrics)
         pass
 
     @rank_zero_only
