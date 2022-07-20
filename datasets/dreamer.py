@@ -53,8 +53,8 @@ class DREAMERDataset(EEGEmotionRecognitionDataset):
                                                  "ScoreDominance"]])]  # (l)
             return eegs, labels, subject_id
 
-        with Pool(processes=len(self.subject_ids)) as pool:
-            data_pool = pool.map(parse_eegs, [i for i in range(len(self.subject_ids))])
+        with Pool(processes=len(self.subject_ids_to_use)) as pool:
+            data_pool = pool.map(parse_eegs, [i for i in range(len(self.subject_ids_to_use))])
             data_pool = [d for d in data_pool if d is not None]
             eegs: List[np.ndarray] = [e for eeg_lists, _, _ in data_pool
                                       for e in eeg_lists]

@@ -69,49 +69,48 @@ if args.setting == "cross_subject":
                             batch_size=args.batch_size)
     # dataset.plot_samples()
     if args.validation == "k_fold":
-        raise NotImplementedError
-    #     for i_fold in tqdm(range(dataset.k_folds), desc="fold"):
-    #         gc.collect()
-    #         dataset.set_k_fold(i_fold)
-    #
-    #         if args.model == "eegt":
-    #             model = EEGT(in_channels=32,
-    #                          labels=dataset.labels_to_use,
-    #                          sampling_rate=dataset.sampling_rate, windows_length=1,
-    #                          num_encoders=args.num_encoders, num_decoders=args.num_decoders,
-    #                          window_embedding_dim=args.window_embedding_dim,
-    #                          learning_rate=args.learning_rate,
-    #                          mask_perc_min=0.05, mask_perc_max=0.2)
-    #         elif args.model == "cnn_baseline":
-    #             model = CNNBaseline(in_channels=32,
-    #                                 labels=dataset.labels_to_use,
-    #                                 sampling_rate=dataset.sampling_rate,
-    #                                 window_embedding_dim=args.window_embedding_dim,
-    #                                 learning_rate=args.learning_rate)
-    #         model.to("cuda" if torch.cuda.is_available() else "cpu")
-    #         trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0, precision=32,
-    #                              max_epochs=args.max_epochs, check_val_every_n_epoch=1,
-    #                              num_sanity_val_steps=args.batch_size,
-    #                              logger=CSVLogger(args.checkpoints_path, name=experiment_name,
-    #                                               version=f"fold_{i_fold}"),
-    #                              enable_progress_bar=True,
-    #                              enable_model_summary=True,
-    #                              limit_train_batches=args.limit_train_batches,
-    #                              limit_val_batches=args.limit_train_batches,
-    #                              log_every_n_steps=1,
-    #                              enable_checkpointing=False,
-    #                              callbacks=[
-    #                                  # ModelCheckpoint(
-    #                                  #     dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
-    #                                  #     save_top_k=1,
-    #                                  #     monitor="loss_val", mode="min",
-    #                                  #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
-    #                                  EarlyStopping(monitor="acc_val",
-    #                                                min_delta=0, patience=10,
-    #                                                verbose=False, mode="max", check_on_train_epoch_end=False),
-    #                              ] if args.checkpoints_path is not None else [])
-    #         trainer.fit(model, datamodule=dataset)
-    #         del trainer, model
+        for i_fold in tqdm(range(dataset.k_folds), desc="fold"):
+            gc.collect()
+            dataset.set_k_fold(i_fold)
+            if args.model == "feegt":
+                model: pl.LightningModule = FEEGT(in_channels=len(dataset.electrodes),
+                                                  sampling_rate=dataset.sampling_rate,
+                                                  labels=dataset.labels_to_use,
+                                                  num_encoders=args.num_encoders,
+                                                  window_embedding_dim=args.window_embedding_dim,
+                                                  mels=args.mels,
+                                                  use_masking=not args.disable_masking,
+                                                  learning_rate=args.learning_rate,
+                                                  dropout_p=args.dropout_p)
+            else:
+                raise NotImplementedError
+            trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
+                                 precision=args.precision,
+                                 max_epochs=args.max_epochs, check_val_every_n_epoch=1,
+                                 num_sanity_val_steps=args.batch_size,
+                                 logger=CSVLogger(args.checkpoints_path, name=experiment_name,
+                                                  version=f"fold_{i_fold}"),
+                                 enable_progress_bar=True,
+                                 enable_model_summary=True if i_fold == 0 else False,
+                                 limit_train_batches=args.limit_train_batches,
+                                 limit_val_batches=args.limit_train_batches,
+                                 log_every_n_steps=1,
+                                 enable_checkpointing=False,
+                                 callbacks=[
+                                     # ModelCheckpoint(
+                                     #     dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
+                                     #     save_top_k=1,
+                                     #     monitor="loss_val", mode="min",
+                                     #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
+                                     EarlyStopping(monitor="accs_val", mode="max", min_delta=1e-4, patience=10,
+                                                   verbose=False, check_on_train_epoch_end=False, strict=True),
+                                 ] if args.checkpoints_path is not None else [])
+            if args.benchmark:
+                print(model)
+            trainer.fit(model, datamodule=dataset)
+            del trainer, model
+            if args.benchmark:
+                break
     elif args.validation == "loso":
         raise NotImplementedError
 elif args.setting == "within_subject":
@@ -127,20 +126,11 @@ elif args.setting == "within_subject":
                                     validation=args.validation, k_folds=args.k_folds,
                                     labels_to_use=["valence", "arousal", "dominance"],
                                     batch_size=args.batch_size)
-            dataset.setup("fit")
             for i_fold in tqdm(range(dataset.k_folds), desc="fold"):
                 gc.collect()
                 dataset.set_k_fold(i_fold)
 
-                if args.model == "eegt":
-                    model: pl.LightningModule = EEGT(in_channels=len(dataset.electrodes),
-                                                     labels=dataset.labels_to_use,
-                                                     sampling_rate=dataset.sampling_rate,
-                                                     windows_length=dataset.window_size,
-                                                     num_encoders=args.num_encoders, num_decoders=args.num_decoders,
-                                                     window_embedding_dim=args.window_embedding_dim,
-                                                     learning_rate=args.learning_rate)
-                elif args.model == "feegt":
+                if args.model == "feegt":
                     model: pl.LightningModule = FEEGT(in_channels=len(dataset.electrodes),
                                                       sampling_rate=dataset.sampling_rate,
                                                       labels=dataset.labels_to_use,
@@ -150,12 +140,8 @@ elif args.setting == "within_subject":
                                                       use_masking=not args.disable_masking,
                                                       learning_rate=args.learning_rate,
                                                       dropout_p=args.dropout_p)
-                elif args.model == "cnn_baseline":
-                    model: pl.LightningModule = CNNBaseline(in_channels=len(dataset.electrodes),
-                                                            labels=dataset.labels_to_use,
-                                                            sampling_rate=dataset.sampling_rate,
-                                                            window_embedding_dim=args.window_embedding_dim,
-                                                            learning_rate=args.learning_rate)
+                else:
+                    raise NotImplementedError
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                      precision=args.precision,
                                      max_epochs=args.max_epochs, check_val_every_n_epoch=1,
@@ -174,7 +160,7 @@ elif args.setting == "within_subject":
                                          #     save_top_k=1,
                                          #     monitor="loss_val", mode="min",
                                          #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
-                                         EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-4, patience=10,
+                                         EarlyStopping(monitor="accs_val", mode="max", min_delta=1e-4, patience=10,
                                                        verbose=False, check_on_train_epoch_end=False, strict=True),
                                      ] if args.checkpoints_path is not None else [])
                 if args.benchmark:
@@ -215,8 +201,9 @@ elif args.setting == "within_subject":
                     metrics_df += [subject_df]
             metrics_df = pd.concat(metrics_df)
             metrics_df.to_csv(join(args.checkpoints_path, experiment_name, "metrics.csv"), index=False)
-            mean_performances_df = metrics_df[["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
-                                               "acc_val", "subject_id"]].groupby("subject_id").max().mean()
+            mean_performances_df = metrics_df[
+                ["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
+                 "acc_val", "subject_id"]].groupby("subject_id").max().mean()
             # saves the mean values
             with open(join(args.checkpoints_path, experiment_name, "mean_performances.json"), 'w') as fp:
                 json.dump(mean_performances_df.to_dict(), fp, indent=4)

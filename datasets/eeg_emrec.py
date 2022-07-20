@@ -189,32 +189,6 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
         self.eegs_data: torch.Tensor = torch.stack([torch.from_numpy(w) for w in self.eegs_data]).float()
         self.labels_data: torch.Tensor = torch.stack([torch.as_tensor(w) for w in self.labels_data]).long()
 
-    def setup(self, stage: Optional[str] = None):
-        if stage == "fit":
-            train_indices: List[int] = []
-            test_indices: List[int] = []
-            if self.validation == "k_fold":
-                train_indices = [i
-                                 for i_fold, f in enumerate(self.folds_indices)
-                                 for i in f
-                                 if i_fold != self.current_k_fold_index]
-                test_indices = [i
-                                for i_fold, f in enumerate(self.folds_indices)
-                                for i in f
-                                if i_fold == self.current_k_fold_index]
-            elif self.validation == "loso":
-                train_indices = [
-                    i for i in range(len(self))
-                    if self.subject_ids_data[i] != self.subjects_ids_indices[self.current_loso_index]
-                ]
-                test_indices = [
-                    i for i in range(len(self))
-                    if self.subject_ids_data[i] == self.subjects_ids_indices[self.current_loso_index]
-                ]
-            assert set(train_indices).isdisjoint(set(test_indices))
-            self.train_split, self.val_split = Subset(self, train_indices), \
-                                               Subset(self, test_indices)
-
     def train_dataloader(self):
         return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True,
                           num_workers=os.cpu_count() - 2, pin_memory=True)
@@ -226,6 +200,18 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
     def set_k_fold(self, i: int) -> None:
         assert isinstance(i, int) and 0 <= i < self.k_folds
         self.current_k_fold_index = i
+
+        train_indices: List[int] = [i
+                                    for i_fold, f in enumerate(self.folds_indices)
+                                    for i in f
+                                    if i_fold != self.current_k_fold_index]
+        test_indices: List[int] = [i
+                                   for i_fold, f in enumerate(self.folds_indices)
+                                   for i in f
+                                   if i_fold == self.current_k_fold_index]
+        assert set(train_indices).isdisjoint(set(test_indices))
+        self.train_split, self.val_split = Subset(self, train_indices), \
+                                           Subset(self, test_indices)
 
     def set_loso_index(self, i: int) -> None:
         assert isinstance(i, int) and i in self.subjects_ids_indices.keys()
