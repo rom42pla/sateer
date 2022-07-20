@@ -160,7 +160,6 @@ class FEEGT(pl.LightningModule):
         eegs *= 1e6
         x = eegs
         # reduces the size of the signal
-        plt.plot(x[0, :, 0])
         kernel_size = int(self.sampling_rate * 0.1)
         stride = int(math.floor(kernel_size / 2))
         x = einops.rearrange(x, "b s c -> b c s")
