@@ -242,6 +242,10 @@ class FEEGT(pl.LightningModule):
     def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]) -> None:
         self.log_stats(outputs)
 
+    def on_validation_epoch_end(self) -> None:
+        elogs = trainer.logged_metrics  # access it here
+        self.collection.append(elogs)
+        # do whatever is needed
     def validation_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]) -> None:
         self.log_stats(outputs)
 
@@ -249,8 +253,8 @@ class FEEGT(pl.LightningModule):
         # name of the current phase
         phase = "train" if self.training is True else "val"
         # loss
-        # losses = torch.stack([e["loss"] for e in outputs])
-        # self.log(f"loss_{phase}", losses.mean(), prog_bar=True)
+        losses = torch.stack([e["loss"] for e in outputs])
+        self.log(f"loss_{phase}", losses.mean(), prog_bar=False)
         # classification metrics
         labels, labels_pred = torch.cat([e["labels"] for e in outputs], dim=0), \
                               torch.cat([e["labels_pred"] for e in outputs], dim=0)
@@ -266,39 +270,6 @@ class FEEGT(pl.LightningModule):
         optimizer = torch.optim.AdamW(self.parameters(),
                                       lr=self.learning_rate)
         return optimizer
-
-    def get_positional_encodings(self, length: int):
-        pe = torch.zeros(length, self.window_embedding_dim, device=self.device)
-        position = torch.arange(0, length, device=self.device).unsqueeze(1)
-        div_term = torch.exp((torch.arange(0, self.window_embedding_dim, 2, dtype=torch.float, device=self.device) *
-                              -(math.log(10000.0) / self.window_embedding_dim)))
-        pe[:, 0::2] = torch.sin(position.float() * div_term)
-        pe[:, 1::2] = torch.cos(position.float() * div_term)
-        return pe
-
-    @staticmethod
-    def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
-        assert len(spectrogram.shape) == 3  # s c m
-        import matplotlib.pyplot as plt
-        lines = int(math.ceil(math.sqrt(spectrogram.shape[1])))
-        fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
-                                tight_layout=True)
-        min_value, max_value = spectrogram.min(), spectrogram.max()
-
-        for i_ax, ax in enumerate(axs.flat):
-            if i_ax < spectrogram.shape[1]:
-                im = ax.imshow(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
-                               vmin=min_value, vmax=max_value, aspect="auto", cmap=plt.get_cmap("hot"))
-                divider = make_axes_locatable(ax)
-                cax = divider.append_axes("right", size="5%", pad=0.05)
-                fig.colorbar(im, cax=cax, orientation="vertical")
-                ax.set_title(f"electrode {i_ax}")
-                ax.set_xlabel("sample")
-                ax.set_ylabel("mels")
-                ax.invert_yaxis()
-            else:
-                ax.set_visible(False)
-        plt.show(block=False)
 
 
 class MelSpectrogram(nn.Module):

@@ -19,6 +19,7 @@ from tqdm.autonotebook import tqdm
 from arg_parsers import get_training_args
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
+from loggers.logger import MyLogger
 from models.cnn_baseline import CNNBaseline
 from models.eegt import EEGT
 import pytorch_lightning as pl
@@ -142,12 +143,14 @@ elif args.setting == "within_subject":
                                                       dropout_p=args.dropout_p)
                 else:
                     raise NotImplementedError
+                mylogger = MyLogger()
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                      precision=args.precision,
                                      max_epochs=args.max_epochs, check_val_every_n_epoch=1,
                                      num_sanity_val_steps=args.batch_size,
-                                     logger=CSVLogger(args.checkpoints_path, name=experiment_name,
-                                                      version=join(subject_id, f"fold_{i_fold}")),
+                                     # logger=CSVLogger(args.checkpoints_path, name=experiment_name,
+                                     #                  version=join(subject_id, f"fold_{i_fold}")),
+                                     logger=mylogger,
                                      enable_progress_bar=True,
                                      enable_model_summary=True if (i_subject == 0 and i_fold == 0) else False,
                                      limit_train_batches=args.limit_train_batches,
