@@ -242,10 +242,6 @@ class FEEGT(pl.LightningModule):
     def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]) -> None:
         self.log_stats(outputs)
 
-    def on_validation_epoch_end(self) -> None:
-        elogs = trainer.logged_metrics  # access it here
-        self.collection.append(elogs)
-        # do whatever is needed
     def validation_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]) -> None:
         self.log_stats(outputs)
 
