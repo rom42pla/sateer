@@ -6,13 +6,14 @@ from pytorch_lightning.loggers.base import LightningLoggerBase, rank_zero_experi
 from pytorch_lightning.utilities.distributed import rank_zero_only
 import pandas as pd
 
+
 class MyLogger(LightningLoggerBase):
     def __init__(self, path: Optional[str] = None):
         super().__init__()
         if path is not None:
             if not isdir(path):
                 makedirs(path)
-        self.history: pd.DataFrame = pd.DataFrame()
+        self.logs: pd.DataFrame = pd.DataFrame()
 
     @property
     def name(self):
@@ -33,7 +34,7 @@ class MyLogger(LightningLoggerBase):
     def log_metrics(self, metrics, step):
         # metrics is a dictionary of metric names and values
         # your code to record metrics goes here
-        self.history = self.history.append(pd.DataFrame.from_dict(metrics), ignore_index=True)
+        self.logs = self.logs.append(metrics, ignore_index=True)
 
     @rank_zero_only
     def save(self):
@@ -44,4 +45,4 @@ class MyLogger(LightningLoggerBase):
     def finalize(self, status):
         # Optional. Any code that needs to be run after training
         # finishes goes here
-        print(self.history)
+        print(self.logs)
