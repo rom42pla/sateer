@@ -177,6 +177,7 @@ elif args['setting'] == "within_subject":
                     enable_checkpointing=False,
                     gradient_clip_val=1 if args['gradient_clipping'] else 0,
                     auto_lr_find=args['auto_lr_finder'],
+                    reload_dataloaders_every_epoch=True,
                     callbacks=callbacks
                 )
                 if args['benchmark']:
