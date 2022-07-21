@@ -116,6 +116,7 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
                                                 endpoint=True, dtype=int)
             self.folds_indices = [shuffled_indices[i1:i2]
                                   for i1, i2 in zip(fold_starting_indices[:-1], fold_starting_indices[1:])]
+            self.set_k_fold(self.current_k_fold_index)
         elif self.validation == "loso":
             self.current_loso_index = 0
             self.subjects_ids_indices = {i_subject: subject_id
@@ -216,6 +217,9 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
                                    for i in f
                                    if i_fold == self.current_k_fold_index]
         assert set(train_indices).isdisjoint(set(test_indices))
+        assert set(train_indices).union(set(test_indices)) == {i
+                                                               for f in self.folds_indices
+                                                               for i in f}
         self.train_split, self.val_split = Subset(self, train_indices), \
                                            Subset(self, test_indices)
 
