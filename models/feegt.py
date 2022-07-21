@@ -214,10 +214,10 @@ class FouriEEGTransformer(pl.LightningModule):
             "labels_pred": labels_pred,
         }
 
-    def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]) -> None:
+    def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
         self.log_stats(outputs)
 
-    def validation_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]) -> None:
+    def validation_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
         self.log_stats(outputs)
 
     def log_stats(self, outputs: List[Dict[str, torch.Tensor]]):
@@ -236,8 +236,8 @@ class FouriEEGTransformer(pl.LightningModule):
             self.log(f"acc_{label}_{phase}", accs[i_label], prog_bar=False)
         self.log(f"acc_mean_{phase}", sum(accs) / len(accs), prog_bar=True)
 
-    def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
-        optimizer.zero_grad(set_to_none=True)
+    # def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
+    #     optimizer.zero_grad(set_to_none=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(),
