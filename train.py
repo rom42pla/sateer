@@ -135,14 +135,13 @@ elif args['setting'] == "within_subject":
                 labels_to_use=["valence", "arousal", "dominance"],
                 batch_size=args['batch_size']
             )
-            dataset.prepare_data()
-            dataset.setup()
             for i_fold in range(args['k_folds']):
                 logging.info(f"fold {i_fold + 1} of {dataset.k_folds}")
                 logging.info(f"|train set| = {len(dataset.train_split)}")
                 logging.info(f"|val set| = {len(dataset.val_split)}")
                 gc.collect()
                 dataset.set_k_fold(i_fold)
+                dataset.setup()
 
                 if args['model'] == "feegt":
                     model: pl.LightningModule = FouriEEGTransformer(
@@ -167,7 +166,7 @@ elif args['setting'] == "within_subject":
                 trainer = pl.Trainer(
                     gpus=1 if torch.cuda.is_available() else 0,
                     precision=args['precision'],
-                    min_epochs=20,
+                    # min_epochs=20,
                     max_epochs=args['max_epochs'],
                     check_val_every_n_epoch=1,
                     # logger=logger,
