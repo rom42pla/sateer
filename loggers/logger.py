@@ -39,7 +39,7 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
 
     @property
     def experiment(self) -> Any:
-        pass
+        return 0
 
     @rank_zero_only
     def log_hyperparams(self, params):
