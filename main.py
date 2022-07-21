@@ -5,7 +5,7 @@ import random
 from datetime import datetime
 from os import listdir, makedirs
 from os.path import join, isdir
-from pprint import pprint
+from pprint import pprint, pformat
 
 import numpy as np
 import pandas as pd
@@ -30,6 +30,11 @@ from models.feegt import FouriEEGTransformer
 warnings.filterwarnings("ignore", category=LightningDeprecationWarning)
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
+logging.basicConfig(
+    format='\x1b[42m\x1b[30m[%(asctime)s, %(levelname)s]\x1b[0m %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
+
 # retrieves line arguments
 args = get_training_args()
 
@@ -47,8 +52,7 @@ makedirs(join(args.checkpoints_path, experiment_name))
 # saves the line arguments
 with open(join(args.checkpoints_path, experiment_name, "line_args.json"), 'w') as fp:
     json.dump(vars(args), fp, indent=4)
-print(f"Line args")
-pprint(vars(args))
+logging.info(f"Line args\n{pformat(vars(args))}")
 
 # sets up the dataset to use
 if args.dataset_type == "deap":
@@ -56,9 +60,9 @@ if args.dataset_type == "deap":
 elif args.dataset_type == "dreamer":
     dataset_class = DREAMERDataset
 
-print(f"starting {args.setting} training with {args.validation} validation")
+logging.info(f"starting {args.setting} training with {args.validation} validation")
 if args.setting == "cross_subject":
-    print(f"loading dataset {args.dataset_type} from {args.dataset_path}")
+    logging.info(f"loading dataset {args.dataset_type} from {args.dataset_path}")
     dataset = dataset_class(path=args.dataset_path,
                             split_in_windows=True if args.windows_size is not None else False,
                             window_size=args.windows_size, drop_last=True,
@@ -117,8 +121,8 @@ if args.setting == "cross_subject":
 elif args.setting == "within_subject":
     if args.validation == "k_fold":
         subject_ids = dataset_class.get_subject_ids_static(args.dataset_path)
-        for i_subject, subject_id in tqdm(enumerate(subject_ids),
-                                          desc="looping through subjects", total=len(subject_ids)):
+        for i_subject, subject_id in enumerate(subject_ids):
+            logging.info(f"subject {i_subject + 1} of {len(subject_ids)})")
             dataset = dataset_class(path=args.dataset_path,
                                     subject_ids_to_use=subject_id,
                                     split_in_windows=True if args.windows_size is not None else False,
@@ -127,7 +131,8 @@ elif args.setting == "within_subject":
                                     validation=args.validation, k_folds=args.k_folds,
                                     labels_to_use=["valence", "arousal", "dominance"],
                                     batch_size=args.batch_size)
-            for i_fold in tqdm(range(dataset.k_folds), desc="fold"):
+            for i_fold in range(dataset.k_folds):
+                logging.info(f"fold {i_fold + 1} of {dataset.k_folds}")
                 gc.collect()
                 dataset.set_k_fold(i_fold)
 
