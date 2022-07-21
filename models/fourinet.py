@@ -63,7 +63,7 @@ class FouriEncoder(nn.Module):
                                                            for i in range(self.num_encoders)],
                                                          ("pooler", nn.Linear(in_features=self.embeddings_dim,
                                                                               out_features=self.embeddings_dim)),
-                                                         ("act", nn.Tanh()),
+                                                         ("act", nn.SELU()),
                                                          ]))
 
     def forward(self, x: torch.Tensor):
