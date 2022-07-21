@@ -28,13 +28,14 @@ class FouriEEGTransformer(pl.LightningModule):
 
                  window_embedding_dim: int = 512,
                  num_encoders: int = 1,
-                 dropout_p: float = 0.2,
+                 dropout_p: Union[int, float] = 0.2,
+                 noise_strength: Union[int, float] = 0,
 
-                 learning_rate: float = 1e-3,
+                 learning_rate: float = 1e-4,
 
                  use_masking: bool = True,
                  mask_perc_min: float = 0.05,
-                 mask_perc_max: float = 0.15,
+                 mask_perc_max: float = 0.3,
 
                  mels: int = 8,
 
@@ -62,42 +63,33 @@ class FouriEEGTransformer(pl.LightningModule):
             f"the spectrogram must contain at least one mel bank"
         self.mels = mels
 
-        # masking
+        # regularization
         assert isinstance(use_masking, bool)
         self.use_masking = use_masking
         if self.use_masking is True:
             assert isinstance(mask_perc_min, float) and 0 <= mask_perc_min < 1
             assert isinstance(mask_perc_max, float) and 0 <= mask_perc_max < 1 and mask_perc_max >= mask_perc_min
             self.mask_perc_max, self.mask_perc_min = mask_perc_max, mask_perc_min
+        assert 0 <= dropout_p < 1
+        self.dropout_p = dropout_p
+        assert noise_strength >= 0
+        self.noise_strength = noise_strength
 
         # model architecture
         assert isinstance(num_encoders, int) and num_encoders >= 1
         self.num_encoders = num_encoders
         assert isinstance(window_embedding_dim, int) and window_embedding_dim >= 1
         self.window_embedding_dim = window_embedding_dim
-        assert 0 <= dropout_p < 1
-        self.dropout_p = dropout_p
 
         # optimization
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
         self.labels_embedder = nn.Embedding(len(self.labels), self.window_embedding_dim)
-        # self.normalize = nn.Sequential(OrderedDict([
-        #     ("reshape_in", Rearrange("b s c m -> b c s m")),
-        #     ("conv", nn.Conv2d(in_channels=self.in_channels, out_channels=self.in_channels,
-        #                        kernel_size=1, stride=1, padding=0, bias=True)),
-        #     ("reshape_out", Rearrange("b c s m -> b s c m")),
-        #     ("normalization", nn.LayerNorm([self.in_channels, self.mels])),
-        #     ("activation", nn.GELU()),
-        # ]))
+        self.add_noise = nn.Sequential(
+            AddGaussianNoise(strength=self.noise_strength)
+        )
 
-        # self.merge_mels = nn.Sequential(OrderedDict([
-        #     ("reshape", Rearrange("b s c m -> b s (c m)")),
-        #     (f"encoder", FNetEncoderBlock(in_features=self.in_channels * self.mels,
-        #                                   mid_features=self.window_embedding_dim,
-        #                                   out_features=self.window_embedding_dim))
-        # ]))
         self.merge_mels = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
             nn.Conv2d(in_channels=self.in_channels, out_channels=128,
@@ -141,7 +133,7 @@ class FouriEEGTransformer(pl.LightningModule):
                                       out_features=2)),
                 # ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
             ]))
-            for i_label in range(len(self.labels))
+            for _ in range(len(self.labels))
         ])
 
         self.float()
@@ -158,14 +150,9 @@ class FouriEEGTransformer(pl.LightningModule):
             eegs = eegs.to(self.device)  # (b s c)
         # cast from microvolts to volts
         eegs *= 1e6
-        x = eegs
-        # reduces the size of the signal
-        # kernel_size = int(self.sampling_rate * 0.1)
-        # stride = int(math.floor(kernel_size / 2))
-        # x = einops.rearrange(x, "b s c -> b c s")
-        # x = F.avg_pool1d(x, kernel_size=kernel_size, stride=stride,
-        #                  padding=stride)
-        # x = einops.rearrange(x, "b c s -> b s c")
+        plt.plot(eegs[0, :, 0])
+        if self.training:
+            eegs = self.add_noise(eegs)
 
         with profiler.record_function("spectrogram"):
             spectrogram = MelSpectrogram(sampling_rate=self.sampling_rate,
@@ -268,6 +255,19 @@ class FouriEEGTransformer(pl.LightningModule):
         optimizer = torch.optim.AdamW(self.parameters(),
                                       lr=self.learning_rate)
         return optimizer
+
+
+class AddGaussianNoise(nn.Module):
+    def __init__(self, strength: float = 0.1):
+        super().__init__()
+        assert strength >= 0
+        self.strength = strength
+
+    def forward(self, x: torch.Tensor):
+        noise = torch.normal(mean=torch.zeros_like(x, device=x.device, requires_grad=False) + x.mean(),
+                             std=torch.zeros_like(x, device=x.device, requires_grad=False) + x.std())
+        noise = noise * self.strength
+        return x + noise
 
 
 class MelSpectrogram(nn.Module):

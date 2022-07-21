@@ -86,7 +86,8 @@ if args.setting == "cross_subject":
                                                                 mels=args.mels,
                                                                 use_masking=not args.disable_masking,
                                                                 learning_rate=args.learning_rate,
-                                                                dropout_p=args.dropout_p)
+                                                                dropout_p=args.dropout_p,
+                                                                noise_strength=args.noise_strength)
             else:
                 raise NotImplementedError
             logger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
@@ -147,7 +148,8 @@ elif args.setting == "within_subject":
                                                                     mels=args.mels,
                                                                     use_masking=not args.disable_masking,
                                                                     learning_rate=args.learning_rate,
-                                                                    dropout_p=args.dropout_p)
+                                                                    dropout_p=args.dropout_p,
+                                                                    noise_strength=args.noise_strength)
                 else:
                     raise NotImplementedError
                 logger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,

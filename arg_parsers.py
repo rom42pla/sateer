@@ -93,6 +93,11 @@ def get_training_args():
                         default=0.2,
                         type=float,
                         help="The amount of dropout to use")
+    parser.add_argument("--noise_strength",
+                        default=0,
+                        type=float,
+                        help="The amount of gaussian noise to add to the eegs")
+
     parser.add_argument("--disable_masking",
                         default=False,
                         action="store_true",
@@ -131,6 +136,7 @@ def get_training_args():
 
     assert args.num_encoders >= 1
     assert 0 <= args.dropout_p < 1
+    assert args.noise_strength >= 0
     assert args.learning_rate > 0
     assert args.mels > 0
 

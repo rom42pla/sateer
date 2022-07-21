@@ -62,14 +62,14 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         self.logs.to_csv(join(self.path, "logs.csv"))
         # plots the data
         self.make_plot(key=f"loss", legend_name=f"loss",
-                       y_lims=[0, None],
+                       y_lims=[0, None], y_label="loss",
                        plot=self.plot, path=join("plots"))
         self.make_plot(key=f"acc_mean", legend_name=f"accuracy (mean)",
-                       y_lims=[0.4, 1],
+                       y_lims=[0.4, 1], y_label="accuracy",
                        plot=self.plot, path=join("plots"))
         for label in ["valence", "arousal", "dominance"]:
             self.make_plot(key=f"acc_{label}", legend_name=f"accuracy ({label})",
-                           y_lims=[0.4, 1],
+                           y_lims=[0.4, 1], y_label="accuracy",
                            plot=self.plot, path=join("plots"))
 
     @rank_zero_only
