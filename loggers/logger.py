@@ -11,7 +11,11 @@ import matplotlib.pyplot as plt
 
 
 class FouriEEGTransformerLogger(LightningLoggerBase):
-    def __init__(self, path: Optional[str] = None, plot: bool = True):
+    def __init__(
+            self,
+            path: Optional[str] = None,
+            plot: bool = True
+    ):
         super().__init__()
         assert path is None or isinstance(path, str)
         self.path = path
