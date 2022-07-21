@@ -163,6 +163,7 @@ elif args['setting'] == "within_subject":
                 trainer = pl.Trainer(
                     gpus=1 if torch.cuda.is_available() else 0,
                     precision=args['precision'],
+                    min_epochs=20,
                     max_epochs=args['max_epochs'],
                     check_val_every_n_epoch=1,
                     # logger=logger,
