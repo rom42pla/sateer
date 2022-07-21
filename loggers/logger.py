@@ -109,6 +109,7 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
             if not isdir(path):
                 makedirs(path)
             plt.savefig(join(path, f"{key}.svg"))
+            plt.savefig(join(path, f"{key}.png"))
         # eventually plots
         if plot is True:
             plt.show()
