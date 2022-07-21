@@ -135,6 +135,8 @@ elif args['setting'] == "within_subject":
                 labels_to_use=["valence", "arousal", "dominance"],
                 batch_size=args['batch_size']
             )
+            dataset.prepare_data()
+            dataset.setup()
             for i_fold in range(args['k_folds']):
                 logging.info(f"fold {i_fold + 1} of {dataset.k_folds}")
                 logging.info(f"|train set| = {len(dataset.train_split)}")

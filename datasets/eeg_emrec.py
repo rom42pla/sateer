@@ -139,6 +139,34 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
                                         if k in self.labels_to_use]],
         }
 
+    def prepare_data(self) -> None:
+        pass
+
+    def setup(self, stage: Optional[str] = None):
+        # Assign train/val datasets for use in dataloaders
+        if stage == "fit" or stage is None:
+            self.set_k_fold(self.current_k_fold_index)
+            train_indices: List[int] = [i
+                                        for i_fold, f in enumerate(self.folds_indices)
+                                        for i in f
+                                        if i_fold != self.current_k_fold_index]
+            test_indices: List[int] = [i
+                                       for i_fold, f in enumerate(self.folds_indices)
+                                       for i in f
+                                       if i_fold == self.current_k_fold_index]
+            assert set(train_indices).isdisjoint(set(test_indices))
+            assert set(train_indices).union(set(test_indices)) == {i
+                                                                   for f in self.folds_indices
+                                                                   for i in f}
+            self.train_split, self.val_split = Subset(self, train_indices), \
+                                               Subset(self, test_indices)
+        # Assign test dataset for use in dataloader(s)
+        if stage == "test" or stage is None:
+            pass
+
+        if stage == "predict" or stage is None:
+            pass
+
     @staticmethod
     @abstractmethod
     def get_subject_ids_static(path: str):
@@ -207,21 +235,6 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
     def set_k_fold(self, i: int) -> None:
         assert isinstance(i, int) and 0 <= i < self.k_folds
         self.current_k_fold_index = i
-
-        train_indices: List[int] = [i
-                                    for i_fold, f in enumerate(self.folds_indices)
-                                    for i in f
-                                    if i_fold != self.current_k_fold_index]
-        test_indices: List[int] = [i
-                                   for i_fold, f in enumerate(self.folds_indices)
-                                   for i in f
-                                   if i_fold == self.current_k_fold_index]
-        assert set(train_indices).isdisjoint(set(test_indices))
-        assert set(train_indices).union(set(test_indices)) == {i
-                                                               for f in self.folds_indices
-                                                               for i in f}
-        self.train_split, self.val_split = Subset(self, train_indices), \
-                                           Subset(self, test_indices)
 
     def set_loso_index(self, i: int) -> None:
         assert isinstance(i, int) and i in self.subjects_ids_indices.keys()
