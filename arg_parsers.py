@@ -77,7 +77,7 @@ def get_training_args() -> Dict[str, Union[bool, str, int, float]]:
 
     # model args
     parser.add_argument("--model",
-                        default="cnn_baseline",
+                        default="feegt",
                         type=str,
                         choices={"feegt"},
                         help="The model to use")

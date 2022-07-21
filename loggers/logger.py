@@ -3,7 +3,7 @@ from os import makedirs
 from os.path import isdir, join, dirname
 from typing import Optional, Union, List
 
-from pytorch_lightning.loggers.base import LightningLoggerBase, rank_zero_experiment
+from pytorch_lightning.loggers.base import LightningLoggerBase
 from pytorch_lightning.utilities.distributed import rank_zero_only
 
 import pandas as pd
@@ -27,14 +27,14 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         assert isinstance(plot, bool)
         self.plot = plot
 
-    @property
-    def name(self):
-        return "MyLogger"
-
-    @property
-    def version(self):
-        # Return the experiment version, int or str.
-        return "0.1"
+    # @property
+    # def name(self):
+    #     return "MyLogger"
+    #
+    # @property
+    # def version(self):
+    #     # Return the experiment version, int or str.
+    #     return "0.1"
 
     def experiment(self):
         pass

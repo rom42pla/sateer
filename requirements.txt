@@ -7,7 +7,7 @@ pandas
 numpy
 einops
 torch
-pytorch-lightning
+pytorch-lightning==1.5.10
 torchmetrics
 librosa
 functorch
