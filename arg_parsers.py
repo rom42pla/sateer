@@ -97,6 +97,14 @@ def get_training_args():
                         default=0,
                         type=float,
                         help="The amount of gaussian noise to add to the eegs")
+    parser.add_argument("--gradient_clipping",
+                        default=False,
+                        action="store_true",
+                        help="Whether to clip the gradients to 1")
+    parser.add_argument("--auto_lr_finder",
+                        default=False,
+                        action="store_true",
+                        help="Whether to run an automatic learning range finder algorithm")
 
     parser.add_argument("--disable_masking",
                         default=False,

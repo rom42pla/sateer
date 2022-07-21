@@ -104,6 +104,8 @@ if args.setting == "cross_subject":
                                  limit_val_batches=args.limit_train_batches,
                                  log_every_n_steps=1,
                                  enable_checkpointing=False,
+                                 gradient_clip_val=1 if args.gradient_clipping else 0,
+                                 auto_lr_find=args.auto_lr_finder,
                                  callbacks=[
                                      # ModelCheckpoint(
                                      #     dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
@@ -115,6 +117,9 @@ if args.setting == "cross_subject":
                                  ] if args.checkpoints_path is not None else [])
             if args.benchmark:
                 print(model)
+            if args.auto_lr_finder is True:
+                trainer.tune(model, datamodule=dataset)
+                logging.info(f"learning rate has been set to {model.lr}")
             trainer.fit(model, datamodule=dataset)
             del trainer, model
             if args.benchmark:
@@ -168,6 +173,8 @@ elif args.setting == "within_subject":
                                      limit_val_batches=args.limit_train_batches,
                                      log_every_n_steps=1,
                                      enable_checkpointing=False,
+                                     gradient_clip_val=1 if args.gradient_clipping else 0,
+                                     auto_lr_find=args.auto_lr_finder,
                                      callbacks=[
                                          # ModelCheckpoint(
                                          #     dirpath=join(args.checkpoints_path, experiment_name, f"fold_{i_fold}"),
@@ -191,6 +198,9 @@ elif args.setting == "within_subject":
                                      ] if args.checkpoints_path is not None else [])
                 if args.benchmark:
                     print(model)
+                if args.auto_lr_finder is True:
+                    trainer.tune(model, datamodule=dataset)
+                    logging.info(f"learning rate has been set to {model.learning_rate}")
                 trainer.fit(model, datamodule=dataset)
                 del trainer, model
                 if args.benchmark:
