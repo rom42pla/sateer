@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 
 class FouriEEGTransformerLogger(LightningLoggerBase):
-    def __init__(self, path: Optional[str] = None):
+    def __init__(self, path: Optional[str] = None, plot: bool = True):
         super().__init__()
         assert path is None or isinstance(path, str)
         self.path = path
@@ -19,6 +19,8 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
             if not isdir(self.path):
                 makedirs(self.path)
         self.logs: pd.DataFrame = pd.DataFrame()
+        assert isinstance(plot, bool)
+        self.plot = plot
 
     @property
     def name(self):
@@ -55,14 +57,14 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         print(self.logs)
         self.make_plot(key=f"loss", legend_name=f"loss",
                        y_lims=[0, None],
-                       plot=True, path=join("plots"))
+                       plot=self.plot, path=join("plots"))
         self.make_plot(key=f"acc_mean", legend_name=f"accuracy (mean)",
                        y_lims=[0.4, 1],
-                       plot=True, path=join("plots"))
+                       plot=self.plot, path=join("plots"))
         for label in ["valence", "arousal", "dominance"]:
             self.make_plot(key=f"acc_{label}", legend_name=f"accuracy ({label})",
                            y_lims=[0.4, 1],
-                           plot=True, path=join("plots"))
+                           plot=self.plot, path=join("plots"))
 
     @rank_zero_only
     def make_plot(self, key: str,

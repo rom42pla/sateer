@@ -86,14 +86,13 @@ if args.setting == "cross_subject":
                                                                 dropout_p=args.dropout_p)
             else:
                 raise NotImplementedError
-            mylogger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
-                                                           f"fold_{i_fold}"))
+            logger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
+                                                         f"fold_{i_fold}"))
             trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                  precision=args.precision,
                                  max_epochs=args.max_epochs, check_val_every_n_epoch=1,
                                  num_sanity_val_steps=args.batch_size,
-                                 logger=CSVLogger(args.checkpoints_path, name=experiment_name,
-                                                  version=f"fold_{i_fold}"),
+                                 logger=logger,
                                  enable_progress_bar=True,
                                  enable_model_summary=True if i_fold == 0 else False,
                                  limit_train_batches=args.limit_train_batches,
@@ -146,7 +145,7 @@ elif args.setting == "within_subject":
                                                                     dropout_p=args.dropout_p)
                 else:
                     raise NotImplementedError
-                mylogger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
+                logger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
                                                                subject_id, f"fold_{i_fold}"))
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                      precision=args.precision,
@@ -154,7 +153,7 @@ elif args.setting == "within_subject":
                                      num_sanity_val_steps=args.batch_size,
                                      # logger=CSVLogger(args.checkpoints_path, name=experiment_name,
                                      #                  version=join(subject_id, f"fold_{i_fold}")),
-                                     logger=mylogger,
+                                     logger=logger,
                                      enable_progress_bar=True,
                                      enable_model_summary=True if (i_subject == 0 and i_fold == 0) else False,
                                      limit_train_batches=args.limit_train_batches,
