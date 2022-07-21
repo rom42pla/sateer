@@ -192,9 +192,8 @@ class FouriEEGTransformer(pl.LightningModule):
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
         labels_pred = self(eegs=eegs)  # (b l d)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
+        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label], label_smoothing=0.1)
                   for i_label in range(labels.shape[-1])]
-        print(losses, sum(losses), labels.shape, self.training)
         loss = sum(losses)
         return {
             "loss": loss,
@@ -208,7 +207,6 @@ class FouriEEGTransformer(pl.LightningModule):
         labels_pred = self(eegs=eegs)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
-        print(losses, sum(losses), labels.shape, self.training)
         loss = sum(losses)
         return {
             "loss": loss,
