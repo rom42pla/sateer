@@ -27,14 +27,14 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         assert isinstance(plot, bool)
         self.plot = plot
 
-    # @property
-    # def name(self):
-    #     return "MyLogger"
-    #
-    # @property
-    # def version(self):
-    #     # Return the experiment version, int or str.
-    #     return "0.1"
+    @property
+    def name(self):
+        return "MyLogger"
+
+    @property
+    def version(self):
+        # Return the experiment version, int or str.
+        return "0.1"
 
     def experiment(self):
         pass
