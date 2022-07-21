@@ -20,7 +20,7 @@ from tqdm.autonotebook import tqdm
 from arg_parsers import get_training_args
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
-from logs.logger import FouriEEGTransformerLogger
+from loggers.logger import FouriEEGTransformerLogger
 import pytorch_lightning as pl
 # torch.autograd.set_detect_anomaly(True)
 # torch.backends.cudnn.benchmark = True
