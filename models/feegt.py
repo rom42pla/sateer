@@ -157,7 +157,7 @@ class FouriEEGTransformer(pl.LightningModule):
         with profiler.record_function("spectrogram"):
             spectrogram = MelSpectrogram(sampling_rate=self.sampling_rate,
                                          min_freq=0, max_freq=50, mels=self.mels,
-                                         window_size=0.02, window_stride=0.01)(eegs)  # (b s c m)
+                                         window_size=0.1, window_stride=0.01)(eegs)  # (b s c m)
 
         with profiler.record_function("preparation"):
             x = self.merge_mels(spectrogram)  # (b s c)
