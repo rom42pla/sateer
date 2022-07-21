@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import torch.cuda
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
-from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
 
 from tqdm.autonotebook import tqdm
@@ -20,8 +19,6 @@ from arg_parsers import get_training_args
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
 from loggers.logger import FouriEEGTransformerLogger
-from models.cnn_baseline import CNNBaseline
-from models.eegt import EEGT
 import pytorch_lightning as pl
 # torch.autograd.set_detect_anomaly(True)
 # torch.backends.cudnn.benchmark = True

@@ -58,7 +58,9 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
 
     @rank_zero_only
     def finalize(self, status):
-        print(self.logs)
+        # saves the logs
+        self.logs.to_csv(join(self.path, "logs.csv"))
+        # plots the data
         self.make_plot(key=f"loss", legend_name=f"loss",
                        y_lims=[0, None],
                        plot=self.plot, path=join("plots"))
