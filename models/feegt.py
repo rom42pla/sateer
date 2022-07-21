@@ -38,6 +38,8 @@ class FouriEEGTransformer(pl.LightningModule):
                  mask_perc_max: float = 0.3,
 
                  mels: int = 8,
+                 mel_window_size: Union[int, float] = 1,
+                 mel_window_stride: Union[int, float] = 0.05,
 
                  device: Optional[str] = None):
         super().__init__()
@@ -62,6 +64,10 @@ class FouriEEGTransformer(pl.LightningModule):
         assert isinstance(mels, int) and mels >= 1, \
             f"the spectrogram must contain at least one mel bank"
         self.mels = mels
+        assert mel_window_size > 0
+        assert mel_window_stride > 0
+        self.mel_window_size = mel_window_size
+        self.mel_window_stride = mel_window_stride
 
         # regularization
         assert isinstance(use_masking, bool)
@@ -157,7 +163,8 @@ class FouriEEGTransformer(pl.LightningModule):
         with profiler.record_function("spectrogram"):
             spectrogram = MelSpectrogram(sampling_rate=self.sampling_rate,
                                          min_freq=0, max_freq=50, mels=self.mels,
-                                         window_size=0.1, window_stride=0.01)(eegs)  # (b s c m)
+                                         window_size=self.mel_window_size,
+                                         window_stride=self.mel_window_stride)(eegs)  # (b s c m)
 
         with profiler.record_function("preparation"):
             x = self.merge_mels(spectrogram)  # (b s c)

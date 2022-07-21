@@ -78,16 +78,20 @@ if args.setting == "cross_subject":
             gc.collect()
             dataset.set_k_fold(i_fold)
             if args.model == "feegt":
-                model: pl.LightningModule = FouriEEGTransformer(in_channels=len(dataset.electrodes),
-                                                                sampling_rate=dataset.sampling_rate,
-                                                                labels=dataset.labels_to_use,
-                                                                num_encoders=args.num_encoders,
-                                                                window_embedding_dim=args.window_embedding_dim,
-                                                                mels=args.mels,
-                                                                use_masking=not args.disable_masking,
-                                                                learning_rate=args.learning_rate,
-                                                                dropout_p=args.dropout_p,
-                                                                noise_strength=args.noise_strength)
+                model: pl.LightningModule = FouriEEGTransformer(
+                    in_channels=len(dataset.electrodes),
+                    sampling_rate=dataset.sampling_rate,
+                    labels=dataset.labels_to_use,
+                    num_encoders=args.num_encoders,
+                    window_embedding_dim=args.window_embedding_dim,
+                    use_masking=not args.disable_masking,
+                    learning_rate=args.learning_rate,
+                    dropout_p=args.dropout_p,
+                    noise_strength=args.noise_strength,
+                    mels=args.mels,
+                    mel_window_size=args.mel_window_size,
+                    mel_window_stride=args.mel_window_stride
+                )
             else:
                 raise NotImplementedError
             logger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
@@ -146,16 +150,20 @@ elif args.setting == "within_subject":
                 dataset.set_k_fold(i_fold)
 
                 if args.model == "feegt":
-                    model: pl.LightningModule = FouriEEGTransformer(in_channels=len(dataset.electrodes),
-                                                                    sampling_rate=dataset.sampling_rate,
-                                                                    labels=dataset.labels_to_use,
-                                                                    num_encoders=args.num_encoders,
-                                                                    window_embedding_dim=args.window_embedding_dim,
-                                                                    mels=args.mels,
-                                                                    use_masking=not args.disable_masking,
-                                                                    learning_rate=args.learning_rate,
-                                                                    dropout_p=args.dropout_p,
-                                                                    noise_strength=args.noise_strength)
+                    model: pl.LightningModule = FouriEEGTransformer(
+                        in_channels=len(dataset.electrodes),
+                        sampling_rate=dataset.sampling_rate,
+                        labels=dataset.labels_to_use,
+                        num_encoders=args.num_encoders,
+                        window_embedding_dim=args.window_embedding_dim,
+                        use_masking=not args.disable_masking,
+                        learning_rate=args.learning_rate,
+                        dropout_p=args.dropout_p,
+                        noise_strength=args.noise_strength,
+                        mels=args.mels,
+                        mel_window_size=args.mel_window_size,
+                        mel_window_stride=args.mel_window_stride
+                    )
                 else:
                     raise NotImplementedError
                 logger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,

@@ -119,10 +119,19 @@ def get_training_args():
                         default=1e-4,
                         type=float,
                         help="Learning rate of the model")
+
     parser.add_argument("--mels",
                         default=8,
                         type=int,
                         help="Number of mel banks")
+    parser.add_argument("--mel_window_size",
+                        default=1,
+                        type=float,
+                        help="Size of spectrogram's windows")
+    parser.add_argument("--mel_window_stride",
+                        default=0.05,
+                        type=float,
+                        help="Size of spectrogram's windows stride")
 
     args = parser.parse_args()
 
