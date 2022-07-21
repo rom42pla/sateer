@@ -165,7 +165,7 @@ elif args['setting'] == "within_subject":
                     precision=args['precision'],
                     max_epochs=args['max_epochs'],
                     check_val_every_n_epoch=1,
-                    logger=logger,
+                    # logger=logger,
                     log_every_n_steps=1,
                     enable_progress_bar=True,
                     enable_model_summary=True if i_fold == 0 else False,
