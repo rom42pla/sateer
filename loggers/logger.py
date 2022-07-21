@@ -1,3 +1,4 @@
+import math
 from os import makedirs
 from os.path import isdir, join, dirname
 from typing import Optional, Union, List
@@ -61,19 +62,21 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         # saves the logs
         self.logs.to_csv(join(self.path, "logs.csv"))
         # plots the data
-        self.make_plot(key=f"loss",
+        self.make_plot(key=f"loss", best="max",
                        y_lims=[0, None], y_label="loss",
                        plot=self.plot, path=join("plots"))
-        self.make_plot(key=f"acc_mean",
+        self.make_plot(key=f"acc_mean", best="max",
                        y_lims=[0.4, 1], y_label="accuracy",
                        plot=self.plot, path=join("plots"))
         for label in ["valence", "arousal", "dominance"]:
-            self.make_plot(key=f"acc_{label}",
+            self.make_plot(key=f"acc_{label}", best="max",
                            y_lims=[0.4, 1], y_label=f"accuracy ({label})",
                            plot=self.plot, path=join("plots"))
 
     @rank_zero_only
-    def make_plot(self, key: str,
+    def make_plot(self,
+                  key: str,
+                  best: str = "max",
                   title: Optional[str] = None,
                   x_label: Optional[str] = None,
                   y_label: Optional[str] = None,
@@ -86,6 +89,7 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         assert plot is True or path is not None, \
             f"the plot is not being shown or saved"
         assert isinstance(key, str)
+        assert best in {"min", "max"}
         assert title is None or isinstance(title, str)
         for lims in [x_lims, y_lims]:
             assert lims is None or isinstance(lims, list) \
@@ -98,12 +102,15 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         size = ((21 / 2) / 2.54) * 1.5
         fig, ax = plt.subplots(1, 1,
                                figsize=(size, size), tight_layout=True)
+        legend_labels = []
         for phase_key, phase_name in [("train", "training"),
                                       ("val", "validation")]:
             sns.lineplot(data=self.logs, x="epoch", y=f"{key}_{phase_key}",
                          ax=ax)
-        ax.legend([f"{phase_name}"
-                   for phase_name in ["training", "validation"]])
+            best_value = self.logs[f"{key}_{phase_key}"].max() if best == "max" \
+                else self.logs[f"{key}_{phase_key}"].min()
+            legend_labels += [f"{phase_key} (best is {best_value:.3f})"]
+        ax.legend(legend_labels)
         # title
         if title is not None:
             fig.suptitle(title)

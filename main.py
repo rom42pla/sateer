@@ -20,7 +20,7 @@ from tqdm.autonotebook import tqdm
 from arg_parsers import get_training_args
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
-from loggers.logger import FouriEEGTransformerLogger
+from logs.logger import FouriEEGTransformerLogger
 import pytorch_lightning as pl
 # torch.autograd.set_detect_anomaly(True)
 # torch.backends.cudnn.benchmark = True
@@ -52,9 +52,9 @@ experiment_name = f"{datetime_str}_{args.setting}_{args.validation}"
 makedirs(join(args.checkpoints_path, experiment_name))
 
 # saves the line arguments
+logging.info(f"Line args\n{pformat(vars(args))}")
 with open(join(args.checkpoints_path, experiment_name, "line_args.json"), 'w') as fp:
     json.dump(vars(args), fp, indent=4)
-logging.info(f"Line args\n{pformat(vars(args))}")
 
 # sets up the dataset to use
 if args.dataset_type == "deap":
@@ -63,6 +63,7 @@ elif args.dataset_type == "dreamer":
     dataset_class = DREAMERDataset
 
 logging.info(f"starting {args.setting} training with {args.validation} validation")
+logs = []
 if args.setting == "cross_subject":
     logging.info(f"loading dataset {args.dataset_type} from {args.dataset_path}")
     dataset = dataset_class(path=args.dataset_path,
@@ -126,11 +127,13 @@ if args.setting == "cross_subject":
                 trainer.tune(model, datamodule=dataset)
                 logging.info(f"learning rate has been set to {model.lr}")
             trainer.fit(model, datamodule=dataset)
+            logs += [{"logs": logger.logs, "fold": i_fold}]
             del trainer, model
             if args.benchmark:
                 break
     elif args.validation == "loso":
         raise NotImplementedError
+
 elif args.setting == "within_subject":
     if args.validation == "k_fold":
         subject_ids = dataset_class.get_subject_ids_static(args.dataset_path)
@@ -212,46 +215,51 @@ elif args.setting == "within_subject":
                     trainer.tune(model, datamodule=dataset)
                     logging.info(f"learning rate has been set to {model.learning_rate}")
                 trainer.fit(model, datamodule=dataset)
+                logs += [{
+                    "logs": logger.logs,
+                    "fold": i_fold,
+                    "subject": i_subject,
+                }]
                 del trainer, model
                 if args.benchmark:
                     break
             if args.benchmark:
                 break
-            subject_metrics_dfs = []
-            for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
-                             if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))
-                                and f.startswith("fold_")]:
-                subject_df = pd.read_csv(
-                    join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
-                subject_df["subject_id"] = subject_id
-                subject_df["fold"] = fold_dir
-                subject_metrics_dfs += [subject_df]
-            metrics_df = pd.concat(subject_metrics_dfs)
-            mean_performances_df = metrics_df[
-                ["valence_acc_val", "arousal_acc_val", "dominance_acc_val",
-                 "acc_val", "subject_id"]].groupby("subject_id").max().mean()
-            print(f"Stats for subject {subject_id}:")
-            pprint(mean_performances_df.to_dict())
-
-        if not args.benchmark:
-            # logs metrics
-            metrics_df = []
-            for subject_id in [f for f in listdir(join(args.checkpoints_path, experiment_name))
-                               if isdir(join(args.checkpoints_path, experiment_name, f))]:
-                for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
-                                 if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))
-                                    and f.startswith("fold_")]:
-                    subject_df = pd.read_csv(
-                        join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
-                    subject_df["subject_id"] = subject_id
-                    metrics_df += [subject_df]
-            metrics_df = pd.concat(metrics_df)
-            metrics_df.to_csv(join(args.checkpoints_path, experiment_name, "metrics.csv"), index=False)
-            mean_performances_df = metrics_df[
-                ["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
-                 "acc_val", "subject_id"]].groupby("subject_id").max().mean()
-            # saves the mean values
-            with open(join(args.checkpoints_path, experiment_name, "mean_performances.json"), 'w') as fp:
-                json.dump(mean_performances_df.to_dict(), fp, indent=4)
-            print(f"Mean performances from all users")
-            pprint(mean_performances_df.to_dict())
+        #     subject_metrics_dfs = []
+        #     for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
+        #                      if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))
+        #                         and f.startswith("fold_")]:
+        #         subject_df = pd.read_csv(
+        #             join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
+        #         subject_df["subject_id"] = subject_id
+        #         subject_df["fold"] = fold_dir
+        #         subject_metrics_dfs += [subject_df]
+        #     metrics_df = pd.concat(subject_metrics_dfs)
+        #     mean_performances_df = metrics_df[
+        #         ["valence_acc_val", "arousal_acc_val", "dominance_acc_val",
+        #          "acc_val", "subject_id"]].groupby("subject_id").max().mean()
+        #     print(f"Stats for subject {subject_id}:")
+        #     pprint(mean_performances_df.to_dict())
+        #
+        # if not args.benchmark:
+        #     # logs metrics
+        #     metrics_df = []
+        #     for subject_id in [f for f in listdir(join(args.checkpoints_path, experiment_name))
+        #                        if isdir(join(args.checkpoints_path, experiment_name, f))]:
+        #         for fold_dir in [f for f in listdir(join(args.checkpoints_path, experiment_name, subject_id))
+        #                          if isdir(join(args.checkpoints_path, experiment_name, subject_id, f))
+        #                             and f.startswith("fold_")]:
+        #             subject_df = pd.read_csv(
+        #                 join(args.checkpoints_path, experiment_name, subject_id, fold_dir, "metrics.csv"))
+        #             subject_df["subject_id"] = subject_id
+        #             metrics_df += [subject_df]
+        #     metrics_df = pd.concat(metrics_df)
+        #     metrics_df.to_csv(join(args.checkpoints_path, experiment_name, "metrics.csv"), index=False)
+        #     mean_performances_df = metrics_df[
+        #         ["valence_acc_val", "arousal_acc_val", "dominance_acc_val", "liking_acc_val",
+        #          "acc_val", "subject_id"]].groupby("subject_id").max().mean()
+        #     # saves the mean values
+        #     with open(join(args.checkpoints_path, experiment_name, "mean_performances.json"), 'w') as fp:
+        #         json.dump(mean_performances_df.to_dict(), fp, indent=4)
+        #     print(f"Mean performances from all users")
+        #     pprint(mean_performances_df.to_dict())
