@@ -137,6 +137,8 @@ elif args['setting'] == "within_subject":
             )
             for i_fold in range(args['k_folds']):
                 logging.info(f"fold {i_fold + 1} of {dataset.k_folds}")
+                logging.info(f"|train set| = {len(dataset.train_split)}")
+                logging.info(f"|val set| = {len(dataset.val_split)}")
                 gc.collect()
                 dataset.set_k_fold(i_fold)
 
