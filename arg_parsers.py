@@ -89,6 +89,12 @@ def get_training_args():
                         default=512,
                         type=int,
                         help="Dimension of the internal windows embedding in FEEGT")
+    parser.add_argument("--auto_lr_finder",
+                        default=False,
+                        action="store_true",
+                        help="Whether to run an automatic learning range finder algorithm")
+
+    # regularization
     parser.add_argument("--dropout_p",
                         default=0.2,
                         type=float,
@@ -101,11 +107,10 @@ def get_training_args():
                         default=False,
                         action="store_true",
                         help="Whether to clip the gradients to 1")
-    parser.add_argument("--auto_lr_finder",
+    parser.add_argument("--stochastic_weight_average",
                         default=False,
                         action="store_true",
-                        help="Whether to run an automatic learning range finder algorithm")
-
+                        help="Whether to use the SWA algorithm")
     parser.add_argument("--disable_masking",
                         default=False,
                         action="store_true",
