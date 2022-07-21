@@ -150,7 +150,7 @@ class FouriEEGTransformer(pl.LightningModule):
             eegs = eegs.to(self.device)  # (b s c)
         # cast from microvolts to volts
         eegs *= 1e6
-        plt.plot(eegs[0, :, 0])
+        # eventually adds gaussian noise
         if self.training:
             eegs = self.add_noise(eegs)
 
