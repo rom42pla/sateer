@@ -11,3 +11,4 @@ pytorch-lightning
 torchmetrics
 librosa
 functorch
+rich

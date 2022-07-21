@@ -11,7 +11,9 @@ import numpy as np
 import pandas as pd
 import torch.cuda
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
+from pytorch_lightning.callbacks import RichProgressBar
 
 from tqdm.autonotebook import tqdm
 
@@ -122,7 +124,7 @@ elif args.setting == "within_subject":
     if args.validation == "k_fold":
         subject_ids = dataset_class.get_subject_ids_static(args.dataset_path)
         for i_subject, subject_id in enumerate(subject_ids):
-            logging.info(f"subject {i_subject + 1} of {len(subject_ids)})")
+            logging.info(f"subject {i_subject + 1} of {len(subject_ids)}")
             dataset = dataset_class(path=args.dataset_path,
                                     subject_ids_to_use=subject_id,
                                     split_in_windows=True if args.windows_size is not None else False,
@@ -172,6 +174,18 @@ elif args.setting == "within_subject":
                                          #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
                                          EarlyStopping(monitor="acc_mean_val", mode="max", min_delta=1e-4, patience=10,
                                                        verbose=False, check_on_train_epoch_end=False, strict=True),
+                                         RichProgressBar(
+                                             theme=RichProgressBarTheme(
+                                                 description="green_yellow",
+                                                 progress_bar="green1",
+                                                 progress_bar_finished="green1",
+                                                 progress_bar_pulse="#6206E0",
+                                                 batch_progress="green_yellow",
+                                                 time="grey82",
+                                                 processing_speed="grey82",
+                                                 metrics="grey82",
+                                             )
+                                         )
                                      ] if args.checkpoints_path is not None else [])
                 if args.benchmark:
                     print(model)
