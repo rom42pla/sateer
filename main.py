@@ -86,6 +86,8 @@ if args.setting == "cross_subject":
                                                                 dropout_p=args.dropout_p)
             else:
                 raise NotImplementedError
+            mylogger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
+                                                           f"fold_{i_fold}"))
             trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                  precision=args.precision,
                                  max_epochs=args.max_epochs, check_val_every_n_epoch=1,
