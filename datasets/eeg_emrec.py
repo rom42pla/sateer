@@ -160,6 +160,8 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
                                                                    for i in f}
             self.train_split, self.val_split = Subset(self, train_indices), \
                                                Subset(self, test_indices)
+            self.train_dataloader()
+            self.val_dataloader()
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
             pass
