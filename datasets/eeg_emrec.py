@@ -62,8 +62,8 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
 
         assert isinstance(subject_ids, list)
         assert all((isinstance(x, str) for x in subject_ids))
-        self.subject_ids: Dict[str, int] = {subject_id: i
-                                            for i, subject_id in enumerate(subject_ids)}
+        self.subject_ids: List[str] = subject_ids
+        self.subject_ids.sort()
 
         assert isinstance(split_in_windows, bool)
         self.split_in_windows: bool = split_in_windows
@@ -87,12 +87,13 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
 
         assert subject_ids_to_use is None or isinstance(subject_ids_to_use, str) or isinstance(subject_ids_to_use, list)
         if subject_ids_to_use is None:
-            subject_ids_to_use = list(self.subject_ids.keys())
+            subject_ids_to_use = deepcopy(self.subject_ids)
         elif isinstance(subject_ids_to_use, str):
             subject_ids_to_use = [subject_ids_to_use]
-        assert set(subject_ids_to_use).issubset(set(self.subject_ids.keys())), \
+        assert set(subject_ids_to_use).issubset(set(self.subject_ids)), \
             f"one or more subject ids are not in dataset"
         self.subject_ids_to_use: List[str] = subject_ids_to_use
+        self.subject_ids_to_use.sort()
 
         assert isinstance(discretize_labels, bool)
         self.discretize_labels: bool = discretize_labels

@@ -135,3 +135,4 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         # eventually plots
         if plot is True:
             plt.show()
+        plt.close(fig)

@@ -36,7 +36,8 @@ class DREAMERDataset(EEGClassificationDataset):
         global parse_eegs
 
         def parse_eegs(subject_no) -> Tuple[List[np.ndarray], List[np.ndarray], str]:
-            subject_id: str = f"s{subject_no}"
+            subject_id: str = self.subject_ids_to_use[subject_no]
+            assert subject_id in self.subject_ids
             subject_data = data_raw[subject_no]
             eegs: List[np.ndarray] = []
             labels: List[np.ndarray] = []
