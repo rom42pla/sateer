@@ -87,7 +87,8 @@ if args.setting == "cross_subject":
             else:
                 raise NotImplementedError
             logger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
-                                                         f"fold_{i_fold}"))
+                                                         f"fold_{i_fold}"),
+                                               plot=True)
             trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                  precision=args.precision,
                                  max_epochs=args.max_epochs, check_val_every_n_epoch=1,
@@ -146,7 +147,8 @@ elif args.setting == "within_subject":
                 else:
                     raise NotImplementedError
                 logger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
-                                                               subject_id, f"fold_{i_fold}"))
+                                                             subject_id, f"fold_{i_fold}"),
+                                                   plot=False)
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                      precision=args.precision,
                                      max_epochs=args.max_epochs, check_val_every_n_epoch=1,
