@@ -185,7 +185,9 @@ elif args['setting'] == "within_subject":
                 if args['auto_lr_finder'] is True:
                     trainer.tune(model, datamodule=dataset)
                     logging.info(f"learning rate has been set to {model.learning_rate}")
-                trainer.fit(model, datamodule=dataset)
+                trainer.fit(model,
+                            train_dataloaders=dataset.train_dataloader(),
+                            val_dataloaders=dataset.val_dataloader())
                 logs += [{
                     "logs": logger.logs,
                     "fold": i_fold,
