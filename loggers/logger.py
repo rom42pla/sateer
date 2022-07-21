@@ -57,17 +57,19 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
                        y_lims=[0, None],
                        plot=True, path=join("plots"))
         self.make_plot(key=f"acc_mean", legend_name=f"accuracy (mean)",
-                       y_lims=[None, 1],
+                       y_lims=[0.4, 1],
                        plot=True, path=join("plots"))
         for label in ["valence", "arousal", "dominance"]:
             self.make_plot(key=f"acc_{label}", legend_name=f"accuracy ({label})",
-                           y_lims=[None, 1],
+                           y_lims=[0.4, 1],
                            plot=True, path=join("plots"))
 
     @rank_zero_only
     def make_plot(self, key: str,
                   legend_name: Optional[str] = None,
                   title: Optional[str] = None,
+                  x_label: Optional[str] = None,
+                  y_label: Optional[str] = None,
                   x_lims: Optional[List[Union[int, float]]] = None,
                   y_lims: Optional[List[Union[int, float]]] = None,
                   plot: bool = True,
@@ -86,23 +88,31 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
                    and any([v is None or isinstance(v, t)
                             for v in lims for t in (int, float)]), \
                 f"invalid limits {lims} ({type(lims)})"
-
+        for label in [x_label, y_label]:
+            assert label is None or isinstance(label, str), \
+                f"invalid label {label}"
         size = ((21 / 2) / 2.54) * 1.5
         fig, ax = plt.subplots(1, 1,
                                figsize=(size, size), tight_layout=True)
-        if title is not None:
-            fig.suptitle(title)
-
         for phase_key, phase_name in [("train", "training"),
                                       ("val", "validation")]:
             sns.lineplot(data=self.logs, x="epoch", y=f"{key}_{phase_key}",
                          ax=ax)
         ax.legend([f"{phase_name} {legend_name}"
                    for phase_name in ["training", "validation"]])
+        # title
+        if title is not None:
+            fig.suptitle(title)
+        # limits
         if x_lims is not None:
             ax.set_xlim(*x_lims)
         if y_lims is not None:
             ax.set_ylim(*y_lims)
+        # labels
+        if x_label is not None:
+            ax.set_xlabel(x_label)
+        if y_label is not None:
+            ax.set_ylabel(y_label)
         # eventually saves the plot
         if path is not None:
             path = join(self.path, path)
