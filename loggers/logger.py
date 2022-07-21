@@ -37,6 +37,10 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         # Return the experiment version, int or str.
         return "0.1"
 
+    @property
+    def experiment(self) -> Any:
+        pass
+
     @rank_zero_only
     def log_hyperparams(self, params):
         # params is an argparse.Namespace
