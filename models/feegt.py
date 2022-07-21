@@ -189,21 +189,13 @@ class FouriEEGTransformer(pl.LightningModule):
         return labels_pred
 
     def training_step(self, batch, batch_idx):
-        # self.log("batch_size", float(len(batch)), prog_bar=False, on_step=True, batch_size=len(batch))
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
         labels_pred = self(eegs=eegs)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
-        # accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
-        #                                          labels[:, i_label], average="micro")
-        #         for i_label in range(labels.shape[-1])]
-        # for i_label, label in enumerate(self.labels):
-        #     self.log(f"{label}_acc_train", accs[i_label], prog_bar=False)
+        print(losses, sum(losses), labels.shape, self.training)
         loss = sum(losses)
-        # self.log(f"loss", loss)
-        # self.log(f"acc_train", acc, prog_bar=True, on_step=False, on_epoch=True)
-        # self.log("training", 1.0, prog_bar=False, on_step=False, on_epoch=True)
         return {
             "loss": loss,
             "labels": labels,
@@ -211,22 +203,13 @@ class FouriEEGTransformer(pl.LightningModule):
         }
 
     def validation_step(self, batch, batch_idx):
-        # self.log("batch_size", float(len(batch)), prog_bar=False, on_step=True, batch_size=len(batch))
-        # eeg, labels = [e.to(self.device) for e in batch]  # (b s c), (b l)
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
         labels_pred = self(eegs=eegs)  # (b l d)
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
                   for i_label in range(labels.shape[-1])]
-        # accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=1),
-        #                                          labels[:, i_label], average="micro")
-        #         for i_label in range(labels.shape[-1])]
-        # for i_label, label in enumerate(self.labels):
-        #     self.log(f"{label}_acc_val", accs[i_label], prog_bar=False)
+        print(losses, sum(losses), labels.shape, self.training)
         loss = sum(losses)
-        # self.log(f"loss_val", loss, prog_bar=True, on_step=False, on_epoch=True)
-        # self.log(f"acc_val", acc, prog_bar=True, on_step=False, on_epoch=True)
-        # self.log("training", 0.0, prog_bar=False)
         return {
             "loss": loss,
             "labels": labels,

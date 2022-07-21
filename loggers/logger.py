@@ -62,7 +62,7 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         # saves the logs
         self.logs.to_csv(join(self.path, "logs.csv"))
         # plots the data
-        self.make_plot(key=f"loss", best="max",
+        self.make_plot(key=f"loss", best="min",
                        y_lims=[0, None], y_label="loss",
                        plot=self.plot, path=join("plots"))
         self.make_plot(key=f"acc_mean", best="max",
