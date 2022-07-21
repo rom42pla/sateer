@@ -44,11 +44,11 @@ def get_training_args():
                         type=int,
                         help="Type of validation algorithm ('kfold' or 'loso')")
     parser.add_argument("--min_epochs",
-                        default=5,
+                        default=1,
                         type=int,
                         help="Minimum number of epochs")
     parser.add_argument("--max_epochs",
-                        default=100,
+                        default=1000,
                         type=int,
                         help="Maximum number of epochs")
     parser.add_argument("--validation",

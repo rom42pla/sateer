@@ -19,7 +19,7 @@ from tqdm.autonotebook import tqdm
 from arg_parsers import get_training_args
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
-from loggers.logger import MyLogger
+from loggers.logger import FouriEEGTransformerLogger
 from models.cnn_baseline import CNNBaseline
 from models.eegt import EEGT
 import pytorch_lightning as pl
@@ -28,7 +28,7 @@ import pytorch_lightning as pl
 import warnings
 
 # suppresses some warnings
-from models.feegt import FEEGT
+from models.feegt import FouriEEGTransformer
 
 warnings.filterwarnings("ignore", category=LightningDeprecationWarning)
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -40,6 +40,7 @@ args = get_training_args()
 random.seed(args.seed)
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
+pd.set_option('display.max_columns', None)
 
 # sets the logging folder
 datetime_str = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -74,15 +75,15 @@ if args.setting == "cross_subject":
             gc.collect()
             dataset.set_k_fold(i_fold)
             if args.model == "feegt":
-                model: pl.LightningModule = FEEGT(in_channels=len(dataset.electrodes),
-                                                  sampling_rate=dataset.sampling_rate,
-                                                  labels=dataset.labels_to_use,
-                                                  num_encoders=args.num_encoders,
-                                                  window_embedding_dim=args.window_embedding_dim,
-                                                  mels=args.mels,
-                                                  use_masking=not args.disable_masking,
-                                                  learning_rate=args.learning_rate,
-                                                  dropout_p=args.dropout_p)
+                model: pl.LightningModule = FouriEEGTransformer(in_channels=len(dataset.electrodes),
+                                                                sampling_rate=dataset.sampling_rate,
+                                                                labels=dataset.labels_to_use,
+                                                                num_encoders=args.num_encoders,
+                                                                window_embedding_dim=args.window_embedding_dim,
+                                                                mels=args.mels,
+                                                                use_masking=not args.disable_masking,
+                                                                learning_rate=args.learning_rate,
+                                                                dropout_p=args.dropout_p)
             else:
                 raise NotImplementedError
             trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
@@ -103,7 +104,7 @@ if args.setting == "cross_subject":
                                      #     save_top_k=1,
                                      #     monitor="loss_val", mode="min",
                                      #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
-                                     EarlyStopping(monitor="accs_val", mode="max", min_delta=1e-4, patience=10,
+                                     EarlyStopping(monitor="acc_mean_val", mode="max", min_delta=1e-4, patience=10,
                                                    verbose=False, check_on_train_epoch_end=False, strict=True),
                                  ] if args.checkpoints_path is not None else [])
             if args.benchmark:
@@ -132,18 +133,19 @@ elif args.setting == "within_subject":
                 dataset.set_k_fold(i_fold)
 
                 if args.model == "feegt":
-                    model: pl.LightningModule = FEEGT(in_channels=len(dataset.electrodes),
-                                                      sampling_rate=dataset.sampling_rate,
-                                                      labels=dataset.labels_to_use,
-                                                      num_encoders=args.num_encoders,
-                                                      window_embedding_dim=args.window_embedding_dim,
-                                                      mels=args.mels,
-                                                      use_masking=not args.disable_masking,
-                                                      learning_rate=args.learning_rate,
-                                                      dropout_p=args.dropout_p)
+                    model: pl.LightningModule = FouriEEGTransformer(in_channels=len(dataset.electrodes),
+                                                                    sampling_rate=dataset.sampling_rate,
+                                                                    labels=dataset.labels_to_use,
+                                                                    num_encoders=args.num_encoders,
+                                                                    window_embedding_dim=args.window_embedding_dim,
+                                                                    mels=args.mels,
+                                                                    use_masking=not args.disable_masking,
+                                                                    learning_rate=args.learning_rate,
+                                                                    dropout_p=args.dropout_p)
                 else:
                     raise NotImplementedError
-                mylogger = MyLogger()
+                mylogger = FouriEEGTransformerLogger(path=join(args.checkpoints_path, experiment_name,
+                                                               subject_id, f"fold_{i_fold}"))
                 trainer = pl.Trainer(gpus=1 if torch.cuda.is_available() else 0,
                                      precision=args.precision,
                                      max_epochs=args.max_epochs, check_val_every_n_epoch=1,
@@ -163,7 +165,7 @@ elif args.setting == "within_subject":
                                          #     save_top_k=1,
                                          #     monitor="loss_val", mode="min",
                                          #     filename=args.dataset_type + "_{loss_val:.3f}_{epoch:02d}"),
-                                         EarlyStopping(monitor="accs_val", mode="max", min_delta=1e-4, patience=10,
+                                         EarlyStopping(monitor="acc_mean_val", mode="max", min_delta=1e-4, patience=10,
                                                        verbose=False, check_on_train_epoch_end=False, strict=True),
                                      ] if args.checkpoints_path is not None else [])
                 if args.benchmark:

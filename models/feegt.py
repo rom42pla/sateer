@@ -20,7 +20,7 @@ from torchaudio import transforms
 from models.fourinet import FouriEncoder, FouriEncoderBlock
 
 
-class FEEGT(pl.LightningModule):
+class FouriEEGTransformer(pl.LightningModule):
     def __init__(self,
                  in_channels: int,
                  sampling_rate: int,
@@ -247,17 +247,19 @@ class FEEGT(pl.LightningModule):
 
     def log_stats(self, outputs: List[Dict[str, torch.Tensor]]):
         # name of the current phase
-        phase = "train" if self.training is True else "val"
+        phase: str = "train" if self.training is True else "val"
         # loss
-        losses = torch.stack([e["loss"] for e in outputs])
+        losses: torch.Tensor = torch.stack([e["loss"] for e in outputs])
         self.log(f"loss_{phase}", losses.mean(), prog_bar=False)
         # classification metrics
         labels, labels_pred = torch.cat([e["labels"] for e in outputs], dim=0), \
                               torch.cat([e["labels_pred"] for e in outputs], dim=0)
-        accs = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1),
-                                                 labels[:, i_label], average="micro")
-                for i_label in range(labels.shape[-1])]
-        self.log(f"accs_{phase}", sum(accs) / len(accs), prog_bar=True)
+        accs: List[torch.Tensor] = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1),
+                                                                     labels[:, i_label], average="micro")
+                                    for i_label in range(labels.shape[-1])]
+        for i_label, label in enumerate(self.labels):
+            self.log(f"acc_{label}_{phase}", accs[i_label], prog_bar=False)
+        self.log(f"acc_mean_{phase}", sum(accs) / len(accs), prog_bar=True)
 
     def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
         optimizer.zero_grad(set_to_none=True)
@@ -355,10 +357,10 @@ if __name__ == "__main__":
         "labels": torch.ones(batch_size, 4, dtype=torch.long),
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
-    model = FEEGT(in_channels=32, sampling_rate=sampling_rate,
-                  labels=4, window_embedding_dim=512,
-                  num_encoders=2, use_masking=True,
-                  mask_perc_min=0.1, mask_perc_max=0.3)
+    model = FouriEEGTransformer(in_channels=32, sampling_rate=sampling_rate,
+                                labels=4, window_embedding_dim=512,
+                                num_encoders=2, use_masking=True,
+                                mask_perc_min=0.1, mask_perc_max=0.3)
     model.training = True
     print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
