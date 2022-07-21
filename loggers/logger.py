@@ -59,19 +59,20 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
 
     @rank_zero_only
     def finalize(self, status):
-        # saves the logs
-        self.logs.to_csv(join(self.path, "logs.csv"))
-        # plots the data
-        self.make_plot(key=f"loss", best="min",
-                       y_lims=[0, None], y_label="loss",
-                       plot=self.plot, path=join("plots"))
-        self.make_plot(key=f"acc_mean", best="max",
-                       y_lims=[0.4, 1], y_label="accuracy",
-                       plot=self.plot, path=join("plots"))
-        for label in ["valence", "arousal", "dominance"]:
-            self.make_plot(key=f"acc_{label}", best="max",
-                           y_lims=[0.4, 1], y_label=f"accuracy ({label})",
+        if not self.logs.empty:
+            # saves the logs
+            self.logs.to_csv(join(self.path, "logs.csv"))
+            # plots the data
+            self.make_plot(key=f"loss", best="min",
+                           y_lims=[0, None], y_label="loss",
                            plot=self.plot, path=join("plots"))
+            self.make_plot(key=f"acc_mean", best="max",
+                           y_lims=[0.4, 1], y_label="accuracy",
+                           plot=self.plot, path=join("plots"))
+            for label in ["valence", "arousal", "dominance"]:
+                self.make_plot(key=f"acc_{label}", best="max",
+                               y_lims=[0.4, 1], y_label=f"accuracy ({label})",
+                               plot=self.plot, path=join("plots"))
 
     @rank_zero_only
     def make_plot(self,
