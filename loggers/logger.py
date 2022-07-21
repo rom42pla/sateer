@@ -1,9 +1,9 @@
 import math
 from os import makedirs
 from os.path import isdir, join, dirname
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Dict, Any
 
-from pytorch_lightning.loggers.base import LightningLoggerBase
+from pytorch_lightning.loggers.base import LightningLoggerBase, rank_zero_experiment
 from pytorch_lightning.utilities.distributed import rank_zero_only
 
 import pandas as pd
@@ -24,6 +24,7 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
             if not isdir(self.path):
                 makedirs(self.path)
         self.logs: pd.DataFrame = pd.DataFrame()
+        self.hparams: Dict[str, Any] = {}
         assert isinstance(plot, bool)
         self.plot = plot
 
@@ -36,14 +37,11 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         # Return the experiment version, int or str.
         return "0.1"
 
-    def experiment(self):
-        pass
-
     @rank_zero_only
     def log_hyperparams(self, params):
         # params is an argparse.Namespace
         # your code to record hyperparameters goes here
-        pass
+        self.hparams = vars(params)
 
     @rank_zero_only
     def log_metrics(self, metrics, step):
@@ -74,7 +72,6 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
                                y_lims=[0.4, 1], y_label=f"accuracy ({label})",
                                plot=self.plot, path=join("plots"))
 
-    @rank_zero_only
     def make_plot(self,
                   key: str,
                   best: str = "max",
