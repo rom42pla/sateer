@@ -19,7 +19,7 @@ import einops
 import pytorch_lightning as pl
 
 
-class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
+class EEGClassificationDataset(pl.LightningDataModule, ABC):
 
     def __init__(self, path: str,
                  sampling_rate: int,
@@ -136,6 +136,11 @@ class EEGEmotionRecognitionDataset(pl.LightningDataModule, ABC):
                                        [v for k, v in self.labels.items()
                                         if k in self.labels_to_use]],
         }
+
+    @staticmethod
+    @abstractmethod
+    def get_subject_ids_static(path: str):
+        pass
 
     @abstractmethod
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray], List[str]]:

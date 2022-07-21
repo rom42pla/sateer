@@ -17,10 +17,10 @@ import pickle
 import einops
 import pytorch_lightning as pl
 
-from datasets.eeg_emrec import EEGEmotionRecognitionDataset
+from datasets.eeg_emrec import EEGClassificationDataset
 
 
-class DEAPDataset(EEGEmotionRecognitionDataset):
+class DEAPDataset(EEGClassificationDataset):
     def __init__(self, path: str, **kwargs):
         super(DEAPDataset, self).__init__(path=path,
                                           sampling_rate=128,

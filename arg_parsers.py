@@ -2,10 +2,10 @@ import argparse
 import random
 from os import makedirs
 from os.path import isdir
-from typing import Optional
+from typing import Optional, Dict, Union
 
 
-def get_training_args():
+def get_training_args() -> Dict[str, Union[bool, str, int, float]]:
     parser = argparse.ArgumentParser()
 
     # dataset args
@@ -162,4 +162,4 @@ def get_training_args():
     assert args.learning_rate > 0
     assert args.mels > 0
 
-    return args
+    return vars(args)
