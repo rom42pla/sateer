@@ -121,9 +121,9 @@ if args['setting'] == "cross_subject":
 elif args['setting'] == "within_subject":
     if args['validation'] == "k_fold":
         subject_ids = dataset_class.get_subject_ids_static(args['dataset_path'])
-        for i_subject, subject_id in enumerate(subject_ids):
+        for subject_id in subject_ids:
             # loads the dataset
-            logging.info(f"subject {subject_id} ({i_subject + 1} of {len(subject_ids)})")
+            logging.info(f"subject {subject_id}")
             dataset: EEGClassificationDataset = dataset_class(
                 path=args['dataset_path'],
                 subject_ids_to_use=subject_id,
@@ -135,13 +135,14 @@ elif args['setting'] == "within_subject":
                 labels_to_use=["valence", "arousal", "dominance"],
                 batch_size=args['batch_size']
             )
+            i_subject = dataset.subject_ids.index(subject_id)
             for i_fold in range(args['k_folds']):
                 logging.info(f"fold {i_fold + 1} of {dataset.k_folds}")
-                logging.info(f"|train set| = {len(dataset.train_split)}")
-                logging.info(f"|val set| = {len(dataset.val_split)}")
                 gc.collect()
                 dataset.set_k_fold(i_fold)
                 dataset.setup()
+                assert all([i["subject_id"] == i_subject for i in dataset.train_split]) \
+                       and all([i["subject_id"] == i_subject for i in dataset.val_split])
 
                 if args['model'] == "feegt":
                     model: pl.LightningModule = FouriEEGTransformer(

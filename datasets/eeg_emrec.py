@@ -132,7 +132,7 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
     def __getitem__(self, i: int) -> Dict[str, Union[int, torch.Tensor]]:
         return {
             "sampling_rates": self.sampling_rate,
-            # "subject_id": self.subject_ids_data[i],
+            "subject_id": self.subject_ids.index(self.subject_ids_data[i]),
             "eegs": self.eegs_data[i],
             "labels": self.labels_data[i,
                                        [v for k, v in self.labels.items()
