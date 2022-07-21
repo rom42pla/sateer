@@ -82,7 +82,7 @@ if args['setting'] == "cross_subject":
                 raise NotImplementedError
             logger = FouriEEGTransformerLogger(path=join(experiment_path,
                                                          f"fold_{i_fold}"),
-                                               plot=True)
+                                               plot=False)
             trainer = pl.Trainer(
                 gpus=1 if torch.cuda.is_available() else 0,
                 precision=args['precision'],
@@ -123,7 +123,7 @@ elif args['setting'] == "within_subject":
         subject_ids = dataset_class.get_subject_ids_static(args['dataset_path'])
         for i_subject, subject_id in enumerate(subject_ids):
             # loads the dataset
-            logging.info(f"subject {i_subject + 1} of {len(subject_ids)}")
+            logging.info(f"subject {subject_id} ({i_subject + 1} of {len(subject_ids)})")
             dataset: EEGClassificationDataset = dataset_class(
                 path=args['dataset_path'],
                 subject_ids_to_use=subject_id,
@@ -183,7 +183,7 @@ elif args['setting'] == "within_subject":
                 logs += [{
                     "logs": logger.logs,
                     "fold": i_fold,
-                    "subject": i_subject,
+                    "subject": subject_id,
                 }]
                 del trainer, model
                 if args['benchmark']:
