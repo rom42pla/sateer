@@ -92,7 +92,7 @@ if args['setting'] == "cross_subject":
                 log_every_n_steps=1,
                 enable_progress_bar=True,
                 enable_model_summary=True if i_fold == 0 else False,
-                enable_checkpointing=False,
+                enable_checkpointing=True,
                 gradient_clip_val=1 if args['gradient_clipping'] else 0,
                 auto_lr_find=args['auto_lr_finder'],
                 callbacks=callbacks + [
