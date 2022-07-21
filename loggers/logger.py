@@ -61,20 +61,19 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         # saves the logs
         self.logs.to_csv(join(self.path, "logs.csv"))
         # plots the data
-        self.make_plot(key=f"loss", legend_name=f"loss",
+        self.make_plot(key=f"loss",
                        y_lims=[0, None], y_label="loss",
                        plot=self.plot, path=join("plots"))
-        self.make_plot(key=f"acc_mean", legend_name=f"accuracy (mean)",
+        self.make_plot(key=f"acc_mean",
                        y_lims=[0.4, 1], y_label="accuracy",
                        plot=self.plot, path=join("plots"))
         for label in ["valence", "arousal", "dominance"]:
-            self.make_plot(key=f"acc_{label}", legend_name=f"accuracy ({label})",
-                           y_lims=[0.4, 1], y_label="accuracy",
+            self.make_plot(key=f"acc_{label}",
+                           y_lims=[0.4, 1], y_label=f"accuracy ({label})",
                            plot=self.plot, path=join("plots"))
 
     @rank_zero_only
     def make_plot(self, key: str,
-                  legend_name: Optional[str] = None,
                   title: Optional[str] = None,
                   x_label: Optional[str] = None,
                   y_label: Optional[str] = None,
@@ -87,9 +86,6 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         assert plot is True or path is not None, \
             f"the plot is not being shown or saved"
         assert isinstance(key, str)
-        assert legend_name is None or isinstance(legend_name, str)
-        if legend_name is None:
-            legend_name = key
         assert title is None or isinstance(title, str)
         for lims in [x_lims, y_lims]:
             assert lims is None or isinstance(lims, list) \
@@ -106,7 +102,7 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
                                       ("val", "validation")]:
             sns.lineplot(data=self.logs, x="epoch", y=f"{key}_{phase_key}",
                          ax=ax)
-        ax.legend([f"{phase_name} {legend_name}"
+        ax.legend([f"{phase_name}"
                    for phase_name in ["training", "validation"]])
         # title
         if title is not None:
