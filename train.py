@@ -104,7 +104,8 @@ elif args['setting'] == "within_subject":
                                         **args)
             # saves the logs
             logs += [
-                log | {"subject": subject_id}
+                {**log,
+                 "subject": subject_id}
                 for log in logs_subject
             ]
             # frees some memory
@@ -112,6 +113,7 @@ elif args['setting'] == "within_subject":
     elif args['validation'] == "loso":
         raise NotImplementedError
 del dataset
+
 # merges all the logs into a single dataframe and saves it
 merged_logs: pd.DataFrame = merge_logs(logs=logs)
 merged_logs.to_csv(join(experiment_path, "logs.csv"))
