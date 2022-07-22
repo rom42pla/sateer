@@ -145,14 +145,13 @@ def train_k_fold(
                      f"|dataloader_train| = {len(dataloader_train)}, "
                      f"|dataloader_val| = {len(dataloader_val)}")
         # initializes the trainer
-        logger = FouriEEGTransformerLogger(path=join(experiment_path, f"fold_{i_fold}"),
-                                           plot=benchmark)
         trainer = pl.Trainer(
             gpus=1 if torch.cuda.is_available() else 0,
             precision=precision,
             max_epochs=max_epochs,
             check_val_every_n_epoch=1,
-            logger=logger,
+            logger=FouriEEGTransformerLogger(path=join(experiment_path, f"fold_{i_fold}"),
+                                             plot=benchmark),
             log_every_n_steps=1,
             enable_progress_bar=True,
             enable_model_summary=False,
@@ -173,15 +172,15 @@ def train_k_fold(
         trainer.fit(model,
                     train_dataloaders=dataloader_train,
                     val_dataloaders=dataloader_val)
+        assert not trainer.logger.logs.empty
         assert base_model.state_dict().__str__() != model.state_dict().__str__(), \
             f"model not updating"
         logs += [{
-            "logs": logger.logs,
+            "logs": deepcopy(trainer.logger.logs),
             "fold": i_fold,
         }]
         # frees some memory
-        del trainer, model, logger, \
-            dataloader_train, dataloader_val
+        del trainer, model, dataloader_train, dataloader_val
         if benchmark:
             break
     return logs

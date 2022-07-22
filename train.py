@@ -78,11 +78,13 @@ if args['setting'] == "cross_subject":
         # starts the kfold training
         logging.info(f"training on {args['dataset_type']} dataset "
                      f"({len(dataset)} samples)")
-        logs_subject = train_k_fold(dataset=dataset, base_model=model,
-                                    experiment_path=experiment_path,
-                                    **args)
+        logs_k_fold = train_k_fold(dataset=dataset, base_model=model,
+                                   experiment_path=experiment_path,
+                                   **args)
         # saves the logs
-        logs += [logs_subject]
+        print(logs_k_fold)
+        assert not logs_k_fold.logs.empty()
+        logs += [logs_k_fold]
     elif args['validation'] == "loso":
         raise NotImplementedError
 
@@ -99,14 +101,14 @@ elif args['setting'] == "within_subject":
             # starts the kfold training
             logging.info(f"training on {args['dataset_type']}, subject {subject_id} "
                          f"({i_subject+1}/{len(dataset.subject_ids)}, {len(dataset_single_subject)} samples)")
-            logs_subject = train_k_fold(dataset=dataset_single_subject, base_model=model,
-                                        experiment_path=join(experiment_path, subject_id),
-                                        **args)
+            logs_k_fold = train_k_fold(dataset=dataset_single_subject, base_model=model,
+                                       experiment_path=join(experiment_path, subject_id),
+                                       **args)
             # saves the logs
             logs += [
                 {**log,
                  "subject": subject_id}
-                for log in logs_subject
+                for log in logs_k_fold
             ]
             # frees some memory
             del dataset_single_subject
@@ -116,5 +118,6 @@ del dataset
 
 # merges all the logs into a single dataframe and saves it
 logging.info(f"saving all logs on {join(experiment_path, 'logs.csv')}")
+print(logs)
 merged_logs: pd.DataFrame = merge_logs(logs=logs)
 merged_logs.to_csv(join(experiment_path, "logs.csv"))

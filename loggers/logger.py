@@ -23,7 +23,7 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         if self.path is not None:
             if not isdir(self.path):
                 makedirs(self.path)
-        self.logs: pd.DataFrame = pd.DataFrame()
+        self.logs_df: pd.DataFrame = pd.DataFrame()
         self.hparams: Dict[str, Any] = {}
         assert isinstance(plot, bool)
         self.plot = plot
@@ -31,6 +31,10 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
     @property
     def name(self):
         return "MyLogger"
+
+    @property
+    def logs(self):
+        return self.logs_df
 
     @property
     def version(self):
@@ -51,8 +55,8 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
     def log_metrics(self, metrics, step):
         # metrics is a dictionary of metric names and values
         # your code to record metrics goes here
-        self.logs = pd.concat([self.logs, pd.DataFrame([metrics])],
-                              ignore_index=True)
+        self.logs_df = pd.concat([self.logs_df, pd.DataFrame([metrics])],
+                                 ignore_index=True)
 
     @rank_zero_only
     def save(self):
@@ -61,9 +65,9 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
 
     @rank_zero_only
     def finalize(self, status):
-        if not self.logs.empty:
+        if not self.logs_df.empty:
             # saves the logs
-            self.logs.to_csv(join(self.path, "logs.csv"))
+            self.logs_df.to_csv(join(self.path, "logs.csv"))
             # plots the data
             self.make_plot(key=f"loss", best="min",
                            y_lims=[0, None], y_label="loss",
@@ -75,6 +79,8 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
                 self.make_plot(key=f"acc_{label}", best="max",
                                y_lims=[0.4, 1], y_label=f"accuracy ({label})",
                                plot=self.plot, path=join("plots"))
+        else:
+            raise Exception("there are no logs")
 
     def make_plot(self,
                   key: str,
@@ -107,10 +113,10 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
         legend_labels = []
         for phase_key, phase_name in [("train", "training"),
                                       ("val", "validation")]:
-            sns.lineplot(data=self.logs, x="epoch", y=f"{key}_{phase_key}",
+            sns.lineplot(data=self.logs_df, x="epoch", y=f"{key}_{phase_key}",
                          ax=ax)
-            best_value = self.logs[f"{key}_{phase_key}"].max() if best == "max" \
-                else self.logs[f"{key}_{phase_key}"].min()
+            best_value = self.logs_df[f"{key}_{phase_key}"].max() if best == "max" \
+                else self.logs_df[f"{key}_{phase_key}"].min()
             legend_labels += [f"{phase_key} (best is {best_value:.3f})"]
         ax.legend(legend_labels)
         # title
