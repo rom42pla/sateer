@@ -134,7 +134,6 @@ if args['setting'] == "cross_subject":
 
 elif args['setting'] == "within_subject":
     if args['validation'] == "k_fold":
-        # subject_ids = dataset_class.get_subject_ids_static(args['dataset_path'])
         for subject_id in dataset.subject_ids:
             dataset_single_subject = Subset(dataset, [i for i, s in enumerate(dataset)
                                                       if dataset.subject_ids[s["subject_id"]] == subject_id])
@@ -176,7 +175,7 @@ elif args['setting'] == "within_subject":
                                                         num_workers=os.cpu_count() - 2,
                                                         pin_memory=True if torch.cuda.is_available() else False)
                 logging.info(f"fold {i_fold + 1} of {args['k_folds']}, "
-                             f"|dataloader_train| = {len(dataloader_train)}, " 
+                             f"|dataloader_train| = {len(dataloader_train)}, "
                              f"|dataloader_val| = {len(dataloader_val)}")
                 gc.collect()
 
@@ -233,9 +232,10 @@ elif args['setting'] == "within_subject":
                 del trainer, model, dataloader_train, dataloader_val
                 if args['benchmark']:
                     break
+            del dataset_single_subject
             if args['benchmark']:
                 break
-
+del dataset
 # merges all the logs into a single dataframe and saves it
 merged_logs: pd.DataFrame = merge_logs(logs=logs)
 merged_logs.to_csv(join(experiment_path, "logs.csv"))
