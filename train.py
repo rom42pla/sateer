@@ -118,6 +118,5 @@ gc.collect()
 
 # merges all the logs into a single dataframe and saves it
 logging.info(f"saving all logs on {join(experiment_path, 'logs.csv')}")
-print(logs)
-merged_logs: pd.DataFrame = merge_logs(logs=logs)
+merged_logs: pd.DataFrame = merge_logs(logs=logs[0])
 merged_logs.to_csv(join(experiment_path, "logs.csv"))
