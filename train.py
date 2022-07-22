@@ -5,20 +5,16 @@ from datetime import datetime
 from os import makedirs
 from os.path import join, exists
 from pprint import pformat
-from typing import Union, Dict, List
+from typing import Union, Dict
 
 import pandas as pd
 
 import pytorch_lightning as pl
-import torch
-from pytorch_lightning import Callback
-from pytorch_lightning.callbacks import ModelCheckpoint
-from torch.utils.data import Subset, DataLoader
+from torch.utils.data import Subset
 
 from arg_parsers import get_training_args
-from utils import parse_dataset_class, set_global_seed, save_dict, init_logger, init_callbacks, merge_logs, train_k_fold
+from utils import parse_dataset_class, set_global_seed, save_dict, init_logger, train_k_fold
 from datasets.eeg_emrec import EEGClassificationDataset
-from loggers.logger import FouriEEGTransformerLogger
 from models.feegt import FouriEEGTransformer
 
 # sets up the loggers
