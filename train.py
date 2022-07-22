@@ -57,7 +57,6 @@ dataset: EEGClassificationDataset = dataset_class(
 
 # sets up the structures needed for the experiment
 logs: List[Dict[str, Union[int, pd.DataFrame]]] = []
-callbacks: List[Callback] = init_callbacks(swa=args['stochastic_weight_average'])
 
 if args['setting'] == "cross_subject":
     # loads the dataset
@@ -212,7 +211,7 @@ elif args['setting'] == "within_subject":
                     enable_checkpointing=False,
                     gradient_clip_val=1 if args['gradient_clipping'] else 0,
                     auto_lr_find=args['auto_lr_finder'],
-                    callbacks=callbacks
+                    callbacks=init_callbacks(swa=args['stochastic_weight_average']),
                 )
                 if args['benchmark']:
                     print(model)
@@ -229,7 +228,7 @@ elif args['setting'] == "within_subject":
                     "fold": i_fold,
                     "subject": subject_id,
                 }]
-                del trainer, model, dataloader_train, dataloader_val
+                del trainer, model, logger, dataloader_train, dataloader_val
                 if args['benchmark']:
                     break
             del dataset_single_subject
