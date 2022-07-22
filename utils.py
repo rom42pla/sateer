@@ -78,6 +78,7 @@ def init_callbacks(swa: bool = False) -> List[Callback]:
 def merge_logs(logs: List[Dict[str, Union[pd.DataFrame, int]]]) -> pd.DataFrame:
     merged_logs: pd.DataFrame = pd.DataFrame()
     for experiment_logs in logs:
+        print(experiment_logs)
         log_df: pd.DataFrame = experiment_logs["logs"]
         log_df["fold"] = experiment_logs["fold"]
         if "subject" in experiment_logs.keys():
