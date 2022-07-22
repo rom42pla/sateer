@@ -88,7 +88,7 @@ if args['setting'] == "cross_subject":
 
 elif args['setting'] == "within_subject":
     if args['validation'] == "k_fold":
-        for subject_id in dataset.subject_ids:
+        for i_subject, subject_id in enumerate(dataset.subject_ids):
             # frees some memory
             gc.collect()
             # retrieves the samples for a single subject
@@ -98,7 +98,7 @@ elif args['setting'] == "within_subject":
                         for s in dataset_single_subject])
             # starts the kfold training
             logging.info(f"training on {args['dataset_type']}, subject {subject_id} "
-                         f"({len(dataset_single_subject)} samples)")
+                         f"({i_subject+1}/{len(dataset.subject_ids)}, {len(dataset_single_subject)} samples)")
             logs_subject = train_k_fold(dataset=dataset_single_subject, base_model=model,
                                         experiment_path=join(experiment_path, subject_id),
                                         **args)
