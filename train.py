@@ -149,7 +149,8 @@ elif args['setting'] == "within_subject":
             assert len([i for f in folds_indices for i in f]) == len(dataset_single_subject) \
                    and {i for f in folds_indices for i in f} == set(range(len(dataset_single_subject)))
             # loads the dataset
-            logging.info(f"subject {subject_id}")
+            logging.info(f"subject {subject_id}, "
+                         f"|dataset| = {len(dataset_single_subject)}")
             i_subject = dataset.subject_ids.index(subject_id)
             for i_fold in range(args['k_folds']):
                 # retrieves training and validation sets
@@ -174,7 +175,9 @@ elif args['setting'] == "within_subject":
                                                         batch_size=args['batch_size'], shuffle=False,
                                                         num_workers=os.cpu_count() - 2,
                                                         pin_memory=True if torch.cuda.is_available() else False)
-                logging.info(f"fold {i_fold + 1} of {args['k_folds']}")
+                logging.info(f"fold {i_fold + 1} of {args['k_folds']}, "
+                             f"|dataloader_train| = {len(dataloader_train)}, " 
+                             f"|dataloader_val| = {len(dataloader_val)}")
                 gc.collect()
 
                 if args['model'] == "feegt":
@@ -216,10 +219,12 @@ elif args['setting'] == "within_subject":
                     print(model)
                 if args['auto_lr_finder'] is True:
                     trainer.tune(model,
-                                 train_dataloaders=dataloader_train, val_dataloaders=dataloader_val)
+                                 train_dataloaders=dataloader_train,
+                                 val_dataloaders=dataloader_val)
                     logging.info(f"learning rate has been set to {model.learning_rate}")
                 trainer.fit(model,
-                            train_dataloaders=dataloader_train, val_dataloaders=dataloader_val)
+                            train_dataloaders=dataloader_train,
+                            val_dataloaders=dataloader_val)
                 logs += [{
                     "logs": logger.logs,
                     "fold": i_fold,
