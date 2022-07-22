@@ -36,7 +36,7 @@ class DREAMERDataset(EEGClassificationDataset):
         global parse_eegs
 
         def parse_eegs(subject_no) -> Tuple[List[np.ndarray], List[np.ndarray], str]:
-            subject_id: str = self.subject_ids_to_use[subject_no]
+            subject_id: str = self.subject_ids[subject_no]
             assert subject_id in self.subject_ids
             subject_data = data_raw[subject_no]
             eegs: List[np.ndarray] = []
@@ -54,8 +54,8 @@ class DREAMERDataset(EEGClassificationDataset):
                                                  "ScoreDominance"]])]  # (l)
             return eegs, labels, subject_id
 
-        with Pool(processes=len(self.subject_ids_to_use)) as pool:
-            data_pool = pool.map(parse_eegs, [i for i in range(len(self.subject_ids_to_use))])
+        with Pool(processes=len(self.subject_ids)) as pool:
+            data_pool = pool.map(parse_eegs, [i for i in range(len(self.subject_ids))])
             data_pool = [d for d in data_pool if d is not None]
             eegs: List[np.ndarray] = [e for eeg_lists, _, _ in data_pool
                                       for e in eeg_lists]

@@ -17,9 +17,11 @@ import numpy as np
 import pickle
 import einops
 import pytorch_lightning as pl
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
-class EEGClassificationDataset(pl.LightningDataModule, ABC):
+class EEGClassificationDataset(Dataset, ABC):
 
     def __init__(self, path: str,
                  sampling_rate: int,
@@ -31,15 +33,16 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
                  window_size: Optional[Union[float, int]] = 1,
                  drop_last: Optional[bool] = False,
 
-                 labels_to_use: Optional[Union[str, List[str]]] = None,
-                 subject_ids_to_use: Optional[Union[str, List[str]]] = None,
+                 # labels_to_use: Optional[Union[str, List[str]]] = None,
+                 # subject_ids_to_use: Optional[Union[str, List[str]]] = None,
 
                  discretize_labels: bool = False,
                  normalize_eegs: bool = False,
 
-                 validation: Optional[str] = None,
-                 k_folds: Optional[int] = 10,
-                 batch_size: int = 32):
+                 # validation: Optional[str] = None,
+                 # k_folds: Optional[int] = 10,
+                 # batch_size: int = 32
+                 ):
         super().__init__()
 
         assert isdir(path)
@@ -57,8 +60,7 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
 
         assert isinstance(labels, list)
         assert all((isinstance(x, str) for x in labels))
-        self.labels: Dict[str, int] = {label: i
-                                       for i, label in enumerate(labels)}
+        self.labels: List[str] = labels
 
         assert isinstance(subject_ids, list)
         assert all((isinstance(x, str) for x in subject_ids))
@@ -76,24 +78,24 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
             assert isinstance(drop_last, bool)
             self.drop_last = drop_last
 
-        assert labels_to_use is None or isinstance(labels_to_use, str) or isinstance(labels_to_use, list)
-        if labels_to_use is None:
-            labels_to_use = list(self.labels.keys())
-        elif isinstance(labels_to_use, str):
-            labels_to_use = [labels_to_use]
-        assert set(labels_to_use).issubset(set(self.labels.keys())), \
-            f"one or more labels are not allowed"
-        self.labels_to_use: List[str] = labels_to_use
+        # assert labels_to_use is None or isinstance(labels_to_use, str) or isinstance(labels_to_use, list)
+        # if labels_to_use is None:
+        #     labels_to_use = list(self.labels.keys())
+        # elif isinstance(labels_to_use, str):
+        #     labels_to_use = [labels_to_use]
+        # assert set(labels_to_use).issubset(set(self.labels.keys())), \
+        #     f"one or more labels are not allowed"
+        # self.labels_to_use: List[str] = labels_to_use
 
-        assert subject_ids_to_use is None or isinstance(subject_ids_to_use, str) or isinstance(subject_ids_to_use, list)
-        if subject_ids_to_use is None:
-            subject_ids_to_use = deepcopy(self.subject_ids)
-        elif isinstance(subject_ids_to_use, str):
-            subject_ids_to_use = [subject_ids_to_use]
-        assert set(subject_ids_to_use).issubset(set(self.subject_ids)), \
-            f"one or more subject ids are not in dataset"
-        self.subject_ids_to_use: List[str] = subject_ids_to_use
-        self.subject_ids_to_use.sort()
+        # assert subject_ids_to_use is None or isinstance(subject_ids_to_use, str) or isinstance(subject_ids_to_use, list)
+        # if subject_ids_to_use is None:
+        #     subject_ids_to_use = deepcopy(self.subject_ids)
+        # elif isinstance(subject_ids_to_use, str):
+        #     subject_ids_to_use = [subject_ids_to_use]
+        # assert set(subject_ids_to_use).issubset(set(self.subject_ids)), \
+        #     f"one or more subject ids are not in dataset"
+        # self.subject_ids_to_use: List[str] = subject_ids_to_use
+        # self.subject_ids_to_use.sort()
 
         assert isinstance(discretize_labels, bool)
         self.discretize_labels: bool = discretize_labels
@@ -106,25 +108,25 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
         self.setup_data()
 
         # sets up k-fold
-        assert validation in {None, "k_fold", "loso"}
-        self.validation = validation
-        if self.validation == "k_fold":
-            assert isinstance(k_folds, int) and k_folds >= 1
-            self.k_folds, self.current_k_fold_index = k_folds, 0
-            shuffled_indices = np.random.permutation(len(self))
-            fold_starting_indices = np.linspace(start=0, stop=len(self), num=self.k_folds + 1,
-                                                endpoint=True, dtype=int)
-            self.folds_indices = [shuffled_indices[i1:i2]
-                                  for i1, i2 in zip(fold_starting_indices[:-1], fold_starting_indices[1:])]
-            self.set_k_fold(self.current_k_fold_index)
-        elif self.validation == "loso":
-            self.current_loso_index = 0
-            self.subjects_ids_indices = {i_subject: subject_id
-                                         for i_subject, subject_id in
-                                         enumerate(self.subject_ids_to_use)}
-
-        assert isinstance(batch_size, int) and batch_size >= 1
-        self.batch_size: int = batch_size
+        # assert validation in {None, "k_fold", "loso"}
+        # self.validation = validation
+        # if self.validation == "k_fold":
+        #     assert isinstance(k_folds, int) and k_folds >= 1
+        #     self.k_folds, self.current_k_fold_index = k_folds, 0
+        #     shuffled_indices = np.random.permutation(len(self))
+        #     fold_starting_indices = np.linspace(start=0, stop=len(self), num=self.k_folds + 1,
+        #                                         endpoint=True, dtype=int)
+        #     self.folds_indices = [shuffled_indices[i1:i2]
+        #                           for i1, i2 in zip(fold_starting_indices[:-1], fold_starting_indices[1:])]
+        #     self.set_k_fold(self.current_k_fold_index)
+        # elif self.validation == "loso":
+        #     self.current_loso_index = 0
+        #     self.subjects_ids_indices = {i_subject: subject_id
+        #                                  for i_subject, subject_id in
+        #                                  enumerate(self.subject_ids_to_use)}
+        #
+        # assert isinstance(batch_size, int) and batch_size >= 1
+        # self.batch_size: int = batch_size
 
     def __len__(self) -> int:
         return len(self.eegs_data)
@@ -134,9 +136,10 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
             "sampling_rates": self.sampling_rate,
             "subject_id": self.subject_ids.index(self.subject_ids_data[i]),
             "eegs": self.eegs_data[i],
-            "labels": self.labels_data[i,
-                                       [v for k, v in self.labels.items()
-                                        if k in self.labels_to_use]],
+            # "labels": self.labels_data[i,
+            #                            [v for k, v in self.labels.items()
+            #                             if k in self.labels_to_use]],
+            "labels": self.labels_data[i],
         }
 
     def prepare_data(self) -> None:
@@ -224,24 +227,37 @@ class EEGClassificationDataset(pl.LightningDataModule, ABC):
         self.eegs_data: torch.Tensor = torch.stack([torch.from_numpy(w) for w in self.eegs_data]).float()
         self.labels_data: torch.Tensor = torch.stack([torch.as_tensor(w) for w in self.labels_data]).long()
 
-    def train_dataloader(self):
-        return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True,
-                          num_workers=os.cpu_count() - 2, pin_memory=True)
-
-    def val_dataloader(self):
-        return DataLoader(self.val_split, batch_size=self.batch_size, shuffle=False,
-                          num_workers=os.cpu_count() - 2, pin_memory=True)
-
-    def set_k_fold(self, i: int) -> None:
-        assert isinstance(i, int) and 0 <= i < self.k_folds
-        self.current_k_fold_index = i
-
-    def set_loso_index(self, i: int) -> None:
-        assert isinstance(i, int) and i in self.subjects_ids_indices.keys()
-        self.current_loso_index = i
+    # def train_dataloader(self):
+    #     return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True,
+    #                       num_workers=os.cpu_count() - 2, pin_memory=True)
+    #
+    # def val_dataloader(self):
+    #     return DataLoader(self.val_split, batch_size=self.batch_size, shuffle=False,
+    #                       num_workers=os.cpu_count() - 2, pin_memory=True)
+    #
+    # def set_k_fold(self, i: int) -> None:
+    #     assert isinstance(i, int) and 0 <= i < self.k_folds
+    #     self.current_k_fold_index = i
+    #
+    # def set_loso_index(self, i: int) -> None:
+    #     assert isinstance(i, int) and i in self.subjects_ids_indices.keys()
+    #     self.current_loso_index = i
 
     def plot_samples(self) -> None:
         raw_mne_array = mne.io.RawArray(einops.rearrange(self[0][0], "s c -> c s"),
                                         info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
                                                              verbose=False, ch_types="eeg"), verbose=False)
         raw_mne_array.plot()
+
+    def plot_subjects_distribution(self) -> None:
+        subject_indices_samples = sorted([s["subject_id"]
+                                          for s in self])
+        subject_ids_samples = [self.subject_ids[i]
+                               for i in subject_indices_samples]
+        fig, ax = plt.subplots(1, 1,
+                               figsize=(15, 5),
+                               tight_layout=True)
+        sns.countplot(x=subject_ids_samples,
+                      palette="rocket", ax=ax)
+        plt.show()
+        fig.clf()

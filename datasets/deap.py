@@ -52,8 +52,8 @@ class DEAPDataset(EEGClassificationDataset):
                 labels += [subject_data["labels"][i_experiment]]  # (l)
             return eegs, labels, subject_id
 
-        with Pool(processes=len(self.subject_ids_to_use)) as pool:
-            data_pool = pool.map(parse_eegs, [s_id for s_id in self.subject_ids_to_use])
+        with Pool(processes=len(self.subject_ids)) as pool:
+            data_pool = pool.map(parse_eegs, [s_id for s_id in self.subject_ids])
             data_pool = [d for d in data_pool if d is not None]
             eegs: List[np.ndarray] = [e for eeg_lists, _, _ in data_pool
                                       for e in eeg_lists]
