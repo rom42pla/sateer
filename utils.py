@@ -75,17 +75,6 @@ def init_callbacks(swa: bool = False) -> List[Callback]:
     return callbacks
 
 
-def merge_logs(logs: List[Dict[str, Union[pd.DataFrame, int]]]) -> pd.DataFrame:
-    merged_logs: pd.DataFrame = pd.DataFrame()
-    for experiment_logs in logs:
-        log_df: pd.DataFrame = experiment_logs["logs"]
-        log_df["fold"] = experiment_logs["fold"]
-        if "subject" in experiment_logs.keys():
-            log_df["subject"] = experiment_logs["subject"]
-        merged_logs = pd.concat([merged_logs, log_df], ignore_index=True)
-    return merged_logs
-
-
 def save_dict(dictionary: Dict[Any, Any], path: str) -> None:
     with open(path, 'w') as fp:
         json.dump(dictionary, fp, indent=4)
@@ -102,9 +91,9 @@ def train_k_fold(
         gradient_clipping: bool = False,
         stochastic_weight_average: bool = False,
         **kwargs,
-) -> List[Dict[str, Union[int, pd.DataFrame]]]:
+) -> pd.DataFrame:
     # initialize the logs
-    logs: List[Dict[str, Union[int, pd.DataFrame]]] = []
+    logs: pd.DataFrame = pd.DataFrame()
     # sets up the k_fold
     shuffled_indices = torch.randperm(len(dataset)).tolist()
     fold_starting_indices = torch.linspace(start=0, end=len(dataset),
@@ -175,10 +164,9 @@ def train_k_fold(
         assert not trainer.logger.logs.empty
         assert base_model.state_dict().__str__() != model.state_dict().__str__(), \
             f"model not updating"
-        logs += [{
-            "logs": deepcopy(trainer.logger.logs),
-            "fold": i_fold,
-        }]
+        fold_logs = deepcopy(trainer.logger.logs)
+        fold_logs["fold"] = i_fold
+        logs = pd.concat([logs, fold_logs], ignore_index=True)
         # frees some memory
         del trainer, model, dataloader_train, dataloader_val
         if benchmark:

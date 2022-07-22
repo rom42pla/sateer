@@ -337,9 +337,9 @@ class MelSpectrogram(nn.Module):
 
 
 if __name__ == "__main__":
-    batch_size = 2048
+    batch_size = 64
     sampling_rate = 128
-    seconds = 1
+    seconds = 10
     batch = {
         "eegs": torch.randn(batch_size, seconds * sampling_rate, 32, dtype=torch.float32) * 1e-6,
         "labels": torch.ones(batch_size, 4, dtype=torch.long),

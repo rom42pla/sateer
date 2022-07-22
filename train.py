@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime
 from os import makedirs
-from os.path import join
+from os.path import join, exists
 from pprint import pformat
 from typing import Union, Dict, List
 
@@ -33,7 +33,7 @@ set_global_seed(seed=args['seed'])
 
 # sets the logging folder
 datetime_str: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-experiment_name: str = f"{datetime_str}_{args['setting']}_{args['validation']}"
+experiment_name: str = f"{datetime_str}_{args['setting']}_{args['validation']}_{args['dataset_type']}"
 experiment_path: str = join(args['checkpoints_path'], experiment_name)
 makedirs(experiment_path)
 
@@ -71,7 +71,7 @@ else:
     raise NotImplementedError
 
 # sets up the structures needed for the experiment
-logs: List[Dict[str, Union[int, pd.DataFrame]]] = []
+logs: pd.DataFrame = pd.DataFrame()
 
 if args['setting'] == "cross_subject":
     if args['validation'] == "k_fold":
@@ -82,7 +82,8 @@ if args['setting'] == "cross_subject":
                                    experiment_path=experiment_path,
                                    **args)
         # saves the logs
-        logs += [logs_k_fold]
+        logs = pd.concat([logs, logs_k_fold], ignore_index=True)
+        logs.to_csv(join(experiment_path, "logs_tmp.csv"), index=False)
     elif args['validation'] == "loso":
         raise NotImplementedError
 
@@ -103,11 +104,9 @@ elif args['setting'] == "within_subject":
                                        experiment_path=join(experiment_path, subject_id),
                                        **args)
             # saves the logs
-            logs += [
-                {**log,
-                 "subject": subject_id}
-                for log in logs_k_fold
-            ]
+            logs_k_fold["subject"] = subject_id
+            logs = pd.concat([logs, logs_k_fold], ignore_index=True)
+            logs.to_csv(join(experiment_path, "logs_tmp.csv"), index=False)
             # frees some memory
             del dataset_single_subject
     elif args['validation'] == "loso":
@@ -117,6 +116,8 @@ del dataset
 gc.collect()
 
 # merges all the logs into a single dataframe and saves it
-logging.info(f"saving all logs on {join(experiment_path, 'logs.csv')}")
-merged_logs: pd.DataFrame = merge_logs(logs=logs[0])
-merged_logs.to_csv(join(experiment_path, "logs.csv"), index=False)
+logs.to_csv(join(experiment_path, "logs.csv"), index=False)
+logging.info(f"logs saved to {join(experiment_path, 'logs.csv')}")
+# deletes the temporary log file
+if exists(join(experiment_path, "logs_tmp.csv")):
+    os.remove(join(experiment_path, "logs_tmp.csv"))

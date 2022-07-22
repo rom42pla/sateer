@@ -212,16 +212,17 @@ class FouriEEGFeedForward(nn.Module):
 
 
 if __name__ == "__main__":
-    embeddings_dim, batch_size, sampling_rate, seconds = 512, 2048, 128, 1
+    embeddings_dim, batch_size, sampling_rate, seconds = 512, 512, 128, 1
     batch = {
         "eegs": torch.randn(batch_size, seconds * sampling_rate, embeddings_dim, dtype=torch.float32),
         "labels": torch.ones(batch_size, 6, dtype=torch.long),
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
-    model = FouriEncoder(embeddings_dim=embeddings_dim,
+    encoder = FouriEncoder(embeddings_dim=embeddings_dim,
                          num_encoders=2, use_masking=True,
                          mask_perc_min=0.1, mask_perc_max=0.3)
-    print("input shape", batch["eegs"].shape)
-    out = model(batch["eegs"])
-    print("output shape", out.shape)
-    print(model)
+    print(encoder)
+    print("input before encoder", batch["eegs"].shape)
+    out = encoder(batch["eegs"])
+    print("output after encoder", out.shape)
+
