@@ -115,5 +115,6 @@ elif args['setting'] == "within_subject":
 del dataset
 
 # merges all the logs into a single dataframe and saves it
+logging.info(f"saving all logs on {join(experiment_path, 'logs.csv')}")
 merged_logs: pd.DataFrame = merge_logs(logs=logs)
 merged_logs.to_csv(join(experiment_path, "logs.csv"))
