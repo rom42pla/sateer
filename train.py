@@ -98,7 +98,7 @@ elif args['setting'] == "within_subject":
                         for s in dataset_single_subject])
             # starts the kfold training
             logging.info(f"training on {args['dataset_type']}, subject {subject_id} "
-                         f"({i_subject+1}/{len(dataset.subject_ids)}, {len(dataset_single_subject)} samples)")
+                         f"({i_subject + 1}/{len(dataset.subject_ids)}, {len(dataset_single_subject)} samples)")
             logs_k_fold = train_k_fold(dataset=dataset_single_subject, base_model=model,
                                        experiment_path=join(experiment_path, subject_id),
                                        **args)
@@ -119,4 +119,4 @@ gc.collect()
 # merges all the logs into a single dataframe and saves it
 logging.info(f"saving all logs on {join(experiment_path, 'logs.csv')}")
 merged_logs: pd.DataFrame = merge_logs(logs=logs[0])
-merged_logs.to_csv(join(experiment_path, "logs.csv"))
+merged_logs.to_csv(join(experiment_path, "logs.csv"), index=False)
