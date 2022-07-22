@@ -82,8 +82,6 @@ if args['setting'] == "cross_subject":
                                    experiment_path=experiment_path,
                                    **args)
         # saves the logs
-        print(logs_k_fold)
-        assert not logs_k_fold.logs.empty()
         logs += [logs_k_fold]
     elif args['validation'] == "loso":
         raise NotImplementedError
