@@ -203,14 +203,13 @@ elif args['setting'] == "within_subject":
                     # min_epochs=20,
                     max_epochs=args['max_epochs'],
                     check_val_every_n_epoch=1,
-                    # logger=logger,
+                    logger=logger,
                     log_every_n_steps=1,
                     enable_progress_bar=True,
                     enable_model_summary=False,
                     enable_checkpointing=False,
                     gradient_clip_val=1 if args['gradient_clipping'] else 0,
                     auto_lr_find=args['auto_lr_finder'],
-                    reload_dataloaders_every_epoch=True,
                     callbacks=callbacks
                 )
                 if args['benchmark']:
@@ -226,7 +225,7 @@ elif args['setting'] == "within_subject":
                     "fold": i_fold,
                     "subject": subject_id,
                 }]
-                del trainer, model
+                del trainer, model, dataloader_train, dataloader_val
                 if args['benchmark']:
                     break
             if args['benchmark']:
