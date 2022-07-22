@@ -112,7 +112,9 @@ elif args['setting'] == "within_subject":
             del dataset_single_subject
     elif args['validation'] == "loso":
         raise NotImplementedError
+# frees some memory
 del dataset
+gc.collect()
 
 # merges all the logs into a single dataframe and saves it
 logging.info(f"saving all logs on {join(experiment_path, 'logs.csv')}")
