@@ -1,9 +1,10 @@
 import gc
 import logging
 import os
+import re
 from datetime import datetime
 from os import makedirs
-from os.path import join, exists
+from os.path import join, exists, isdir
 from pprint import pformat
 from typing import Union, Dict
 
@@ -13,7 +14,8 @@ import pytorch_lightning as pl
 from torch.utils.data import Subset
 
 from arg_parsers import get_training_args
-from utils import parse_dataset_class, set_global_seed, save_dict, init_logger, train_k_fold
+from plots import plot_metrics
+from utils import parse_dataset_class, set_global_seed, save_dict, init_logger, train_k_fold, merge_logs
 from datasets.eeg_emrec import EEGClassificationDataset
 from models.feegt import FouriEEGTransformer
 
@@ -74,12 +76,9 @@ if args['setting'] == "cross_subject":
         # starts the kfold training
         logging.info(f"training on {args['dataset_type']} dataset "
                      f"({len(dataset)} samples)")
-        logs_k_fold = train_k_fold(dataset=dataset, base_model=model,
-                                   experiment_path=experiment_path,
-                                   **args)
-        # saves the logs
-        logs = pd.concat([logs, logs_k_fold], ignore_index=True)
-        logs.to_csv(join(experiment_path, "logs_tmp.csv"), index=False)
+        train_k_fold(dataset=dataset, base_model=model,
+                     experiment_path=experiment_path,
+                     **args)
     elif args['validation'] == "loso":
         raise NotImplementedError
 
@@ -96,24 +95,33 @@ elif args['setting'] == "within_subject":
             # starts the kfold training
             logging.info(f"training on {args['dataset_type']}, subject {subject_id} "
                          f"({i_subject + 1}/{len(dataset.subject_ids)}, {len(dataset_single_subject)} samples)")
-            logs_k_fold = train_k_fold(dataset=dataset_single_subject, base_model=model,
-                                       experiment_path=join(experiment_path, subject_id),
-                                       **args)
-            # saves the logs
-            logs_k_fold["subject"] = subject_id
-            logs = pd.concat([logs, logs_k_fold], ignore_index=True)
-            logs.to_csv(join(experiment_path, "logs_tmp.csv"), index=False)
+            train_k_fold(dataset=dataset_single_subject, base_model=model,
+                         experiment_path=join(experiment_path, subject_id),
+                         **args)
             # frees some memory
             del dataset_single_subject
+            if args['benchmark']:
+                break
     elif args['validation'] == "loso":
         raise NotImplementedError
 # frees some memory
 del dataset
 gc.collect()
 
-# merges all the logs into a single dataframe and saves it
-logs.to_csv(join(experiment_path, "logs.csv"), index=False)
-logging.info(f"logs saved to {join(experiment_path, 'logs.csv')}")
-# deletes the temporary log file
-if exists(join(experiment_path, "logs_tmp.csv")):
-    os.remove(join(experiment_path, "logs_tmp.csv"))
+# parses the logs into a single dataframe
+logs = merge_logs(experiment_path)
+
+# plots some metrics
+plot_metrics(logs=logs,
+             metrics=["acc_mean_train", "acc_mean_val"],
+             labels=["training", "validation"],
+             y_label="accuracy",
+             mode="max",
+             experiment_path=experiment_path)
+
+plot_metrics(logs=logs,
+             metrics=["loss_train", "loss_val"],
+             labels=["training", "validation"],
+             y_label="loss",
+             mode="min",
+             experiment_path=experiment_path)

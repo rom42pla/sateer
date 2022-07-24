@@ -3,9 +3,10 @@ import json
 import logging
 import os
 import random
+import re
 import warnings
 from copy import deepcopy
-from os.path import join
+from os.path import join, isdir, exists
 from typing import Dict, Any, List, Union
 
 import numpy as np
@@ -49,6 +50,22 @@ def init_logger() -> None:
         format='\x1b[42m\x1b[30m[%(asctime)s, %(levelname)s]\x1b[0m %(message)s',
         level=logging.INFO,
         datefmt='%Y-%m-%d %H:%M:%S')
+
+
+def merge_logs(experiment_path: str) -> pd.DataFrame:
+    logs: pd.DataFrame = pd.DataFrame()
+    for subject in [f for f in os.listdir(experiment_path)
+                    if isdir(join(experiment_path, f))]:
+        for fold in [f for f in os.listdir(join(experiment_path, subject))
+                     if re.match(r"fold_[0-9]+", f)]:
+            i_fold = int(fold.split("_")[-1])
+            if not exists(join(experiment_path, subject, fold, "logs.csv")):
+                continue
+            logs_fold = pd.read_csv(join(experiment_path, subject, fold, "logs.csv"))
+            logs_fold["subject"] = subject
+            logs_fold["fold"] = i_fold
+            logs = pd.concat([logs, logs_fold], ignore_index=True)
+    return logs
 
 
 def init_callbacks(swa: bool = False) -> List[Callback]:
@@ -124,11 +141,11 @@ def train_k_fold(
         # builds the dataloaders
         dataloader_train: DataLoader = DataLoader(Subset(dataset, train_indices),
                                                   batch_size=batch_size, shuffle=True,
-                                                  num_workers=os.cpu_count() - 2,
+                                                  num_workers=os.cpu_count() - 1,
                                                   pin_memory=True if torch.cuda.is_available() else False)
         dataloader_val: DataLoader = DataLoader(Subset(dataset, test_indices),
                                                 batch_size=batch_size, shuffle=False,
-                                                num_workers=os.cpu_count() - 2,
+                                                num_workers=os.cpu_count() - 1,
                                                 pin_memory=True if torch.cuda.is_available() else False)
         logging.info(f"fold {i_fold + 1} of {k_folds}, "
                      f"|dataloader_train| = {len(dataloader_train)}, "

@@ -163,3 +163,16 @@ def get_training_args() -> Dict[str, Union[bool, str, int, float]]:
     assert args.mels > 0
 
     return vars(args)
+
+def get_results_args() -> Dict[str, Union[bool, str, int, float]]:
+    parser = argparse.ArgumentParser()
+
+    # dataset args
+    parser.add_argument("experiment_path",
+                        type=str,
+                        help="The folder of the experiment")
+    args = parser.parse_args()
+
+    assert isdir(args.experiment_path)
+
+    return vars(args)
