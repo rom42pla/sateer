@@ -109,7 +109,7 @@ del dataset
 gc.collect()
 
 # parses the logs into a single dataframe
-logs = merge_logs(experiment_path)
+logs = merge_logs(experiment_path, setting=args['setting'])
 
 # plots some metrics
 plot_metrics(logs=logs,

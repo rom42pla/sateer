@@ -52,17 +52,29 @@ def init_logger() -> None:
         datefmt='%Y-%m-%d %H:%M:%S')
 
 
-def merge_logs(experiment_path: str) -> pd.DataFrame:
+def merge_logs(experiment_path: str,
+               setting: str) -> pd.DataFrame:
+    assert setting in {"within_subject", "cross_subject"}
     logs: pd.DataFrame = pd.DataFrame()
-    for subject in [f for f in os.listdir(experiment_path)
-                    if isdir(join(experiment_path, f))]:
-        for fold in [f for f in os.listdir(join(experiment_path, subject))
+    if setting == "within_subject":
+        for subject in [f for f in os.listdir(experiment_path)
+                        if isdir(join(experiment_path, f))]:
+            for fold in [f for f in os.listdir(join(experiment_path, subject))
+                         if re.match(r"fold_[0-9]+", f)]:
+                i_fold = int(fold.split("_")[-1])
+                if not exists(join(experiment_path, subject, fold, "logs.csv")):
+                    continue
+                logs_fold = pd.read_csv(join(experiment_path, subject, fold, "logs.csv"))
+                logs_fold["subject"] = subject
+                logs_fold["fold"] = i_fold
+                logs = pd.concat([logs, logs_fold], ignore_index=True)
+    else:
+        for fold in [f for f in os.listdir(experiment_path)
                      if re.match(r"fold_[0-9]+", f)]:
             i_fold = int(fold.split("_")[-1])
-            if not exists(join(experiment_path, subject, fold, "logs.csv")):
+            if not exists(join(experiment_path, fold, "logs.csv")):
                 continue
-            logs_fold = pd.read_csv(join(experiment_path, subject, fold, "logs.csv"))
-            logs_fold["subject"] = subject
+            logs_fold = pd.read_csv(join(experiment_path, fold, "logs.csv"))
             logs_fold["fold"] = i_fold
             logs = pd.concat([logs, logs_fold], ignore_index=True)
     return logs

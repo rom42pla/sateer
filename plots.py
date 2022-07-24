@@ -30,9 +30,15 @@ def plot_metrics(logs: pd.DataFrame,
     for i_fold, ax in enumerate(axs.flat if cols > 1 else [axs]):
         for metric, label in zip(metrics, labels):
             if mode == "max":
-                best = logs[logs['fold'] == i_fold].groupby('subject').max().mean()[metric]
+                if "subject" in logs.columns:
+                    best = logs[logs['fold'] == i_fold].groupby('subject').max().mean()[metric]
+                else:
+                    best = logs[logs['fold'] == i_fold].max()[metric]
             else:
-                best = logs[logs['fold'] == i_fold].groupby('subject').min().mean()[metric]
+                if "subject" in logs.columns:
+                    best = logs[logs['fold'] == i_fold].groupby('subject').min().mean()[metric]
+                else:
+                    best = logs[logs['fold'] == i_fold].min()[metric]
             sns.lineplot(data=logs[logs["fold"] == i_fold], x="epoch", y=metric,
                          label=f"{label} ($\mu = {best:.3f})$",
                          ax=ax, palette="rocket")
