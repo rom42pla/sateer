@@ -69,6 +69,18 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     parser.add_argument("--test_masking",
                         default=False,
                         action="store_true")
+    parser.add_argument("--test_mix_fourier",
+                        default=False,
+                        action="store_true")
+    parser.add_argument("--test_mels",
+                        default=False,
+                        action="store_true")
+    parser.add_argument("--test_mel_window_size",
+                        default=False,
+                        action="store_true")
+    parser.add_argument("--test_mel_window_stride",
+                        default=False,
+                        action="store_true")
 
     parser.add_argument("--gradient_clipping",
                         default=False,
@@ -82,18 +94,6 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=0.0002,
                         type=float,
                         help="Learning rate of the model")
-    parser.add_argument("--mels",
-                        default=8,
-                        type=int,
-                        help="Number of mel banks")
-    parser.add_argument("--mel_window_size",
-                        default=1,
-                        type=float,
-                        help="Size of spectrogram's windows")
-    parser.add_argument("--mel_window_stride",
-                        default=0.1,
-                        type=float,
-                        help="Size of spectrogram's windows stride")
 
     args = parser.parse_args()
 
@@ -112,9 +112,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         args.seed = random.randint(0, 1000000)
 
     assert args.learning_rate > 0
-    assert args.mels > 0
-    assert any([v for v in [args.test_num_encoders, args.test_embeddings_dim, args.test_masking,
-                            args.test_noise, args.test_dropout_p]]), \
+    assert any([v for v in [args.test_num_encoders, args.test_embeddings_dim,
+                            args.test_masking, args.test_noise, args.test_dropout_p,
+                            args.test_mix_fourier,
+                            args.test_mels, args.test_mel_window_size, args.test_mel_window_stride]]), \
         f"you need to specify at least one parameter to analyze"
 
     return vars(args)

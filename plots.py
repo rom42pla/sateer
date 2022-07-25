@@ -77,13 +77,3 @@ def plot_ablation(logs: pd.DataFrame,
         if experiment_path is not None:
             plt.savefig(join(experiment_path, "plots", f"{parameter}.png"))
         plt.show()
-
-
-# import pandas as pd
-#
-# df = pd.read_csv(
-#     "/home/rom42pla/repos/eeg_deep_emotion_recognition/checkpoints/ablation/20220725_174638_dreamer/results.csv").iloc[
-#      :, 1:]
-# print(df)
-# plot_ablation(logs=df,
-#               experiment_path="/home/rom42pla/repos/eeg_deep_emotion_recognition/checkpoints/ablation/20220725_174638_dreamer/")

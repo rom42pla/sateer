@@ -31,7 +31,10 @@ logging.info(f"line args:\n{pformat(args)}")
 # gets testing attributes
 tested_parameters = [
     k for k, v in args.items()
-    if k in ["test_num_encoders", "test_embeddings_dim", "test_masking", "test_noise", "test_dropout_p"]
+    if k in ["test_num_encoders", "test_embeddings_dim",
+             "test_masking", "test_noise", "test_dropout_p",
+             "test_mix_fourier",
+             "test_mels", "test_mel_window_size", "test_mel_window_stride"]
        and v is True
 ]
 logging.info(f"tested parameters:\n{pformat(tested_parameters)}")
@@ -73,6 +76,10 @@ def objective(trial: Trial):
         "dropout_p": trial.suggest_float("dropout_p", 0, 0.99),
         "noise_strength": trial.suggest_float("noise_strength", 0, 0.99),
         "masking": trial.suggest_categorical("masking", [True, False]),
+        "mix_fourier_with_tokens": trial.suggest_categorical("mix_fourier_with_tokens", [True, False]),
+        "mels": trial.suggest_int("mels", 1, 16),
+        "mel_window_size": trial.suggest_float("mel_window_size", 0.1, 1),
+        "mel_window_stride": trial.suggest_float("mel_window_stride", 0.1, 1),
     }
     logging.info(f"started trial {trial.number} with parameters:\n{pformat(trial_args)}")
 
@@ -80,17 +87,17 @@ def objective(trial: Trial):
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
+        learning_rate=args['learning_rate'],
 
         num_encoders=trial_args['num_encoders'],
         window_embedding_dim=trial_args['embeddings_dim'],
         use_masking=trial_args['masking'],
         dropout_p=trial_args['dropout_p'],
         noise_strength=trial_args['noise_strength'],
-
-        learning_rate=args['learning_rate'],
-        mels=args['mels'],
-        mel_window_size=args['mel_window_size'],
-        mel_window_stride=args['mel_window_stride']
+        mix_fourier_with_tokens=trial_args['mix_fourier_with_tokens'],
+        mels=trial_args['mels'],
+        mel_window_size=trial_args['mel_window_size'],
+        mel_window_stride=trial_args['mel_window_stride'],
     )
     logs = train(
         dataset_train=dataset_train,
@@ -111,8 +118,12 @@ search_space = {
     "num_encoders": list(range(1, 6 + 1)) if args['test_num_encoders'] else [1],
     "embeddings_dim": [128, 256, 512] if args['test_embeddings_dim'] else [128],
     "masking": [True, False] if args['test_masking'] else [True],
-    "dropout_p": np.linspace(0, 0.9, 4) if args['test_dropout_p'] else [0.25],
-    "noise_strength": np.linspace(0, 0.9, 4) if args['test_noise'] else [0.1]
+    "dropout_p": [0, 0.1, 0.25, 0.5] if args['test_dropout_p'] else [0.25],
+    "noise_strength": [0, 0.1, 0.25] if args['test_noise'] else [0.1],
+    "mix_fourier_with_tokens": [True, False] if args['test_mix_fourier'] else [True],
+    "mels": [4, 8, 12, 16] if args['test_mels'] else [8],
+    "mel_window_size": [0.1, 0.25, 0.5, 1] if args['test_mel_window_size'] else [1],
+    "mel_window_stride": [0.1, 0.25, 0.5, 1] if args['test_mel_window_stride'] else [0.1],
 }
 study = optuna.create_study(sampler=optuna.samplers.GridSampler(search_space),
                             direction="maximize")
@@ -122,7 +133,7 @@ study.optimize(objective)
 del dataset
 gc.collect()
 
-# saves the best combination of parameters
+# saves the results of the ablation
 logs = pd.DataFrame([
     {**trial.params, "acc_mean_val": trial.value} for trial in study.trials
 ]).sort_values(by="acc_mean_val", ascending=False)

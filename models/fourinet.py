@@ -4,7 +4,6 @@ from typing import Union
 
 import functorch
 import torch
-from einops.layers.torch import Rearrange
 from torch import nn
 import einops
 
@@ -21,6 +20,7 @@ class FouriEncoder(nn.Module):
                  mask_start_index: int = 0,
 
                  add_positional_embeddings: bool = True,
+                 mix_fourier_with_tokens: bool = True,
                  ):
         super().__init__()
 
@@ -36,6 +36,8 @@ class FouriEncoder(nn.Module):
         self.dropout_p = dropout_p
         assert isinstance(add_positional_embeddings, bool)
         self.add_positional_embeddings = add_positional_embeddings
+        assert isinstance(mix_fourier_with_tokens, bool)
+        self.mix_fourier_with_tokens = mix_fourier_with_tokens
 
         # masking
         assert isinstance(use_masking, bool)
@@ -62,7 +64,8 @@ class FouriEncoder(nn.Module):
                                                             FouriEncoderBlock(in_features=self.embeddings_dim,
                                                                               mid_features=self.embeddings_dim,
                                                                               out_features=self.embeddings_dim,
-                                                                              dropout_p=self.dropout_p))
+                                                                              dropout_p=self.dropout_p,
+                                                                              mix_fourier_with_tokens=self.mix_fourier_with_tokens))
                                                            for i in range(self.num_encoders)],
                                                          ("pooler", nn.Linear(in_features=self.embeddings_dim,
                                                                               out_features=self.embeddings_dim)),
@@ -129,7 +132,8 @@ class FouriEncoder(nn.Module):
 class FouriEncoderBlock(nn.Module):
 
     def __init__(self, in_features: int, mid_features: int, out_features: int,
-                 dropout_p: Union[int, float] = 0):
+                 dropout_p: Union[int, float] = 0,
+                 mix_fourier_with_tokens: bool = True):
         super().__init__()
         assert isinstance(in_features, int) and in_features >= 1
         assert isinstance(mid_features, int) and mid_features >= 1
@@ -139,9 +143,12 @@ class FouriEncoderBlock(nn.Module):
         self.out_features = out_features
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p
+        assert isinstance(mix_fourier_with_tokens, bool)
+        self.mix_fourier_with_tokens = mix_fourier_with_tokens
 
-        self.fourier_layer = FastFourierTransform()
-        self.layer_norm_1 = nn.LayerNorm([in_features, ])
+        if self.mix_fourier_with_tokens:
+            self.fourier_layer = FastFourierTransform()
+            self.layer_norm_1 = nn.LayerNorm([in_features, ])
         self.feed_forward_layer = FouriEEGFeedForward(in_features=self.in_features,
                                                       mid_features=self.mid_features,
                                                       out_features=self.out_features,
@@ -155,9 +162,10 @@ class FouriEncoderBlock(nn.Module):
         self.layer_norm_2 = nn.LayerNorm([out_features, ])
 
     def forward(self, x):
-        # fourier pass
-        x_fourier = self.fourier_layer(x)
-        x = self.layer_norm_1(x + x_fourier)
+        if self.mix_fourier_with_tokens:
+            # fourier pass
+            x_fourier = self.fourier_layer(x)
+            x = self.layer_norm_1(x + x_fourier)
         # fc pass
         x_forwarded = self.feed_forward_layer(x)
         if self.in_features != self.out_features:
@@ -222,10 +230,9 @@ if __name__ == "__main__":
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
     encoder = FouriEncoder(embeddings_dim=embeddings_dim,
-                         num_encoders=2, use_masking=True,
-                         mask_perc_min=0.1, mask_perc_max=0.3)
+                           num_encoders=2, use_masking=True,
+                           mask_perc_min=0.1, mask_perc_max=0.3)
     print(encoder)
     print("input before encoder", batch["eegs"].shape)
     out = encoder(batch["eegs"])
     print("output after encoder", out.shape)
-

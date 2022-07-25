@@ -41,6 +41,7 @@ class FouriEEGTransformer(pl.LightningModule):
                  mels: int = 8,
                  mel_window_size: Union[int, float] = 1,
                  mel_window_stride: Union[int, float] = 0.05,
+                 mix_fourier_with_tokens: bool = True,
 
                  device: Optional[str] = None):
         super().__init__()
@@ -69,6 +70,8 @@ class FouriEEGTransformer(pl.LightningModule):
         assert mel_window_stride > 0
         self.mel_window_size = mel_window_size
         self.mel_window_stride = mel_window_stride
+        assert isinstance(mix_fourier_with_tokens, bool)
+        self.mix_fourier_with_tokens = mix_fourier_with_tokens
 
         # regularization
         assert isinstance(use_masking, bool)
@@ -120,7 +123,8 @@ class FouriEEGTransformer(pl.LightningModule):
         self.preprocessing = nn.Sequential(
             FouriEncoderBlock(in_features=self.in_channels,
                               mid_features=self.window_embedding_dim,
-                              out_features=self.window_embedding_dim),
+                              out_features=self.window_embedding_dim,
+                              mix_fourier_with_tokens=self.mix_fourier_with_tokens),
         )
         self.encoder = FouriEncoder(embeddings_dim=self.window_embedding_dim,
                                     num_encoders=self.num_encoders,
@@ -130,6 +134,7 @@ class FouriEEGTransformer(pl.LightningModule):
                                     mask_perc_max=self.mask_perc_max,
                                     mask_start_index=len(self.labels),
                                     add_positional_embeddings=True,
+                                    mix_fourier_with_tokens=self.mix_fourier_with_tokens,
                                     )
 
         self.classification = nn.ModuleList([
@@ -173,7 +178,6 @@ class FouriEEGTransformer(pl.LightningModule):
             x = self.merge_mels(spectrogram)  # (b s c)
 
         with profiler.record_function("transformer encoder"):
-            # x = self.preprocessing(x)
             # adds the labels for the tokens
             label_tokens = self.labels_embedder(
                 torch.as_tensor(list(range(len(self.labels))), device=x.device))
@@ -355,7 +359,8 @@ if __name__ == "__main__":
     model = FouriEEGTransformer(in_channels=32, sampling_rate=sampling_rate,
                                 labels=4, window_embedding_dim=512,
                                 num_encoders=2, use_masking=True,
-                                mask_perc_min=0.1, mask_perc_max=0.3)
+                                mask_perc_min=0.1, mask_perc_max=0.3,
+                                mix_fourier_with_tokens=True)
     model.training = True
     print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
