@@ -30,10 +30,12 @@ logging.info(f"line args:\n{pformat(args)}")
 
 # gets testing attributes
 tested_parameters = [
-    arg for arg in ["num_encoders", "window_embedding_dim", "noise_strength", "dropout_p", "masking"]
-    if args[arg] is None
+    k for k, v in args.items()
+    if k in ["test_num_encoders", "test_embeddings_dim", "test_masking", "test_noise", "test_dropout_p"]
+       and v is True
 ]
 logging.info(f"tested parameters:\n{pformat(tested_parameters)}")
+assert len(tested_parameters) > 0
 
 # sets the random seed
 set_global_seed(seed=args['seed'])
@@ -68,18 +70,20 @@ logs: pd.DataFrame = pd.DataFrame()
 def objective(trial: Trial):
     trial_args = {
         "num_encoders": trial.suggest_int("num_encoders", 1, 8),
-        "window_embedding_dim": trial.suggest_int("window_embedding_dim", -2048, 2048),
+        "embeddings_dim": trial.suggest_int("embeddings_dim", -2048, 2048),
         "dropout_p": trial.suggest_float("dropout_p", 0, 0.99),
         "noise_strength": trial.suggest_float("noise_strength", 0, 0.99),
         "masking": trial.suggest_categorical("masking", [True, False]),
     }
+    logging.info(f"started trial {trial.number} with parameters:\n{pformat(trial_args)}")
+
     model: pl.LightningModule = FouriEEGTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
 
         num_encoders=trial_args['num_encoders'],
-        window_embedding_dim=trial_args['window_embedding_dim'],
+        window_embedding_dim=trial_args['embeddings_dim'],
         use_masking=trial_args['masking'],
         dropout_p=trial_args['dropout_p'],
         noise_strength=trial_args['noise_strength'],
@@ -89,7 +93,6 @@ def objective(trial: Trial):
         mel_window_size=args['mel_window_size'],
         mel_window_stride=args['mel_window_stride']
     )
-    logging.info(f"training")
     logs = train(
         dataset_train=dataset_train,
         dataset_val=dataset_val,
@@ -105,12 +108,11 @@ def objective(trial: Trial):
 
 
 search_space = {
-    "num_encoders": list(range(1, 6 + 1)) if not args['num_encoders'] else args['num_encoders'],
-    "window_embedding_dim": [64, 128, 256, 512, 1024] if not args['window_embedding_dim'] else args[
-        'window_embedding_dim'],
-    "masking": [True, False] if args["masking"] is None else args["masking"],
-    "dropout_p": np.linspace(0, 0.9, 9) if not args['dropout_p'] else args['dropout_p'],
-    "noise_strength": np.linspace(0, 0.9, 9) if not args['noise_strength'] else args['noise_strength']
+    "num_encoders": list(range(1, 6 + 1)) if args['test_num_encoders'] else [2],
+    "embeddings_dim": [128, 256, 512] if args['test_embeddings_dim'] else [128],
+    "masking": [True, False] if args['test_masking'] else [True],
+    "dropout_p": np.linspace(0, 0.9, 4) if args['test_dropout_p'] else [0.2],
+    "noise_strength": np.linspace(0, 0.9, 4) if args['test_noise'] else [0.1]
 }
 study = optuna.create_study(sampler=optuna.samplers.GridSampler(search_space),
                             direction="maximize")
@@ -120,5 +122,10 @@ study.optimize(objective)
 del dataset
 gc.collect()
 
-# parses the logs into a single dataframe
+# saves the best combination of parameters
+trials_df = pd.DataFrame([
+    {**trial.params, "acc_mean_val": trial.value} for trial in study.trials
+]).sort_values(by="acc_mean_val", ascending=False)
+print(trials_df)
+save_to_json(study.best_trial.params, path=join(experiment_path, "best_parameters.json"))
 # logs = merge_logs(experiment_path, setting=args['setting'])

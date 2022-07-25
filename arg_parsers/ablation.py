@@ -52,30 +52,24 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=1000,
                         type=int,
                         help="Maximum number of epochs")
-    parser.add_argument("--benchmark",
+
+    # tunable parameters
+    parser.add_argument("--test_num_encoders",
                         default=False,
-                        action="store_true",
-                        help="Whether to test a single training")
+                        action="store_true")
+    parser.add_argument("--test_embeddings_dim",
+                        default=False,
+                        action="store_true")
+    parser.add_argument("--test_dropout_p",
+                        default=False,
+                        action="store_true")
+    parser.add_argument("--test_noise",
+                        default=False,
+                        action="store_true")
+    parser.add_argument("--test_masking",
+                        default=False,
+                        action="store_true")
 
-    # model args
-    parser.add_argument("--num_encoders",
-                        default=None,
-                        type=int,
-                        help="Number of encoders in FEEGT")
-    parser.add_argument("--window_embedding_dim",
-                        default=None,
-                        type=int,
-                        help="Dimension of the internal windows embedding in FEEGT")
-
-    # regularization
-    parser.add_argument("--dropout_p",
-                        default=None,
-                        type=float,
-                        help="The amount of dropout to use")
-    parser.add_argument("--noise_strength",
-                        default=None,
-                        type=float,
-                        help="The amount of gaussian noise to add to the eegs")
     parser.add_argument("--gradient_clipping",
                         default=False,
                         action="store_true",
@@ -84,16 +78,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=False,
                         action="store_true",
                         help="Whether to use the SWA algorithm")
-    parser.add_argument("--masking",
-                        default=None,
-                        choices={None, "true", "True", "false", "False"},
-                        type=str,
-                        help="Whether not to mask a percentage of embeddings during training of FEEGT")
     parser.add_argument("--learning_rate",
-                        default=1e-4,
+                        default=0.0002,
                         type=float,
                         help="Learning rate of the model")
-
     parser.add_argument("--mels",
                         default=8,
                         type=int,
@@ -123,13 +111,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     if args.seed is None:
         args.seed = random.randint(0, 1000000)
 
-    assert not args.num_encoders or args.num_encoders >= 1
-    assert not args.window_embedding_dim or args.window_embedding_dim >= 1
-    if args.masking is not None:
-        args.masking = True if args.masking in {"true", "True"} else False
-    assert not args.dropout_p or 0 <= args.dropout_p < 1
-    assert not args.noise_strength or args.noise_strength >= 0
     assert args.learning_rate > 0
     assert args.mels > 0
+    assert any([v for v in [args.test_num_encoders, args.test_embeddings_dim, args.test_masking,
+                            args.test_noise, args.test_dropout_p]]), \
+        f"you need to specify at least one parameter to analyze"
 
     return vars(args)

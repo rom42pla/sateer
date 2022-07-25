@@ -82,7 +82,7 @@ def merge_logs(experiment_path: str,
 
 def init_callbacks(swa: bool = False) -> List[Callback]:
     callbacks: List[Callback] = [
-        EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-4, patience=10,
+        EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-3, patience=5,
                       verbose=False, check_on_train_epoch_end=False, strict=True),
         RichProgressBar(
             theme=RichProgressBarTheme(
