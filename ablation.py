@@ -103,13 +103,13 @@ def objective(trial: Trial):
             trial.suggest_categorical("mix_fourier_with_tokens", [True, False])
             if args['test_mix_fourier'] else defaults['mix_fourier_with_tokens'],
         "mels":
-            trial.suggest_int("mels", 1, 16)
+            trial.suggest_categorical("mels", [4, 8, 12, 16])
             if args['test_mels'] else defaults['mels'],
         "mel_window_size":
             trial.suggest_float("mel_window_size", 0.1, 1)
             if args['test_mel_window_size'] else defaults['mel_window_size'],
         "mel_window_stride":
-            trial.suggest_float("mel_window_stride", 0.1, 1)
+            trial.suggest_float("mel_window_stride", 0.05, 0.5)
             if args['test_mel_window_stride'] else defaults['mel_window_stride'],
     }
     logging.info(f"started trial {trial.number} with parameters:\n{pformat(trial_args)}")
