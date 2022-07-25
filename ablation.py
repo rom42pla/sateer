@@ -67,20 +67,50 @@ shuffled_indices = torch.randperm(len(dataset))
 dataset_train = Subset(dataset, shuffled_indices[:int(len(dataset) * args['train_set_size'])])
 dataset_val = Subset(dataset, shuffled_indices[int(len(dataset) * args['train_set_size']):])
 
+defaults = {
+    "num_encoders": 1,
+    "embeddings_dim": 128,
+    "masking": True,
+    "dropout_p": 0.25,
+    "noise_strength": 0.1,
+    "mix_fourier_with_tokens": True,
+    "mels": 8,
+    "mel_window_size": 1,
+    "mel_window_stride": 0.1,
+}
+
 
 def objective(trial: Trial):
     gc.collect()
 
     trial_args = {
-        "num_encoders": trial.suggest_int("num_encoders", 1, 8),
-        "embeddings_dim": trial.suggest_categorical("embeddings_dim", [128, 256, 512]),
-        "dropout_p": trial.suggest_float("dropout_p", 0, 0.99),
-        "noise_strength": trial.suggest_float("noise_strength", 0, 0.99),
-        "masking": trial.suggest_categorical("masking", [True, False]),
-        "mix_fourier_with_tokens": trial.suggest_categorical("mix_fourier_with_tokens", [True, False]),
-        "mels": trial.suggest_int("mels", 1, 16),
-        "mel_window_size": trial.suggest_float("mel_window_size", 0.1, 1),
-        "mel_window_stride": trial.suggest_float("mel_window_stride", 0.1, 1),
+        "num_encoders":
+            trial.suggest_int("num_encoders", 1, 8)
+            if args['test_num_encoders'] else defaults['num_encoders'],
+        "embeddings_dim":
+            trial.suggest_categorical("embeddings_dim", [128, 256, 512])
+            if args['test_embeddings_dim'] else defaults['embeddings_dim'],
+        "masking":
+            trial.suggest_categorical("masking", [True, False])
+            if args['test_masking'] else defaults['masking'],
+        "dropout_p":
+            trial.suggest_float("dropout_p", 0, 0.99)
+            if args['test_dropout_p'] else defaults['dropout_p'],
+        "noise_strength":
+            trial.suggest_float("noise_strength", 0, 0.99)
+            if args['test_noise'] else defaults['noise_strength'],
+        "mix_fourier_with_tokens":
+            trial.suggest_categorical("mix_fourier_with_tokens", [True, False])
+            if args['test_mix_fourier'] else defaults['mix_fourier_with_tokens'],
+        "mels":
+            trial.suggest_int("mels", 1, 16)
+            if args['test_mels'] else defaults['mels'],
+        "mel_window_size":
+            trial.suggest_float("mel_window_size", 0.1, 1)
+            if args['test_mel_window_size'] else defaults['mel_window_size'],
+        "mel_window_stride":
+            trial.suggest_float("mel_window_stride", 0.1, 1)
+            if args['test_mel_window_stride'] else defaults['mel_window_stride'],
     }
     logging.info(f"started trial {trial.number} with parameters:\n{pformat(trial_args)}")
 
