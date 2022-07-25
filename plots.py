@@ -8,6 +8,7 @@ from typing import Union, Dict, Any, Optional, List
 import json
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 
 
 def plot_metrics(logs: pd.DataFrame,
@@ -73,6 +74,7 @@ def plot_ablation(logs: pd.DataFrame,
         ax.set_xlabel(parameter)
         ax.set_ylabel("accuracy")
         ax.set_ylim(0.4, 1)
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
         ax.grid(axis="y")
         if experiment_path is not None:
             plt.savefig(join(experiment_path, "plots", f"{parameter}.png"))
