@@ -11,6 +11,7 @@ import optuna
 import pandas as pd
 import torch
 from optuna import Trial
+from optuna.samplers import TPESampler
 
 from torch.utils.data import Subset
 import pytorch_lightning as pl
@@ -72,7 +73,7 @@ def objective(trial: Trial):
 
     trial_args = {
         "num_encoders": trial.suggest_int("num_encoders", 1, 8),
-        "embeddings_dim": trial.suggest_int("embeddings_dim", -2048, 2048),
+        "embeddings_dim": trial.suggest_categorical("embeddings_dim", [128, 256, 512]),
         "dropout_p": trial.suggest_float("dropout_p", 0, 0.99),
         "noise_strength": trial.suggest_float("noise_strength", 0, 0.99),
         "masking": trial.suggest_categorical("masking", [True, False]),
@@ -114,20 +115,29 @@ def objective(trial: Trial):
     return best_accuracy
 
 
-search_space = {
-    "num_encoders": [1, 2, 4, 6] if args['test_num_encoders'] else [1],
-    "embeddings_dim": [128, 256, 512] if args['test_embeddings_dim'] else [128],
-    "masking": [True, False] if args['test_masking'] else [True],
-    "dropout_p": [0, 0.1, 0.25, 0.5] if args['test_dropout_p'] else [0.25],
-    "noise_strength": [0, 0.1, 0.25] if args['test_noise'] else [0.1],
-    "mix_fourier_with_tokens": [True, False] if args['test_mix_fourier'] else [True],
-    "mels": [4, 8, 16] if args['test_mels'] else [8],
-    "mel_window_size": [0.1, 0.25, 0.5, 1] if args['test_mel_window_size'] else [1],
-    "mel_window_stride": [0.1, 0.25, 0.5, 1] if args['test_mel_window_stride'] else [0.1],
-}
-study = optuna.create_study(sampler=optuna.samplers.GridSampler(search_space),
-                            direction="maximize")
-study.optimize(objective)
+if args['grid_search'] is True:
+    search_space = {
+        "num_encoders": [1, 2, 4, 6] if args['test_num_encoders'] else [1],
+        "embeddings_dim": [128, 256, 512] if args['test_embeddings_dim'] else [128],
+        "masking": [True, False] if args['test_masking'] else [True],
+        "dropout_p": [0, 0.1, 0.25, 0.5] if args['test_dropout_p'] else [0.25],
+        "noise_strength": [0, 0.1, 0.25] if args['test_noise'] else [0.1],
+        "mix_fourier_with_tokens": [True, False] if args['test_mix_fourier'] else [True],
+        "mels": [4, 8, 16] if args['test_mels'] else [8],
+        "mel_window_size": [0.1, 0.25, 0.5, 1] if args['test_mel_window_size'] else [1],
+        "mel_window_stride": [0.1, 0.25, 0.5, 1] if args['test_mel_window_stride'] else [0.1],
+    }
+    study = optuna.create_study(
+        sampler=optuna.samplers.GridSampler(search_space),
+        direction="maximize"
+    )
+    study.optimize(objective)
+else:
+    study = optuna.create_study(
+        sampler=TPESampler(),
+        direction="maximize"
+    )
+    study.optimize(objective, n_trials=20)
 
 # frees some memory
 del dataset

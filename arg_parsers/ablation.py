@@ -38,6 +38,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=0.8,
                         type=float,
                         help="The size of the training set, in percentage")
+    parser.add_argument("--grid_search",
+                        default=False,
+                        action="store_true",
+                        help="Whether to test all possible combinations or a fixed amount of trials")
 
     # training args
     parser.add_argument("--batch_size",
