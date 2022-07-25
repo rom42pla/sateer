@@ -1,3 +1,4 @@
+import gc
 import math
 from collections import OrderedDict
 from typing import Union, List, Optional, Dict
@@ -76,6 +77,8 @@ class FouriEEGTransformer(pl.LightningModule):
             assert isinstance(mask_perc_min, float) and 0 <= mask_perc_min < 1
             assert isinstance(mask_perc_max, float) and 0 <= mask_perc_max < 1 and mask_perc_max >= mask_perc_min
             self.mask_perc_max, self.mask_perc_min = mask_perc_max, mask_perc_min
+        else:
+            self.mask_perc_max, self.mask_perc_min = None, None
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p
         assert noise_strength >= 0
@@ -216,9 +219,13 @@ class FouriEEGTransformer(pl.LightningModule):
 
     def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
         self.log_stats(outputs)
+        del outputs
+        gc.collect()
 
     def validation_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
         self.log_stats(outputs)
+        del outputs
+        gc.collect()
 
     def log_stats(self, outputs: List[Dict[str, torch.Tensor]]):
         # name of the current phase

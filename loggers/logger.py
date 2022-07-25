@@ -65,7 +65,7 @@ class FouriEEGTransformerLogger(LightningLoggerBase):
 
     @rank_zero_only
     def finalize(self, status):
-        if not self.logs_df.empty:
+        if not self.logs_df.empty and self.path is not None:
             # saves the logs
             self.logs_df.to_csv(join(self.path, "logs.csv"))
             # plots the data

@@ -7,7 +7,7 @@ import re
 import warnings
 from copy import deepcopy
 from os.path import join, isdir, exists
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Optional
 
 import numpy as np
 import pandas as pd
@@ -133,8 +133,6 @@ def train_k_fold(
            and {i for f in folds_indices for i in f} == set(range(len(dataset)))
     # loops over folds
     for i_fold in range(k_folds):
-        # frees some memory
-        gc.collect()
         # makes a fresh copy of the base model
         model = deepcopy(base_model)
         # retrieves training and validation sets
@@ -142,23 +140,24 @@ def train_k_fold(
                                     for fold_no, fold in enumerate(folds_indices)
                                     for i in fold
                                     if fold_no != i_fold]
-        test_indices: List[int] = [i
-                                   for fold_no, fold in enumerate(folds_indices)
-                                   for i in fold
-                                   if fold_no == i_fold]
-        assert set(train_indices).isdisjoint(set(test_indices))
-        assert set(train_indices).union(set(test_indices)) == {i
-                                                               for f in folds_indices
-                                                               for i in f}
+        val_indices: List[int] = [i
+                                  for fold_no, fold in enumerate(folds_indices)
+                                  for i in fold
+                                  if fold_no == i_fold]
+        assert set(train_indices).isdisjoint(set(val_indices))
+        assert set(train_indices).union(set(val_indices)) == {i
+                                                              for f in folds_indices
+                                                              for i in f}
         # builds the dataloaders
         dataloader_train: DataLoader = DataLoader(Subset(dataset, train_indices),
                                                   batch_size=batch_size, shuffle=True,
                                                   num_workers=os.cpu_count() - 1,
                                                   pin_memory=True if torch.cuda.is_available() else False)
-        dataloader_val: DataLoader = DataLoader(Subset(dataset, test_indices),
+        dataloader_val: DataLoader = DataLoader(Subset(dataset, val_indices),
                                                 batch_size=batch_size, shuffle=False,
                                                 num_workers=os.cpu_count() - 1,
                                                 pin_memory=True if torch.cuda.is_available() else False)
+        del train_indices, val_indices
         logging.info(f"fold {i_fold + 1} of {k_folds}, "
                      f"|dataloader_train| = {len(dataloader_train)}, "
                      f"|dataloader_val| = {len(dataloader_val)}")
@@ -197,7 +196,76 @@ def train_k_fold(
         fold_logs["fold"] = i_fold
         logs = pd.concat([logs, fold_logs], ignore_index=True)
         # frees some memory
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         del trainer, model, dataloader_train, dataloader_val
+        gc.collect()
         if benchmark:
             break
+    return logs
+
+
+def train(
+        dataset_train: Dataset,
+        dataset_val: Dataset,
+        model: pl.LightningModule,
+        experiment_path: str,
+        batch_size: int = 64,
+        max_epochs: int = 1000,
+        precision: int = 32,
+        auto_lr_finder: bool = False,
+        gradient_clipping: bool = False,
+        stochastic_weight_average: bool = False,
+        **kwargs,
+) -> pd.DataFrame:
+    initial_weights = deepcopy(model.state_dict().__str__())
+    # initialize the logs
+    logs: pd.DataFrame = pd.DataFrame()
+
+    dataloader_train: DataLoader = DataLoader(dataset_train,
+                                              batch_size=batch_size, shuffle=True,
+                                              num_workers=os.cpu_count() - 1,
+                                              pin_memory=True if torch.cuda.is_available() else False)
+    dataloader_val: DataLoader = DataLoader(dataset_val,
+                                            batch_size=batch_size, shuffle=False,
+                                            num_workers=os.cpu_count() - 1,
+                                            pin_memory=True if torch.cuda.is_available() else False)
+
+    # frees some memory
+    gc.collect()
+
+    # initializes the trainer
+    trainer = pl.Trainer(
+        gpus=1 if torch.cuda.is_available() else 0,
+        precision=precision,
+        max_epochs=max_epochs,
+        check_val_every_n_epoch=1,
+        logger=FouriEEGTransformerLogger(path=experiment_path,
+                                         plot=False),
+        log_every_n_steps=1,
+        enable_progress_bar=True,
+        enable_model_summary=False,
+        enable_checkpointing=False,
+        gradient_clip_val=1 if gradient_clipping else 0,
+        auto_lr_find=auto_lr_finder,
+        callbacks=init_callbacks(swa=stochastic_weight_average),
+        limit_train_batches=0.1,
+    )
+    # eventually selects a starting learning rate
+    if auto_lr_finder is True:
+        trainer.tune(model,
+                     train_dataloaders=dataloader_train,
+                     val_dataloaders=dataloader_val)
+        logging.info(f"learning rate has been set to {model.learning_rate}")
+    # trains the model
+    trainer.fit(model,
+                train_dataloaders=dataloader_train,
+                val_dataloaders=dataloader_val)
+    assert not trainer.logger.logs.empty
+    assert initial_weights != model.state_dict().__str__(), \
+        f"model not updating"
+    logs = deepcopy(trainer.logger.logs)
+    # frees some memory
+    del trainer, \
+        dataloader_train, dataloader_val
     return logs

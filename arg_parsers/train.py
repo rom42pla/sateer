@@ -2,10 +2,10 @@ import argparse
 import random
 from os import makedirs
 from os.path import isdir
-from typing import Optional, Dict, Union
+from typing import Dict, Union
 
 
-def get_training_args() -> Dict[str, Union[bool, str, int, float]]:
+def get_args() -> Dict[str, Union[bool, str, int, float]]:
     parser = argparse.ArgumentParser()
 
     # dataset args
@@ -161,18 +161,5 @@ def get_training_args() -> Dict[str, Union[bool, str, int, float]]:
     assert args.noise_strength >= 0
     assert args.learning_rate > 0
     assert args.mels > 0
-
-    return vars(args)
-
-def get_results_args() -> Dict[str, Union[bool, str, int, float]]:
-    parser = argparse.ArgumentParser()
-
-    # dataset args
-    parser.add_argument("experiment_path",
-                        type=str,
-                        help="The folder of the experiment")
-    args = parser.parse_args()
-
-    assert isdir(args.experiment_path)
 
     return vars(args)

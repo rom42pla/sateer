@@ -1,19 +1,12 @@
-import json
-import re
-from os import listdir, makedirs
-from os.path import join, exists, isdir
+from os.path import join
 from typing import Union, Dict, Any
-
-import pandas as pd
 import json
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-from arg_parsers import get_results_args
+from arg_parsers.results import get_args
 from plots import plot_metrics
 from utils import merge_logs
 
-args: Dict[str, Union[str]] = get_results_args()
+args: Dict[str, Union[str]] = get_args()
 
 # parses line arguments for the training
 with open(join(args["experiment_path"], "line_args.json"), "r") as fp:

@@ -1,19 +1,17 @@
 import gc
 import logging
-import os
-import re
 from datetime import datetime
 from os import makedirs
-from os.path import join, exists, isdir
+from os.path import join
 from pprint import pformat
 from typing import Union, Dict
 
 import pandas as pd
 
-import pytorch_lightning as pl
 from torch.utils.data import Subset
+import pytorch_lightning as pl
 
-from arg_parsers import get_training_args
+from arg_parsers.train import get_args
 from plots import plot_metrics
 from utils import parse_dataset_class, set_global_seed, save_dict, init_logger, train_k_fold, merge_logs
 from datasets.eeg_emrec import EEGClassificationDataset
@@ -23,7 +21,7 @@ from models.feegt import FouriEEGTransformer
 init_logger()
 
 # retrieves line arguments
-args: Dict[str, Union[bool, str, int, float]] = get_training_args()
+args: Dict[str, Union[bool, str, int, float]] = get_args()
 logging.info(f"line args:\n{pformat(args)}")
 
 # sets the random seed

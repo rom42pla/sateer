@@ -46,6 +46,9 @@ class FouriEncoder(nn.Module):
             self.mask_perc_max, self.mask_perc_min = mask_perc_max, mask_perc_min
             assert isinstance(mask_start_index, int) and mask_start_index >= 0
             self.mask_start_index = mask_start_index
+        else:
+            self.mask_perc_max, self.mask_perc_min = None, None
+            self.mask_start_index = 0
 
         # special tokens dict
         self.special_tokens = {
