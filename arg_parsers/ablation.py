@@ -16,6 +16,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     parser.add_argument("dataset_path",
                         type=str,
                         help="Path to dataset's directory")
+    parser.add_argument("--study_name",
+                        default="unnamed",
+                        type=str,
+                        help="The name of the study")
     parser.add_argument("--windows_size",
                         default=None,
                         type=float,

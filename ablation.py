@@ -46,7 +46,7 @@ set_global_seed(seed=args['seed'])
 
 # sets the logging folder
 datetime_str: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-experiment_name: str = f"{datetime_str}_{args['dataset_type']}"
+experiment_name: str = f"{datetime_str}_{args['dataset_type']}_{args['study_name']}"
 experiment_path: str = join(args['checkpoints_path'], "ablation", experiment_name)
 makedirs(experiment_path)
 
