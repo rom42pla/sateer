@@ -2,7 +2,7 @@ import argparse
 import random
 from os import makedirs
 from os.path import isdir
-from typing import Dict, Union, Optional
+from typing import Dict, Union
 
 
 def get_args() -> Dict[str, Union[bool, str, int, float]]:
@@ -60,21 +60,21 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     # model args
     parser.add_argument("--num_encoders",
                         default=None,
-                        type=Optional[int],
+                        type=int,
                         help="Number of encoders in FEEGT")
     parser.add_argument("--window_embedding_dim",
                         default=None,
-                        type=Optional[int],
+                        type=int,
                         help="Dimension of the internal windows embedding in FEEGT")
 
     # regularization
     parser.add_argument("--dropout_p",
                         default=None,
-                        type=Optional[float],
+                        type=float,
                         help="The amount of dropout to use")
     parser.add_argument("--noise_strength",
                         default=None,
-                        type=Optional[float],
+                        type=float,
                         help="The amount of gaussian noise to add to the eegs")
     parser.add_argument("--gradient_clipping",
                         default=False,

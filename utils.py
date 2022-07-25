@@ -104,9 +104,9 @@ def init_callbacks(swa: bool = False) -> List[Callback]:
     return callbacks
 
 
-def save_dict(dictionary: Dict[Any, Any], path: str) -> None:
+def save_to_json(object: Any, path: str) -> None:
     with open(path, 'w') as fp:
-        json.dump(dictionary, fp, indent=4)
+        json.dump(object, fp, indent=4)
 
 
 def train_k_fold(
@@ -219,8 +219,6 @@ def train(
         **kwargs,
 ) -> pd.DataFrame:
     initial_weights = deepcopy(model.state_dict().__str__())
-    # initialize the logs
-    logs: pd.DataFrame = pd.DataFrame()
 
     dataloader_train: DataLoader = DataLoader(dataset_train,
                                               batch_size=batch_size, shuffle=True,
@@ -264,7 +262,7 @@ def train(
     assert not trainer.logger.logs.empty
     assert initial_weights != model.state_dict().__str__(), \
         f"model not updating"
-    logs = deepcopy(trainer.logger.logs)
+    logs: pd.DataFrame = deepcopy(trainer.logger.logs)
     # frees some memory
     del trainer, \
         dataloader_train, dataloader_val

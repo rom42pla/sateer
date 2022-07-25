@@ -13,7 +13,7 @@ import pytorch_lightning as pl
 
 from arg_parsers.train import get_args
 from plots import plot_metrics
-from utils import parse_dataset_class, set_global_seed, save_dict, init_logger, train_k_fold, merge_logs
+from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train_k_fold, merge_logs
 from datasets.eeg_emrec import EEGClassificationDataset
 from models.feegt import FouriEEGTransformer
 
@@ -34,7 +34,7 @@ experiment_path: str = join(args['checkpoints_path'], experiment_name)
 makedirs(experiment_path)
 
 # saves the line arguments
-save_dict(dictionary=args, path=join(experiment_path, "line_args.json"))
+save_to_json(args, path=join(experiment_path, "line_args.json"))
 
 # sets up the dataset
 dataset_class = parse_dataset_class(name=args["dataset_type"])

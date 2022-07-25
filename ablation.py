@@ -4,7 +4,7 @@ from datetime import datetime
 from os import makedirs
 from os.path import join
 from pprint import pformat
-from typing import Union, Dict
+from typing import Union, Dict, Iterable
 
 import numpy as np
 import optuna
@@ -17,7 +17,7 @@ import pytorch_lightning as pl
 
 from arg_parsers.ablation import get_args
 from plots import plot_metrics
-from utils import parse_dataset_class, set_global_seed, save_dict, init_logger, train
+from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train
 from datasets.eeg_emrec import EEGClassificationDataset
 from models.feegt import FouriEEGTransformer
 
@@ -27,6 +27,13 @@ init_logger()
 # retrieves line arguments
 args: Dict[str, Union[bool, str, int, float]] = get_args()
 logging.info(f"line args:\n{pformat(args)}")
+
+# gets testing attributes
+tested_parameters = [
+    arg for arg in ["num_encoders", "window_embedding_dim", "noise_strength", "dropout_p", "masking"]
+    if args[arg] is None
+]
+logging.info(f"tested parameters:\n{pformat(tested_parameters)}")
 
 # sets the random seed
 set_global_seed(seed=args['seed'])
@@ -38,7 +45,8 @@ experiment_path: str = join(args['checkpoints_path'], "ablation", experiment_nam
 makedirs(experiment_path)
 
 # saves the line arguments
-save_dict(dictionary=args, path=join(experiment_path, "line_args.json"))
+save_to_json(args, path=join(experiment_path, "line_args.json"))
+save_to_json(tested_parameters, path=join(experiment_path, "tested_args.json"))
 
 # sets up the dataset
 dataset_class = parse_dataset_class(name=args["dataset_type"])
@@ -63,7 +71,7 @@ def objective(trial: Trial):
         "window_embedding_dim": trial.suggest_int("window_embedding_dim", -2048, 2048),
         "dropout_p": trial.suggest_float("dropout_p", 0, 0.99),
         "noise_strength": trial.suggest_float("noise_strength", 0, 0.99),
-        "use_masking": trial.suggest_categorical("use_masking", [True, False]),
+        "masking": trial.suggest_categorical("masking", [True, False]),
     }
     model: pl.LightningModule = FouriEEGTransformer(
         in_channels=len(dataset.electrodes),
@@ -72,7 +80,7 @@ def objective(trial: Trial):
 
         num_encoders=trial_args['num_encoders'],
         window_embedding_dim=trial_args['window_embedding_dim'],
-        use_masking=trial_args['use_masking'],
+        use_masking=trial_args['masking'],
         dropout_p=trial_args['dropout_p'],
         noise_strength=trial_args['noise_strength'],
 
@@ -100,7 +108,7 @@ search_space = {
     "num_encoders": list(range(1, 6 + 1)) if not args['num_encoders'] else args['num_encoders'],
     "window_embedding_dim": [64, 128, 256, 512, 1024] if not args['window_embedding_dim'] else args[
         'window_embedding_dim'],
-    "use_masking": [True, False] if args["masking"] is None else args["masking"],
+    "masking": [True, False] if args["masking"] is None else args["masking"],
     "dropout_p": np.linspace(0, 0.9, 9) if not args['dropout_p'] else args['dropout_p'],
     "noise_strength": np.linspace(0, 0.9, 9) if not args['noise_strength'] else args['noise_strength']
 }
