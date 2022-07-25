@@ -115,13 +115,13 @@ def objective(trial: Trial):
 
 
 search_space = {
-    "num_encoders": list(range(1, 6 + 1)) if args['test_num_encoders'] else [1],
+    "num_encoders": [1, 2, 4, 6] if args['test_num_encoders'] else [1],
     "embeddings_dim": [128, 256, 512] if args['test_embeddings_dim'] else [128],
     "masking": [True, False] if args['test_masking'] else [True],
     "dropout_p": [0, 0.1, 0.25, 0.5] if args['test_dropout_p'] else [0.25],
     "noise_strength": [0, 0.1, 0.25] if args['test_noise'] else [0.1],
     "mix_fourier_with_tokens": [True, False] if args['test_mix_fourier'] else [True],
-    "mels": [4, 8, 12, 16] if args['test_mels'] else [8],
+    "mels": [4, 8, 16] if args['test_mels'] else [8],
     "mel_window_size": [0.1, 0.25, 0.5, 1] if args['test_mel_window_size'] else [1],
     "mel_window_stride": [0.1, 0.25, 0.5, 1] if args['test_mel_window_stride'] else [0.1],
 }
