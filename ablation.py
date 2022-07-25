@@ -16,7 +16,7 @@ from torch.utils.data import Subset
 import pytorch_lightning as pl
 
 from arg_parsers.ablation import get_args
-from plots import plot_metrics
+from plots import plot_metrics, plot_ablation
 from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train
 from datasets.eeg_emrec import EEGClassificationDataset
 from models.feegt import FouriEEGTransformer
@@ -63,11 +63,10 @@ shuffled_indices = torch.randperm(len(dataset))
 dataset_train = Subset(dataset, shuffled_indices[:int(len(dataset) * args['train_set_size'])])
 dataset_val = Subset(dataset, shuffled_indices[int(len(dataset) * args['train_set_size']):])
 
-# sets up the structures needed for the experiment
-logs: pd.DataFrame = pd.DataFrame()
-
 
 def objective(trial: Trial):
+    gc.collect()
+
     trial_args = {
         "num_encoders": trial.suggest_int("num_encoders", 1, 8),
         "embeddings_dim": trial.suggest_int("embeddings_dim", -2048, 2048),
@@ -103,15 +102,16 @@ def objective(trial: Trial):
     for k, v in trial_args.items():
         logs[k] = v
     logs.to_csv(join(experiment_path, f"trial_{trial.number}", "logs.csv"))
-    best_accuracy = logs.min()["acc_mean_val"]
+    best_accuracy = logs.max()["acc_mean_val"]
+    del logs
     return best_accuracy
 
 
 search_space = {
-    "num_encoders": list(range(1, 6 + 1)) if args['test_num_encoders'] else [2],
+    "num_encoders": list(range(1, 6 + 1)) if args['test_num_encoders'] else [1],
     "embeddings_dim": [128, 256, 512] if args['test_embeddings_dim'] else [128],
     "masking": [True, False] if args['test_masking'] else [True],
-    "dropout_p": np.linspace(0, 0.9, 4) if args['test_dropout_p'] else [0.2],
+    "dropout_p": np.linspace(0, 0.9, 4) if args['test_dropout_p'] else [0.25],
     "noise_strength": np.linspace(0, 0.9, 4) if args['test_noise'] else [0.1]
 }
 study = optuna.create_study(sampler=optuna.samplers.GridSampler(search_space),
@@ -123,9 +123,9 @@ del dataset
 gc.collect()
 
 # saves the best combination of parameters
-trials_df = pd.DataFrame([
+logs = pd.DataFrame([
     {**trial.params, "acc_mean_val": trial.value} for trial in study.trials
 ]).sort_values(by="acc_mean_val", ascending=False)
-print(trials_df)
-save_to_json(study.best_trial.params, path=join(experiment_path, "best_parameters.json"))
-# logs = merge_logs(experiment_path, setting=args['setting'])
+logs.to_csv(join(experiment_path, "results.csv"), index=False)
+plot_ablation(logs=logs,
+              experiment_path=experiment_path)

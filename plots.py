@@ -54,3 +54,36 @@ def plot_metrics(logs: pd.DataFrame,
             makedirs(join(experiment_path, "plots"))
         plt.savefig(join(experiment_path, "plots", f"{y_label}.png"))
     plt.show()
+
+
+def plot_ablation(logs: pd.DataFrame,
+                  experiment_path: Optional[str] = None):
+    tested_parameters = [c for c in logs.columns
+                         if c != "acc_mean_val"
+                         and len(logs[c].unique()) > 1]
+    if experiment_path is not None:
+        if not isdir(join(experiment_path, "plots")):
+            makedirs(join(experiment_path, "plots"))
+    for parameter in tested_parameters:
+        fig, ax = plt.subplots(nrows=1, ncols=1,
+                               figsize=(5, 5),
+                               tight_layout=True)
+        sns.barplot(data=logs, x=parameter, y="acc_mean_val",
+                    ax=ax, palette="rocket")
+        ax.set_xlabel(parameter)
+        ax.set_ylabel("accuracy")
+        ax.set_ylim(0.4, 1)
+        ax.grid(axis="y")
+        if experiment_path is not None:
+            plt.savefig(join(experiment_path, "plots", f"{parameter}.png"))
+        plt.show()
+
+
+# import pandas as pd
+#
+# df = pd.read_csv(
+#     "/home/rom42pla/repos/eeg_deep_emotion_recognition/checkpoints/ablation/20220725_174638_dreamer/results.csv").iloc[
+#      :, 1:]
+# print(df)
+# plot_ablation(logs=df,
+#               experiment_path="/home/rom42pla/repos/eeg_deep_emotion_recognition/checkpoints/ablation/20220725_174638_dreamer/")

@@ -246,8 +246,7 @@ def train(
         enable_checkpointing=False,
         gradient_clip_val=1 if gradient_clipping else 0,
         auto_lr_find=auto_lr_finder,
-        callbacks=init_callbacks(swa=stochastic_weight_average),
-        limit_train_batches=0.1,
+        callbacks=init_callbacks(swa=stochastic_weight_average)
     )
     # eventually selects a starting learning rate
     if auto_lr_finder is True:

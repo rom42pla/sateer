@@ -43,7 +43,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     parser.add_argument("--batch_size",
                         default=64,
                         type=int,
-                        help="Type of validation algorithm ('kfold' or 'loso')")
+                        help="Number of samples per batch")
     parser.add_argument("--min_epochs",
                         default=1,
                         type=int,
@@ -91,7 +91,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=float,
                         help="Size of spectrogram's windows")
     parser.add_argument("--mel_window_stride",
-                        default=0.05,
+                        default=0.1,
                         type=float,
                         help="Size of spectrogram's windows stride")
 
