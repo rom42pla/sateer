@@ -18,7 +18,7 @@ import torch.autograd.profiler as profiler
 from torch.profiler import profile, ProfilerActivity
 from torchaudio import transforms
 
-from models.fourinet import FouriEncoder, FouriEncoderBlock
+from models.fourinet import FouriEncoder, FouriEncoderBlock, FouriDecoder
 
 
 class FouriEEGTransformer(pl.LightningModule):
@@ -29,6 +29,7 @@ class FouriEEGTransformer(pl.LightningModule):
 
                  window_embedding_dim: int = 512,
                  num_encoders: int = 1,
+                 num_decoders: int = 1,
                  dropout_p: Union[int, float] = 0.2,
                  noise_strength: Union[int, float] = 0,
 
@@ -89,7 +90,9 @@ class FouriEEGTransformer(pl.LightningModule):
 
         # model architecture
         assert isinstance(num_encoders, int) and num_encoders >= 1
-        self.num_encoders = num_encoders
+        self.num_encoders: int = num_encoders
+        assert isinstance(num_decoders, int) and num_decoders >= 1
+        self.num_decoders = num_decoders
         assert isinstance(window_embedding_dim, int) and window_embedding_dim >= 1
         self.window_embedding_dim = window_embedding_dim
 
@@ -136,6 +139,16 @@ class FouriEEGTransformer(pl.LightningModule):
                                     add_positional_embeddings=True,
                                     mix_fourier_with_tokens=self.mix_fourier_with_tokens,
                                     )
+        self.decoder = FouriDecoder(embeddings_dim=self.window_embedding_dim,
+                                    num_decoders=self.num_decoders,
+                                    dropout_p=self.dropout_p,
+                                    use_masking=self.use_masking,
+                                    mask_perc_min=self.mask_perc_min,
+                                    mask_perc_max=self.mask_perc_max,
+                                    mask_start_index=0,
+                                    add_positional_embeddings=False,
+                                    mix_fourier_with_tokens=self.mix_fourier_with_tokens,
+                                    )
 
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
@@ -178,15 +191,17 @@ class FouriEEGTransformer(pl.LightningModule):
             x = self.merge_mels(spectrogram)  # (b s c)
 
         with profiler.record_function("transformer encoder"):
+            x_encoded = self.encoder(x)
+
+        with profiler.record_function("transformer decoder"):
             # adds the labels for the tokens
             label_tokens = self.labels_embedder(
-                torch.as_tensor(list(range(len(self.labels))), device=x.device))
-            x = torch.cat([label_tokens.repeat(x.shape[0], 1, 1),
-                           x], dim=1)
-            x = self.encoder(x)
+                torch.as_tensor(list(range(len(self.labels))),
+                                device=x.device)).repeat(x_encoded.shape[0], 1, 1)
+            x_decoded = self.decoder(x_encoder=x_encoded, x_decoder=label_tokens)
 
         with profiler.record_function("predictions"):
-            labels_pred = torch.stack([net(x[:, i_label, :])
+            labels_pred = torch.stack([net(x_decoded[:, i_label, :])
                                        for i_label, net in enumerate(self.classification)],
                                       dim=1)  # (b l d)
             assert labels_pred.shape[1] == len(self.labels)
