@@ -65,6 +65,9 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     parser.add_argument("--test_num_encoders",
                         default=False,
                         action="store_true")
+    parser.add_argument("--test_num_decoders",
+                        default=False,
+                        action="store_true")
     parser.add_argument("--test_embeddings_dim",
                         default=False,
                         action="store_true")
@@ -120,7 +123,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         args.seed = random.randint(0, 1000000)
 
     assert args.learning_rate > 0
-    assert any([v for v in [args.test_num_encoders, args.test_embeddings_dim,
+    assert any([v for v in [args.test_num_encoders, args.test_num_decoders, args.test_embeddings_dim,
                             args.test_masking, args.test_noise, args.test_dropout_p,
                             args.test_mix_fourier,
                             args.test_mels, args.test_mel_window_size, args.test_mel_window_stride]]), \

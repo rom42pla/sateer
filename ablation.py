@@ -69,6 +69,7 @@ dataset_val = Subset(dataset, shuffled_indices[int(len(dataset) * args['train_se
 
 defaults = {
     "num_encoders": 1,
+    "num_decoders": 1,
     "embeddings_dim": 128,
     "masking": True,
     "dropout_p": 0.25,
@@ -85,8 +86,11 @@ def objective(trial: Trial):
 
     trial_args = {
         "num_encoders":
-            trial.suggest_int("num_encoders", 1, 8)
+            trial.suggest_int("num_encoders", 1, 4)
             if args['test_num_encoders'] else defaults['num_encoders'],
+        "num_decoders":
+            trial.suggest_int("num_decoders", 1, 4)
+            if args['test_num_decoders'] else defaults['num_decoders'],
         "embeddings_dim":
             trial.suggest_categorical("embeddings_dim", [128, 256, 512])
             if args['test_embeddings_dim'] else defaults['embeddings_dim'],
@@ -121,6 +125,7 @@ def objective(trial: Trial):
         learning_rate=args['learning_rate'],
 
         num_encoders=trial_args['num_encoders'],
+        num_decoders=trial_args['num_decoders'],
         window_embedding_dim=trial_args['embeddings_dim'],
         use_masking=trial_args['masking'],
         dropout_p=trial_args['dropout_p'],
@@ -148,6 +153,7 @@ def objective(trial: Trial):
 if args['grid_search'] is True:
     search_space = {
         "num_encoders": [1, 2, 4, 6] if args['test_num_encoders'] else [1],
+        "num_decoders": [1, 2, 4, 6] if args['test_num_decoders'] else [1],
         "embeddings_dim": [128, 256, 512] if args['test_embeddings_dim'] else [128],
         "masking": [True, False] if args['test_masking'] else [True],
         "dropout_p": [0, 0.1, 0.25, 0.5] if args['test_dropout_p'] else [0.25],
