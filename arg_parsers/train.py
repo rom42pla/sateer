@@ -85,6 +85,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=2,
                         type=int,
                         help="Number of encoders in FEEGT")
+    parser.add_argument("--num_decoders",
+                        default=2,
+                        type=int,
+                        help="Number of decoders in FEEGT")
     parser.add_argument("--window_embedding_dim",
                         default=512,
                         type=int,
@@ -157,6 +161,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         args.seed = random.randint(0, 1000000)
 
     assert args.num_encoders >= 1
+    assert args.num_decoders >= 1
     assert 0 <= args.dropout_p < 1
     assert args.noise_strength >= 0
     assert args.learning_rate > 0

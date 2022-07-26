@@ -54,6 +54,7 @@ if args['model'] == "feegt":
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
         num_encoders=args['num_encoders'],
+        num_decoders=args['num_decoders'],
         window_embedding_dim=args['window_embedding_dim'],
         use_masking=not args['disable_masking'],
         learning_rate=args['learning_rate'],

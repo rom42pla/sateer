@@ -135,7 +135,7 @@ class FouriEEGTransformer(pl.LightningModule):
                                     use_masking=self.use_masking,
                                     mask_perc_min=self.mask_perc_min,
                                     mask_perc_max=self.mask_perc_max,
-                                    mask_start_index=len(self.labels),
+                                    mask_start_index=0,
                                     add_positional_embeddings=True,
                                     mix_fourier_with_tokens=self.mix_fourier_with_tokens,
                                     )
@@ -197,7 +197,7 @@ class FouriEEGTransformer(pl.LightningModule):
             # adds the labels for the tokens
             label_tokens = self.labels_embedder(
                 torch.as_tensor(list(range(len(self.labels))),
-                                device=x.device)).repeat(x_encoded.shape[0], 1, 1)
+                                device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)
             x_decoded = self.decoder(x_encoder=x_encoded, x_decoder=label_tokens)
 
         with profiler.record_function("predictions"):

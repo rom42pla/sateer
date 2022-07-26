@@ -84,11 +84,16 @@ class FouriEncoder(nn.Module):
         input_shape = x.shape
 
         # generates special tokens
-        start_token, end_token, mask_token = self.tokens_embedder(torch.as_tensor([
-            self.special_tokens["[start]"],
-            self.special_tokens["[end]"],
-            self.special_tokens["[mask]"],
-        ], device=x.device))
+        if self.use_masking:
+            mask_token = self.tokens_embedder(torch.as_tensor([
+                self.special_tokens["[mask]"],
+            ], device=x.device))[0]
+        if self.add_positional_embeddings:
+            start_token, end_token = self.tokens_embedder(torch.as_tensor([
+                self.special_tokens["[start]"],
+                self.special_tokens["[end]"],
+            ], device=x.device))
+            
         # eventually adds masking
         if self.training and self.use_masking:
             mask_rand = torch.rand((x.shape[0], x[:, self.mask_start_index:].shape[1]),
@@ -246,6 +251,11 @@ class FouriDecoder(nn.Module):
                                mix_fourier_with_tokens=self.mix_fourier_with_tokens,
                                num_heads=self.num_heads)
              for _ in range(self.num_decoders)])
+        self.postprocessing = nn.Sequential(OrderedDict([
+            ("pooler", nn.Linear(in_features=self.embeddings_dim,
+                                 out_features=self.embeddings_dim)),
+            ("act", nn.SELU()),
+        ]))
 
     def forward(self, x_encoder: torch.Tensor, x_decoder: torch.Tensor):
         # prepares the input
@@ -295,6 +305,7 @@ class FouriDecoder(nn.Module):
             x_decoder = decoder_block(x_encoder=x_encoder, x_decoder=x_decoder)
         if self.add_positional_embeddings:
             x_decoder = x_decoder[:, 1:-1]
+        x_decoder = self.postprocessing(x_decoder)
 
         if not is_batched:
             x_decoder = einops.rearrange(x_decoder, "b s c -> (b s) c")
