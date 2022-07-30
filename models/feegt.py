@@ -296,7 +296,7 @@ class FouriEEGTransformer(pl.LightningModule):
         phase: str = "train" if self.training is True else "val"
         # loss
         losses: torch.Tensor = torch.stack([e["loss"] for e in outputs])
-        self.log(f"loss_{phase}", losses.mean(), prog_bar=False)
+        self.log(f"loss_{phase}", losses.mean(), prog_bar=True if phase == "val" else False)
         # classification metrics
         labels, labels_pred = torch.cat([e["labels"] for e in outputs], dim=0), \
                               torch.cat([e["labels_pred"] for e in outputs], dim=0)
