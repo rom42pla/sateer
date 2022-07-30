@@ -209,7 +209,7 @@ class FouriEEGTransformer(pl.LightningModule):
             x_decoded = self.decoder(
                 tgt=label_tokens,
                 src=x_encoded
-            )[:, 1:-1]  # (b l d)
+            )  # (b l d)
 
         with profiler.record_function("predictions"):
             labels_pred = torch.stack([net(x_decoded[:, i_label, :])
