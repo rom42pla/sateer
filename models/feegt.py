@@ -131,26 +131,14 @@ class FouriEEGTransformer(pl.LightningModule):
             nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
             Rearrange("b s c m -> b s (c m)"),
         )
-        self.merge_mels = nn.Sequential(
-            # Rearrange("b s c m -> b s c m"),
-            nn.Linear(in_features=self.mels, out_features=1),
-            Rearrange("b s c m -> b s (c m)"),
-            FouriEncoderBlock(in_features=self.in_channels,
-                              mid_features=self.window_embedding_dim * 4,
-                              out_features=self.window_embedding_dim,
-                              ),
-
-            # nn.Conv2d(in_channels=128, out_channels=256,
-            #           kernel_size=5, stride=1, padding=2),
-            # nn.SELU(),
-            #
-            # nn.Conv2d(in_channels=256, out_channels=self.window_embedding_dim,
-            #           kernel_size=3, stride=1, padding=1),
-            # nn.SELU(),
-            # Rearrange("b s c m -> b s (c m)"),
-            # nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
-            # Rearrange("b s c m -> b s (c m)"),
-        )
+        # self.merge_mels = nn.Sequential(
+        #     nn.Linear(in_features=self.mels, out_features=1),
+        #     Rearrange("b s c m -> b s (c m)"),
+        #     FouriEncoderBlock(in_features=self.in_channels,
+        #                       mid_features=self.window_embedding_dim * 4,
+        #                       out_features=self.window_embedding_dim,
+        #                       ),
+        # )
 
         self.encoder = FouriEncoder(embeddings_dim=self.window_embedding_dim,
                                     num_encoders=self.num_encoders,
@@ -272,23 +260,19 @@ class FouriEEGTransformer(pl.LightningModule):
         return x
 
     def training_step(self, batch, batch_idx):
-        eegs: torch.Tensor = batch["eegs"]
-        labels: torch.Tensor = batch["labels"]
-        labels_pred = self(eegs=eegs)  # (b l d)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label], label_smoothing=0.1)
-                  for i_label in range(labels.shape[-1])]
-        loss = sum(losses)
-        return {
-            "loss": loss,
-            "labels": labels,
-            "labels_pred": labels_pred,
-        }
+        self.step(batch)
 
     def validation_step(self, batch, batch_idx):
+        self.step(batch)
+
+    def step(self, batch):
+        # name of the current phase
+        phase: str = "train" if self.training is True else "val"
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
         labels_pred = self(eegs=eegs)  # (b l d)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label])
+        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label],
+                                  label_smoothing=0.1 if phase == "train" else 0.0)
                   for i_label in range(labels.shape[-1])]
         loss = sum(losses)
         return {
