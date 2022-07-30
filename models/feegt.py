@@ -140,7 +140,7 @@ class FouriEEGTransformer(pl.LightningModule):
             # nn.SELU(),
             # nn.Linear(in_features=self.window_embedding_dim, out_features=1),
             # nn.AlphaDropout(self.dropout_p),
-            nn.Linear(in_features=self.mels, out_features=self.window_embedding_dim),
+            nn.Linear(in_features=self.mels, out_features=1),
             Rearrange("b s c m -> b s (c m)"),
             FouriEncoderBlock(in_features=self.in_channels,
                               mid_features=self.window_embedding_dim * 4,
