@@ -232,11 +232,8 @@ class FouriDecoderBlock(nn.Module):
         if self.attention_type == "linear":
             attentions = self.attention_fn(tgt, src, src)
         elif self.attention_type == "quadratic":
-            print(tgt.shape)
             mask = torch.triu(torch.full((tgt.shape[1], src.shape[1]), float('-inf'), device=tgt.device), diagonal=1)
             attentions, _ = self.attention_fn(tgt, src, src, attn_mask=mask)
-            print(attentions.shape)
-            exit()
         else:
             raise NotImplementedError
         tgt = self.layer_norm_2(tgt + attentions)
