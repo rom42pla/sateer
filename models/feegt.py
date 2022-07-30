@@ -202,10 +202,10 @@ class FouriEEGTransformer(pl.LightningModule):
             label_tokens = self.labels_embedder(
                 torch.as_tensor(list(range(len(self.labels))),
                                 device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
-            # adds start and end tokens
-            label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
-            # adds positional embeddings
-            label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
+            # # adds start and end tokens
+            # label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
+            # # adds positional embeddings
+            # label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
             x_decoded = self.decoder(
                 tgt=label_tokens,
                 src=x_encoded
