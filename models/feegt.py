@@ -1,6 +1,7 @@
 import gc
 import logging
 import math
+import warnings
 from collections import OrderedDict
 from pprint import pformat
 from typing import Union, List, Optional, Dict
@@ -113,7 +114,8 @@ class FouriEEGTransformer(pl.LightningModule):
         )
 
         self.get_spectrogram = MelSpectrogram(sampling_rate=self.sampling_rate,
-                                              min_freq=0, max_freq=50, mels=self.mels,
+                                              min_freq=0, max_freq=50,
+                                              mels=self.mels,
                                               window_size=self.mel_window_size,
                                               window_stride=self.mel_window_stride)
         # self.merge_mels = nn.Sequential(
@@ -352,8 +354,8 @@ class AddGaussianNoise(nn.Module):
 class MelSpectrogram(nn.Module):
     def __init__(self,
                  sampling_rate: Union[int, float, torch.Tensor],
-                 window_size: Union[int, float] = 1,
-                 window_stride: Optional[Union[int, float]] = None,
+                 window_size: Union[int, float] = 0.5,
+                 window_stride: Union[int, float] = 0.05,
                  min_freq: int = 0,
                  max_freq: int = 50,
                  mels: int = 8,
@@ -378,28 +380,28 @@ class MelSpectrogram(nn.Module):
         # window
         assert window_size > 0
         self.window_size = math.floor(window_size * self.sampling_rate)
-        assert window_stride is None or window_stride > 0
-        if window_stride is not None:
-            self.window_stride = math.floor(window_stride * self.sampling_rate)
-        else:
-            self.window_stride = 1
+        assert window_stride > 0
+        self.window_stride = math.floor(window_stride * self.sampling_rate)
 
     def forward(self, eegs: torch.Tensor):
         assert isinstance(eegs, torch.Tensor) and len(eegs.shape) in {2, 3}
         eegs = einops.rearrange(eegs, "s c -> c s" if len(eegs.shape) == 2 else "b s c -> b c s")
-        mel_fn = transforms.MelSpectrogram(
-            sample_rate=self.sampling_rate,
-            f_min=self.min_freq, f_max=self.max_freq,
-            n_mels=self.mels, center=True,
-            n_fft=self.window_size,
-            normalized=False,
-            power=2,
-            win_length=self.window_size,
-            hop_length=self.window_stride,
-            # pad=self.window_stride // 2,
-            pad=0,
-        ).to(eegs.device)
-        spectrogram = mel_fn(eegs)  # (b c m s)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            mel_fn = transforms.MelSpectrogram(
+                sample_rate=self.sampling_rate,
+                f_min=self.min_freq,
+                f_max=self.max_freq,
+                n_mels=self.mels,
+                center=True,
+                n_fft=128,
+                normalized=True,
+                power=1,
+                win_length=self.window_size,
+                hop_length=self.window_stride,
+                pad=self.window_stride // 2,
+            ).to(eegs.device)
+            spectrogram = mel_fn(eegs)  # (b c m s)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
 
