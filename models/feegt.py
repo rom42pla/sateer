@@ -117,15 +117,15 @@ class FouriEEGTransformer(pl.LightningModule):
         self.merge_mels = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
             nn.Conv2d(in_channels=self.in_channels, out_channels=128,
-                      kernel_size=7, stride=1, padding=3),
+                      kernel_size=7, stride=2, padding=3),
             nn.SELU(),
 
             nn.Conv2d(in_channels=128, out_channels=256,
-                      kernel_size=5, stride=1, padding=2),
+                      kernel_size=5, stride=2, padding=2),
             nn.SELU(),
 
             nn.Conv2d(in_channels=256, out_channels=self.window_embedding_dim,
-                      kernel_size=3, stride=1, padding=1),
+                      kernel_size=3, stride=2, padding=1),
             nn.SELU(),
             Rearrange("b c s m -> b s c m"),
             nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
