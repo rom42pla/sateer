@@ -114,31 +114,31 @@ class FouriEEGTransformer(pl.LightningModule):
                                               min_freq=0, max_freq=50, mels=self.mels,
                                               window_size=self.mel_window_size,
                                               window_stride=self.mel_window_stride)
-        self.merge_mels = nn.Sequential(
-            Rearrange("b s c m -> b c s m"),
-            nn.Conv2d(in_channels=self.in_channels, out_channels=128,
-                      kernel_size=7, stride=2, padding=3),
-            nn.SELU(),
-
-            nn.Conv2d(in_channels=128, out_channels=256,
-                      kernel_size=5, stride=2, padding=2),
-            nn.SELU(),
-
-            nn.Conv2d(in_channels=256, out_channels=self.window_embedding_dim,
-                      kernel_size=3, stride=2, padding=1),
-            nn.SELU(),
-            Rearrange("b c s m -> b s c m"),
-            nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
-            Rearrange("b s c m -> b s (c m)"),
-        )
         # self.merge_mels = nn.Sequential(
-        #     nn.Linear(in_features=self.mels, out_features=1),
+        #     Rearrange("b s c m -> b c s m"),
+        #     nn.Conv2d(in_channels=self.in_channels, out_channels=128,
+        #               kernel_size=7, stride=2, padding=3),
+        #     nn.SELU(),
+        #
+        #     nn.Conv2d(in_channels=128, out_channels=256,
+        #               kernel_size=5, stride=2, padding=2),
+        #     nn.SELU(),
+        #
+        #     nn.Conv2d(in_channels=256, out_channels=self.window_embedding_dim,
+        #               kernel_size=3, stride=2, padding=1),
+        #     nn.SELU(),
+        #     Rearrange("b c s m -> b s c m"),
+        #     nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
         #     Rearrange("b s c m -> b s (c m)"),
-        #     FouriEncoderBlock(in_features=self.in_channels,
-        #                       mid_features=self.window_embedding_dim * 4,
-        #                       out_features=self.window_embedding_dim,
-        #                       ),
         # )
+        self.merge_mels = nn.Sequential(
+            nn.Linear(in_features=self.mels, out_features=1),
+            Rearrange("b s c m -> b s (c m)"),
+            FouriEncoderBlock(in_features=self.in_channels,
+                              mid_features=self.window_embedding_dim * 4,
+                              out_features=self.window_embedding_dim,
+                              ),
+        )
 
         self.encoder = FouriEncoder(embeddings_dim=self.window_embedding_dim,
                                     num_encoders=self.num_encoders,
