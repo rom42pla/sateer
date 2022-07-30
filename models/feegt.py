@@ -330,8 +330,9 @@ class FouriEEGTransformer(pl.LightningModule):
         return optimizer
 
     def on_fit_end(self) -> None:
-        best_epoch = self.logger.logs.groupby('epoch').min().sort_values(by='acc_mean_val',
-                                                                         ascending=False).iloc[0].to_dict()
+        best_epoch = self.logger.logs.groupby('epoch').min().reset_index().sort_values(by='acc_mean_val',
+                                                                                       ascending=False).iloc[
+            0].to_dict()
         print(best_epoch)
         logging.info(
             f"best epoch was {int(best_epoch['epoch'])}:\t"
