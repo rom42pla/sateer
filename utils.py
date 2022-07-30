@@ -119,6 +119,7 @@ def train_k_fold(
         auto_lr_finder: bool = False,
         gradient_clipping: bool = False,
         stochastic_weight_average: bool = False,
+        progress_bar: bool = True,
         **kwargs,
 ) -> pd.DataFrame:
     # initialize the logs
@@ -170,6 +171,7 @@ def train_k_fold(
             logger=FouriEEGTransformerLogger(path=join(experiment_path, f"fold_{i_fold}"),
                                              plot=benchmark),
             log_every_n_steps=1,
+            enable_progress_bar=progress_bar,
             enable_progress_bar=True,
             enable_model_summary=False,
             enable_checkpointing=False,
