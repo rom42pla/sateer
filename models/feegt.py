@@ -207,22 +207,25 @@ class FouriEEGTransformer(pl.LightningModule):
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
 
-        with profiler.record_function("decoder"):
-            # adds the labels for the tokens
-            label_tokens = self.labels_embedder(
-                torch.as_tensor(list(range(len(self.labels))),
-                                device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
-            # # adds start and end tokens
-            # label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
-            # # adds positional embeddings
-            # label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
-            x_decoded = self.decoder(
-                label_tokens,
-                x_encoded
-            )  # (b l d)
+        # with profiler.record_function("decoder"):
+        #     # adds the labels for the tokens
+        #     label_tokens = self.labels_embedder(
+        #         torch.as_tensor(list(range(len(self.labels))),
+        #                         device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
+        #     # # adds start and end tokens
+        #     # label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
+        #     # # adds positional embeddings
+        #     # label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
+        #     x_decoded = self.decoder(
+        #         label_tokens,
+        #         x_encoded
+        #     )  # (b l d)
 
         with profiler.record_function("predictions"):
-            labels_pred = torch.stack([net(x_decoded[:, i_label, :])
+            # labels_pred = torch.stack([net(x_decoded[:, i_label, :])
+            #                            for i_label, net in enumerate(self.classification)],
+            #                           dim=1)  # (b l d)
+            labels_pred = torch.stack([net(x_encoded[:, 0, :])
                                        for i_label, net in enumerate(self.classification)],
                                       dim=1)  # (b l d)
             assert labels_pred.shape[1] == len(self.labels)
@@ -285,7 +288,8 @@ class FouriEEGTransformer(pl.LightningModule):
                                   label_smoothing=0.1 if phase == "train" else 0.0)
                   for i_label in range(labels.shape[-1])]
         accs: torch.Tensor = torch.as_tensor(
-            [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1),
+            [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1) if phase == "val"
+                                              else labels_pred[:, i_label, :],
                                               labels[:, i_label], average="micro")
              for i_label in range(labels.shape[-1])])
         return {
