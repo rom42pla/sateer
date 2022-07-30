@@ -199,12 +199,12 @@ class FouriDecoderBlock(nn.Module):
         self.layer_norm_1 = nn.LayerNorm([in_features, ])
 
         if attention_type == "linear":
-            self.attention_fn = LinearMultiheadAttention(embeddings_dim=self.in_features,
-                                                         num_heads=self.num_heads)
+            self.attention_fn: LinearMultiheadAttention = LinearMultiheadAttention(embeddings_dim=self.in_features,
+                                                                                   num_heads=self.num_heads)
         elif attention_type == "quadratic":
-            self.attention_fn = nn.MultiheadAttention(embed_dim=self.in_features,
-                                                      num_heads=self.num_heads,
-                                                      batch_first=True)
+            self.attention_fn: nn.MultiheadAttention = nn.MultiheadAttention(embed_dim=self.in_features,
+                                                                             num_heads=self.num_heads,
+                                                                             batch_first=True)
         else:
             raise NotImplementedError
         self.attention_type = attention_type
@@ -232,7 +232,11 @@ class FouriDecoderBlock(nn.Module):
         if self.attention_type == "linear":
             attentions = self.attention_fn(tgt, src, src)
         elif self.attention_type == "quadratic":
-            attentions, _ = self.attention_fn(tgt, src, src)
+            print(tgt.shape)
+            mask = torch.triu(torch.full((tgt.shape[1], src.shape[1]), float('-inf'), device=tgt.device), diagonal=1)
+            attentions, _ = self.attention_fn(tgt, src, src, attn_mask=mask)
+            print(attentions.shape)
+            exit()
         else:
             raise NotImplementedError
         tgt = self.layer_norm_2(tgt + attentions)
