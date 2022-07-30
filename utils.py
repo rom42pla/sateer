@@ -84,18 +84,18 @@ def init_callbacks(swa: bool = False) -> List[Callback]:
     callbacks: List[Callback] = [
         EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-3, patience=5,
                       verbose=False, check_on_train_epoch_end=False, strict=True),
-        RichProgressBar(
-            theme=RichProgressBarTheme(
-                description="green_yellow",
-                progress_bar="green1",
-                progress_bar_finished="green1",
-                progress_bar_pulse="#6206E0",
-                batch_progress="green_yellow",
-                time="grey82",
-                processing_speed="grey82",
-                metrics="grey82",
-            )
-        ),
+        # RichProgressBar(
+        #     theme=RichProgressBarTheme(
+        #         description="green_yellow",
+        #         progress_bar="green1",
+        #         progress_bar_finished="green1",
+        #         progress_bar_pulse="#6206E0",
+        #         batch_progress="green_yellow",
+        #         time="grey82",
+        #         processing_speed="grey82",
+        #         metrics="grey82",
+        #     )
+        # ),
     ]
     if swa:
         callbacks += [
