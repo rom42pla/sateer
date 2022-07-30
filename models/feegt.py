@@ -136,10 +136,11 @@ class FouriEEGTransformer(pl.LightningModule):
         #     Rearrange("b s c m -> b s (c m)"),
         # )
         self.merge_mels = nn.Sequential(
+            # nn.Linear(in_features=128//2 + 1, out_features=self.window_embedding_dim),
+            # nn.SELU(),
+            # nn.Linear(in_features=self.window_embedding_dim, out_features=1),
+            # nn.AlphaDropout(self.dropout_p),
             nn.Linear(in_features=128//2 + 1, out_features=self.window_embedding_dim),
-            nn.SELU(),
-            nn.Linear(in_features=self.window_embedding_dim, out_features=1),
-            nn.AlphaDropout(self.dropout_p),
             Rearrange("b s c m -> b s (c m)"),
             FouriEncoderBlock(in_features=self.in_channels,
                               mid_features=self.window_embedding_dim * 4,
@@ -391,11 +392,11 @@ class MelSpectrogram(nn.Module):
         eegs = einops.rearrange(eegs, "s c -> c s" if len(eegs.shape) == 2 else "b s c -> b c s")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            mel_fn = transforms.Spectrogram(
-                # sample_rate=self.sampling_rate,
-                # f_min=self.min_freq,
-                # f_max=self.max_freq,
-                # n_mels=self.mels,
+            mel_fn = transforms.MelSpectrogram(
+                sample_rate=self.sampling_rate,
+                f_min=self.min_freq,
+                f_max=self.max_freq,
+                n_mels=self.mels,
                 center=True,
                 n_fft=128,
                 normalized=True,
