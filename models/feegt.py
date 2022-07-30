@@ -333,7 +333,7 @@ class FouriEEGTransformer(pl.LightningModule):
         best_epoch = self.logger.logs.groupby('epoch').min().sort_values(by='acc_mean_val',
                                                                          ascending=False).iloc[0:1, :][
             ["loss_train", "loss_val", "acc_mean_train", "acc_mean_val"]]
-        print("\033[A\033[A")
+        print("\r")
         logging.info(
             f"best epoch:\n{best_epoch}")
 
