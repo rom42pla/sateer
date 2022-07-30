@@ -1,4 +1,5 @@
 import gc
+import logging
 import math
 from collections import OrderedDict
 from typing import Union, List, Optional, Dict
@@ -328,7 +329,8 @@ class FouriEEGTransformer(pl.LightningModule):
         return optimizer
 
     def on_fit_end(self) -> None:
-        print(self.logger.logs)
+        logging.info(f"best epoch:\n{self.logger.logs.sort(by='acc_mean_val')[0]}")
+
 
 class AddGaussianNoise(nn.Module):
     def __init__(self, strength: float = 0.1):
