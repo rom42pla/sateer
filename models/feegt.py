@@ -330,7 +330,9 @@ class FouriEEGTransformer(pl.LightningModule):
         return optimizer
 
     def on_fit_end(self) -> None:
-        logging.info(f"best epoch:\n{pformat(self.logger.logs.sort_values(by='acc_mean_val', ascending=False).iloc[0].to_dict())}")
+        print(self.logger.logs.sort_values(by='acc_mean_val', ascending=False))
+        logging.info(
+            f"best epoch:\n{pformat(self.logger.logs.sort_values(by='acc_mean_val', ascending=False).iloc[0].to_dict())}")
 
 
 class AddGaussianNoise(nn.Module):
