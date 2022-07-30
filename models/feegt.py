@@ -279,7 +279,7 @@ class FouriEEGTransformer(pl.LightningModule):
                                     for i_label in range(labels.shape[-1])]
         return {
             "loss": sum(losses),
-            "accs": sum(accs) / len(accs),
+            "accs": accs,
         }
 
     def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
@@ -299,9 +299,13 @@ class FouriEEGTransformer(pl.LightningModule):
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False)
         # classification metrics
-        self.log(f"acc_mean_{phase}", torch.stack([e["accs"] for e in outputs]).mean(),
+        accs = torch.stack([e["accs"] for e in outputs])
+        self.log(f"acc_mean_{phase}", accs.mean(),
                  prog_bar=True)
-        del outputs
+        for i_label, label in enumerate(self.labels):
+            self.log(f"acc_label_{phase}", accs[:, i_label].mean(),
+                     prog_bar=False)
+        del accs, outputs
 
     def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
         optimizer.zero_grad(set_to_none=True)
