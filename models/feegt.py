@@ -100,63 +100,74 @@ class FouriEEGTransformer(pl.LightningModule):
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
 
+        self.special_tokens_vocab = {
+            k: i
+            for i, k in enumerate(["start", "end", "mask"])
+        }
+        self.tokens_embedder = nn.Embedding(len(self.special_tokens_vocab), self.window_embedding_dim)
         self.labels_embedder = nn.Embedding(len(self.labels), self.window_embedding_dim)
         self.add_noise = nn.Sequential(
             AddGaussianNoise(strength=self.noise_strength)
         )
 
+        self.get_spectrogram = MelSpectrogram(sampling_rate=self.sampling_rate,
+                                              min_freq=0, max_freq=50, mels=self.mels,
+                                              window_size=self.mel_window_size,
+                                              window_stride=self.mel_window_stride)
         self.merge_mels = nn.Sequential(
             Rearrange("b s c m -> b c s m"),
             nn.Conv2d(in_channels=self.in_channels, out_channels=128,
-                      kernel_size=7, stride=2, padding=3),
+                      kernel_size=7, stride=1, padding=3),
             nn.SELU(),
 
             nn.Conv2d(in_channels=128, out_channels=256,
-                      kernel_size=5, stride=2, padding=2),
+                      kernel_size=5, stride=1, padding=2),
             nn.SELU(),
 
             nn.Conv2d(in_channels=256, out_channels=self.window_embedding_dim,
-                      kernel_size=3, stride=2, padding=1),
+                      kernel_size=3, stride=1, padding=1),
             nn.SELU(),
             Rearrange("b c s m -> b s c m"),
             nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
             Rearrange("b s c m -> b s (c m)"),
         )
-
-        self.preprocessing = nn.Sequential(
+        self.merge_mels = nn.Sequential(
+            # Rearrange("b s c m -> b s c m"),
+            nn.Linear(in_features=self.mels, out_features=1),
+            Rearrange("b s c m -> b s (c m)"),
             FouriEncoderBlock(in_features=self.in_channels,
-                              mid_features=self.window_embedding_dim,
+                              mid_features=self.window_embedding_dim * 4,
                               out_features=self.window_embedding_dim,
-                              mix_fourier_with_tokens=self.mix_fourier_with_tokens),
+                              ),
+
+            # nn.Conv2d(in_channels=128, out_channels=256,
+            #           kernel_size=5, stride=1, padding=2),
+            # nn.SELU(),
+            #
+            # nn.Conv2d(in_channels=256, out_channels=self.window_embedding_dim,
+            #           kernel_size=3, stride=1, padding=1),
+            # nn.SELU(),
+            # Rearrange("b s c m -> b s (c m)"),
+            # nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
+            # Rearrange("b s c m -> b s (c m)"),
         )
+
         self.encoder = FouriEncoder(embeddings_dim=self.window_embedding_dim,
                                     num_encoders=self.num_encoders,
                                     dropout_p=self.dropout_p,
-                                    use_masking=self.use_masking,
-                                    mask_perc_min=self.mask_perc_min,
-                                    mask_perc_max=self.mask_perc_max,
-                                    mask_start_index=0,
-                                    add_positional_embeddings=True,
-                                    mix_fourier_with_tokens=self.mix_fourier_with_tokens,
                                     )
         self.decoder = FouriDecoder(embeddings_dim=self.window_embedding_dim,
                                     num_decoders=self.num_decoders,
                                     dropout_p=self.dropout_p,
-                                    use_masking=self.use_masking,
-                                    mask_perc_min=self.mask_perc_min,
-                                    mask_perc_max=self.mask_perc_max,
-                                    mask_start_index=0,
-                                    add_positional_embeddings=False,
-                                    mix_fourier_with_tokens=self.mix_fourier_with_tokens,
                                     )
 
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
                 ("linear1", nn.Linear(in_features=self.window_embedding_dim,
-                                      out_features=1024)),
+                                      out_features=self.window_embedding_dim * 4)),
                 ("activation1", nn.SELU()),
                 ("dropout", nn.AlphaDropout(p=self.dropout_p)),
-                ("linear2", nn.Linear(in_features=1024,
+                ("linear2", nn.Linear(in_features=self.window_embedding_dim * 4,
                                       out_features=2)),
                 # ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
             ]))
@@ -182,23 +193,35 @@ class FouriEEGTransformer(pl.LightningModule):
             eegs = self.add_noise(eegs)
 
         with profiler.record_function("spectrogram"):
-            spectrogram = MelSpectrogram(sampling_rate=self.sampling_rate,
-                                         min_freq=0, max_freq=50, mels=self.mels,
-                                         window_size=self.mel_window_size,
-                                         window_stride=self.mel_window_stride)(eegs)  # (b s c m)
+            spectrogram = self.get_spectrogram(eegs)  # (b s c m)
 
         with profiler.record_function("preparation"):
             x = self.merge_mels(spectrogram)  # (b s c)
 
-        with profiler.record_function("transformer encoder"):
-            x_encoded = self.encoder(x)
+        with profiler.record_function("encoder"):
+            # eventually adds masking
+            if self.training and self.use_masking:
+                x = self.apply_random_mask(x)
+            # adds start and end tokens
+            x = self.add_start_end_tokens(x)
+            # adds positional embeddings
+            x = self.add_positional_embeddings(x)  # (b s d)
+            # encoder pass
+            x_encoded = self.encoder(x)  # (b s d)
 
-        with profiler.record_function("transformer decoder"):
+        with profiler.record_function("decoder"):
             # adds the labels for the tokens
             label_tokens = self.labels_embedder(
                 torch.as_tensor(list(range(len(self.labels))),
-                                device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)
-            x_decoded = self.decoder(x_encoder=x_encoded, x_decoder=label_tokens)
+                                device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
+            # adds start and end tokens
+            label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
+            # adds positional embeddings
+            label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
+            x_decoded = self.decoder(
+                tgt=label_tokens,
+                src=x_encoded
+            )[:, 1:-1]  # (b l d)
 
         with profiler.record_function("predictions"):
             labels_pred = torch.stack([net(x_decoded[:, i_label, :])
@@ -209,6 +232,44 @@ class FouriEEGTransformer(pl.LightningModule):
             if self.training is False:
                 labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
         return labels_pred
+
+    def add_positional_embeddings(self, x: torch.Tensor):
+        sequence_length, embeddings_dim = x.shape[-2], x.shape[-1]
+        pe = torch.zeros(sequence_length, embeddings_dim, device=self.device)
+        position = torch.arange(0, sequence_length, device=self.device).unsqueeze(1)
+        div_term = torch.exp((torch.arange(0, embeddings_dim, 2, dtype=torch.float, device=self.device) *
+                              -(math.log(10000.0) / embeddings_dim)))
+        pe[:, 0::2] = torch.sin(position.float() * div_term)
+        pe[:, 1::2] = torch.cos(position.float() * div_term)
+        x = x + pe
+        del pe, position, div_term
+        return x
+
+    def add_start_end_tokens(self, x: torch.Tensor):
+        # generates start and end tokens
+        start_token, end_token = self.tokens_embedder(torch.as_tensor([
+            self.special_tokens_vocab["start"],
+            self.special_tokens_vocab["end"],
+        ], device=x.device))
+        # adds start and end token
+        x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
+                       x,
+                       end_token.repeat(x.shape[0], 1, 1)], dim=1)  # (b s d)
+        del start_token, end_token
+        return x
+
+    def apply_random_mask(self, x: torch.Tensor):
+        # generates mask token
+        mask_token = self.tokens_embedder(torch.as_tensor([
+            self.special_tokens_vocab["mask"],
+        ], device=self.device))[0]
+        # applies the mask
+        mask_rand = torch.rand(*x.shape[:2],
+                               dtype=torch.float, device=self.device)
+        mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
+        x[mask] = mask_token
+        del mask_token, mask_rand, mask
+        return x
 
     def training_step(self, batch, batch_idx):
         eegs: torch.Tensor = batch["eegs"]
