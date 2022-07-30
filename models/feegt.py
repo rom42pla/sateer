@@ -332,12 +332,9 @@ class FouriEEGTransformer(pl.LightningModule):
     def on_fit_end(self) -> None:
         best_epoch = self.logger.logs.groupby('epoch').min().reset_index().sort_values(by='acc_mean_val',
                                                                                        ascending=False).iloc[
-            0].to_dict()
-        print(best_epoch)
+            0][["loss_train", "loss_val", "acc_mean_train", "acc_mean_val"]]
         logging.info(
-            f"best epoch was {int(best_epoch['epoch'])}:\t"
-            f"loss train/val = {best_epoch['loss_train']:.3f}/{best_epoch['loss_val']:.3f}"
-            f"accuracy train/val = {best_epoch['acc_mean_train']:.3f}/{best_epoch['acc_mean_val']:.3f}")
+            f"best epoch was {int(best_epoch['epoch'])}:\t{best_epoch}")
 
 
 class AddGaussianNoise(nn.Module):
