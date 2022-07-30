@@ -260,10 +260,10 @@ class FouriEEGTransformer(pl.LightningModule):
         return x
 
     def training_step(self, batch, batch_idx):
-        self.step(batch)
+        return self.step(batch)
 
     def validation_step(self, batch, batch_idx):
-        self.step(batch)
+        return self.step(batch)
 
     def step(self, batch):
         # name of the current phase
