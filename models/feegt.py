@@ -274,9 +274,10 @@ class FouriEEGTransformer(pl.LightningModule):
         losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label],
                                   label_smoothing=0.1 if phase == "train" else 0.0)
                   for i_label in range(labels.shape[-1])]
-        accs: List[torch.Tensor] = [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1),
-                                                                     labels[:, i_label], average="micro")
-                                    for i_label in range(labels.shape[-1])]
+        accs: torch.Tensor = torch.as_tensor(
+            [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1),
+                                              labels[:, i_label], average="micro")
+             for i_label in range(labels.shape[-1])])
         return {
             "loss": sum(losses),
             "accs": accs,
