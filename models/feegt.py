@@ -334,7 +334,7 @@ class FouriEEGTransformer(pl.LightningModule):
                                                                          ascending=False).iloc[0:1, :][
             ["loss_train", "loss_val", "acc_mean_train", "acc_mean_val"]]
         logging.info(
-            f"best epoch:\n{best_epoch}")
+            f"\rbest epoch:\n{best_epoch}")
 
 
 class AddGaussianNoise(nn.Module):
