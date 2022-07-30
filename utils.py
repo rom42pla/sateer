@@ -172,7 +172,6 @@ def train_k_fold(
                                              plot=benchmark),
             log_every_n_steps=1,
             enable_progress_bar=progress_bar,
-            enable_progress_bar=True,
             enable_model_summary=False,
             enable_checkpointing=False,
             gradient_clip_val=1 if gradient_clipping else 0,
