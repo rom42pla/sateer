@@ -327,6 +327,8 @@ class FouriEEGTransformer(pl.LightningModule):
                                       lr=self.learning_rate)
         return optimizer
 
+    def on_fit_end(self) -> None:
+        print(self.logger.logs)
 
 class AddGaussianNoise(nn.Module):
     def __init__(self, strength: float = 0.1):
