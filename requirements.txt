@@ -12,4 +12,3 @@ optuna
 torchmetrics
 librosa
 functorch
-rich
