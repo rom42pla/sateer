@@ -388,11 +388,11 @@ class MelSpectrogram(nn.Module):
         eegs = einops.rearrange(eegs, "s c -> c s" if len(eegs.shape) == 2 else "b s c -> b c s")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            mel_fn = transforms.MelSpectrogram(
-                sample_rate=self.sampling_rate,
-                f_min=self.min_freq,
-                f_max=self.max_freq,
-                n_mels=self.mels,
+            mel_fn = transforms.Spectrogram(
+                # sample_rate=self.sampling_rate,
+                # f_min=self.min_freq,
+                # f_max=self.max_freq,
+                # n_mels=self.mels,
                 center=True,
                 n_fft=128,
                 normalized=True,
