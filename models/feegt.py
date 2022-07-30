@@ -144,11 +144,21 @@ class FouriEEGTransformer(pl.LightningModule):
                                     num_encoders=self.num_encoders,
                                     dropout_p=self.dropout_p,
                                     )
-        self.decoder = FouriDecoder(embeddings_dim=self.window_embedding_dim,
-                                    num_decoders=self.num_decoders,
-                                    dropout_p=self.dropout_p,
-                                    )
-
+        # self.decoder = FouriDecoder(embeddings_dim=self.window_embedding_dim,
+        #                             num_decoders=self.num_decoders,
+        #                             dropout_p=self.dropout_p,
+        #                             )
+        self.decoder = nn.TransformerDecoder(
+            decoder_layer=nn.TransformerDecoderLayer(
+                batch_first=True,
+                d_model=self.window_embedding_dim,
+                dim_feedforward=self.window_embedding_dim * 4,
+                dropout=dropout_p,
+                activation=F.selu,
+                nhead=8,
+            ),
+            num_layers=num_decoders,
+        )
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
                 ("linear1", nn.Linear(in_features=self.window_embedding_dim,
@@ -207,8 +217,8 @@ class FouriEEGTransformer(pl.LightningModule):
             # # adds positional embeddings
             # label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
             x_decoded = self.decoder(
-                tgt=label_tokens,
-                src=x_encoded
+                label_tokens,
+                x_encoded
             )  # (b l d)
 
         with profiler.record_function("predictions"):
@@ -304,7 +314,7 @@ class FouriEEGTransformer(pl.LightningModule):
         self.log(f"acc_mean_{phase}", accs.mean(),
                  prog_bar=True)
         for i_label, label in enumerate(self.labels):
-            self.log(f"acc_label_{phase}", accs[:, i_label].mean(),
+            self.log(f"acc_{label}_{phase}", accs[:, i_label].mean(),
                      prog_bar=False)
         del accs, outputs
 
