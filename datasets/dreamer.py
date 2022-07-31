@@ -1,20 +1,9 @@
-from abc import ABC
-from copy import deepcopy
 from multiprocessing import Pool
-from os.path import isdir, join, splitext, basename
-from pprint import pprint
-from typing import Dict, Optional, Union, List, Set, Any, Tuple
-
-import torch
-from torch.utils.data import Dataset, DataLoader, Subset
-
-import os
+from os.path import isdir, join
+from typing import Dict, List, Any, Tuple
 
 import scipy.io as sio
 import numpy as np
-import pickle
-import einops
-import pytorch_lightning as pl
 
 from datasets.eeg_emrec import EEGClassificationDataset
 
@@ -80,5 +69,6 @@ class DREAMERDataset(EEGClassificationDataset):
 
 if __name__ == "__main__":
     dataset = DREAMERDataset(path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "dreamer"),
-                             discretize_labels=False)
+                             discretize_labels=True, normalize_eegs=True, split_in_windows=True)
     dataset.plot_labels_distribution()
+    dataset.plot_amplitudes_distribution()

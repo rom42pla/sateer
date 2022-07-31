@@ -1,5 +1,7 @@
+import gc
 from abc import abstractmethod, ABC
 from copy import deepcopy
+from math import ceil
 from os.path import isdir
 from pprint import pprint
 from typing import Dict, Optional, Union, List, Tuple
@@ -13,6 +15,7 @@ import numpy as np
 import einops
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tqdm import tqdm
 
 
 class EEGClassificationDataset(Dataset, ABC):
@@ -32,7 +35,7 @@ class EEGClassificationDataset(Dataset, ABC):
                  # subject_ids_to_use: Optional[Union[str, List[str]]] = None,
 
                  discretize_labels: bool = False,
-                 normalize_eegs: bool = False,
+                 normalize_eegs: bool = True,
 
                  # validation: Optional[str] = None,
                  # k_folds: Optional[int] = 10,
@@ -107,27 +110,6 @@ class EEGClassificationDataset(Dataset, ABC):
         assert all([e.shape[-1] == len(self.electrodes) for e in self.eegs_data])
         self.setup_data()
 
-        # sets up k-fold
-        # assert validation in {None, "k_fold", "loso"}
-        # self.validation = validation
-        # if self.validation == "k_fold":
-        #     assert isinstance(k_folds, int) and k_folds >= 1
-        #     self.k_folds, self.current_k_fold_index = k_folds, 0
-        #     shuffled_indices = np.random.permutation(len(self))
-        #     fold_starting_indices = np.linspace(start=0, stop=len(self), num=self.k_folds + 1,
-        #                                         endpoint=True, dtype=int)
-        #     self.folds_indices = [shuffled_indices[i1:i2]
-        #                           for i1, i2 in zip(fold_starting_indices[:-1], fold_starting_indices[1:])]
-        #     self.set_k_fold(self.current_k_fold_index)
-        # elif self.validation == "loso":
-        #     self.current_loso_index = 0
-        #     self.subjects_ids_indices = {i_subject: subject_id
-        #                                  for i_subject, subject_id in
-        #                                  enumerate(self.subject_ids_to_use)}
-        #
-        # assert isinstance(batch_size, int) and batch_size >= 1
-        # self.batch_size: int = batch_size
-
     def __len__(self) -> int:
         return len(self.eegs_data)
 
@@ -136,39 +118,11 @@ class EEGClassificationDataset(Dataset, ABC):
             "sampling_rates": self.sampling_rate,
             "subject_id": self.subject_ids.index(self.subject_ids_data[i]),
             "eegs": self.eegs_data[i],
-            # "labels": self.labels_data[i,
-            #                            [v for k, v in self.labels.items()
-            #                             if k in self.labels_to_use]],
             "labels": self.labels_data[i],
         }
 
     def prepare_data(self) -> None:
         pass
-
-    def setup(self, stage: Optional[str] = None):
-        # Assign train/val datasets for use in dataloaders
-        if stage == "fit" or stage is None:
-            self.set_k_fold(self.current_k_fold_index)
-            train_indices: List[int] = [i
-                                        for i_fold, f in enumerate(self.folds_indices)
-                                        for i in f
-                                        if i_fold != self.current_k_fold_index]
-            test_indices: List[int] = [i
-                                       for i_fold, f in enumerate(self.folds_indices)
-                                       for i in f
-                                       if i_fold == self.current_k_fold_index]
-            assert set(train_indices).isdisjoint(set(test_indices))
-            assert set(train_indices).union(set(test_indices)) == {i
-                                                                   for f in self.folds_indices
-                                                                   for i in f}
-            self.train_split, self.val_split = Subset(self, train_indices), \
-                                               Subset(self, test_indices)
-        # Assign test dataset for use in dataloader(s)
-        if stage == "test" or stage is None:
-            pass
-
-        if stage == "predict" or stage is None:
-            pass
 
     @staticmethod
     @abstractmethod
@@ -221,26 +175,8 @@ class EEGClassificationDataset(Dataset, ABC):
                           for w in self.eegs_data]
         assert all([len(w) == windows_size for w in self.eegs_data])
         # converts to tensor
-        # self.eegs_data: torch.Tensor = torch.stack([torch.from_numpy(w) for w in self.eegs_data]).float()
-        # self.labels_data: torch.Tensor = torch.stack([torch.as_tensor(w) for w in self.labels_data]).long()
-        self.eegs_data: np.ndarray = np.stack([torch.from_numpy(w) for w in self.eegs_data])
-        self.labels_data: np.ndarray = np.stack([torch.as_tensor(w) for w in self.labels_data])
-
-    # def train_dataloader(self):
-    #     return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True,
-    #                       num_workers=os.cpu_count() - 2, pin_memory=True)
-    #
-    # def val_dataloader(self):
-    #     return DataLoader(self.val_split, batch_size=self.batch_size, shuffle=False,
-    #                       num_workers=os.cpu_count() - 2, pin_memory=True)
-    #
-    # def set_k_fold(self, i: int) -> None:
-    #     assert isinstance(i, int) and 0 <= i < self.k_folds
-    #     self.current_k_fold_index = i
-    #
-    # def set_loso_index(self, i: int) -> None:
-    #     assert isinstance(i, int) and i in self.subjects_ids_indices.keys()
-    #     self.current_loso_index = i
+        self.eegs_data: np.ndarray = np.stack(self.eegs_data).astype(np.float32)
+        self.labels_data: np.ndarray = np.stack(self.labels_data).astype(np.long)
 
     def plot_samples(self) -> None:
         raw_mne_array = mne.io.RawArray(einops.rearrange(self[0][0], "s c -> c s"),
@@ -264,34 +200,36 @@ class EEGClassificationDataset(Dataset, ABC):
     def plot_labels_distribution(
             self,
             title: str = "distribution of labels",
-            scale: int = 5,
+            scale: Union[int, float] = 4,
     ) -> None:
-        # builds the dataframe
-        df = pd.DataFrame()
-        for x in self:
-            for i_label, label in enumerate(self.labels):
-                df = pd.concat([df, pd.DataFrame([{
-                    "label": label,
-                    "value": x["labels"][i_label]
-                }])], ignore_index=True).sort_values(by="value", ascending=True)
         if self.discretize_labels:
-            fig, ax = plt.subplots(nrows=1, ncols=1,
-                                   figsize=(scale, scale),
-                                   tight_layout=True)
+            cols = min(8, len(self.labels))
+            rows = 1 if (len(self.labels) <= 8) else ceil(len(self.labels) / 8)
+            fig, axs = plt.subplots(nrows=rows, ncols=cols,
+                                    figsize=(scale * cols, scale * rows),
+                                    tight_layout=True)
             fig.suptitle(title)
-            # plots
-            sns.histplot(
-                data=df,
-                x="label",
-                hue="value",
-                multiple="stack" if self.discretize_labels is True else "fill",
-                palette="rocket",
-                discrete=self.discretize_labels,
-                ax=ax
-            )
-            ax.set_xlabel("label")
-            ax.set_ylabel("count")
+            labels_data = np.stack([x["labels"] for x in self])
+            for i_ax, ax in enumerate(axs.flat):
+                if i_ax >= len(self.labels):
+                    ax.set_visible(False)
+                    continue
+                unique_labels = np.unique(labels_data[:, i_ax])
+                sizes = [np.count_nonzero(labels_data[:, i_ax] == unique_label)
+                         for unique_label in unique_labels]
+                axs.flat[i_ax].pie(sizes, labels=unique_labels, autopct='%1.1f%%',
+                                   shadow=False)
+                axs.flat[i_ax].axis('equal')
+                axs.flat[i_ax].set_title(self.labels[i_ax])
         else:
+            # builds the dataframe
+            df = pd.DataFrame()
+            for x in self:
+                for i_label, label in enumerate(self.labels):
+                    df = pd.concat([df, pd.DataFrame([{
+                        "label": label,
+                        "value": x["labels"][i_label]
+                    }])], ignore_index=True).sort_values(by="value", ascending=True)
             fig, axs = plt.subplots(nrows=1, ncols=len(self.labels),
                                     figsize=(scale * len(self.labels), scale),
                                     tight_layout=True)
@@ -312,6 +250,35 @@ class EEGClassificationDataset(Dataset, ABC):
             max_ylim = max([ax.get_ylim()[-1] for ax in axs])
             for ax in axs:
                 ax.set_ylim([0, max_ylim])
+        plt.show()
+        fig.clf()
 
+    def plot_amplitudes_distribution(
+            self,
+            title: str = "distribution of amplitudes",
+            scale: Union[int, float] = 4,
+    ):
+        cols: int = 8
+        rows: int = ceil(len(self.electrodes) / cols)
+        fig, axs = plt.subplots(nrows=rows, ncols=cols,
+                                figsize=(scale * cols, scale * rows),
+                                tight_layout=True)
+        fig.suptitle(title)
+        for i_electrode, ax in enumerate(axs.flat):
+            if i_electrode >= len(self.electrodes):
+                ax.set_visible(False)
+                continue
+            ax.hist(
+                np.concatenate([x["eegs"][:, i_electrode] for x in self]),
+                bins=32
+            )
+            ax.set_title(self.electrodes[i_electrode])
+            ax.set_xlabel("mV")
+            ax.set_ylabel("count")
+            ax.set_yscale("log")
+        # adjusts the ylim
+        max_ylim = max([ax.get_ylim()[-1] for ax in axs.flat])
+        for ax in axs.flat:
+            ax.set_ylim([None, max_ylim])
         plt.show()
         fig.clf()
