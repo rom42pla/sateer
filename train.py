@@ -41,7 +41,9 @@ dataset_class = parse_dataset_class(name=args["dataset_type"])
 dataset: EEGClassificationDataset = dataset_class(
     path=args['dataset_path'],
     split_in_windows=True if args['windows_size'] is not None else False,
-    window_size=args['windows_size'], drop_last=True,
+    window_size=args['windows_size'],
+    window_stride=args['windows_stride'],
+    drop_last=True,
     discretize_labels=args['discretize_labels'],
     normalize_eegs=args['normalize_eegs'],
 )

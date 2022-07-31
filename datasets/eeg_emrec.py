@@ -1,22 +1,16 @@
-import time
 from abc import abstractmethod, ABC
 from copy import deepcopy
-from multiprocessing import Pool
-from os.path import isdir, join, splitext, basename
+from os.path import isdir
 from pprint import pprint
-from typing import Dict, Optional, Union, List, Set, Tuple
+from typing import Dict, Optional, Union, List, Tuple
 
 import mne
+import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import Dataset, Subset
 
-import os
-
-import scipy.io as sio
 import numpy as np
-import pickle
 import einops
-import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -31,6 +25,7 @@ class EEGClassificationDataset(Dataset, ABC):
 
                  split_in_windows: bool = False,
                  window_size: Optional[Union[float, int]] = 1,
+                 window_stride: Optional[Union[float, int]] = None,
                  drop_last: Optional[bool] = False,
 
                  # labels_to_use: Optional[Union[str, List[str]]] = None,
@@ -71,12 +66,17 @@ class EEGClassificationDataset(Dataset, ABC):
         self.split_in_windows: bool = split_in_windows
 
         if self.split_in_windows is True:
-            assert isinstance(window_size, float) or isinstance(window_size, int) and window_size > 0
+            assert window_size > 0
             self.window_size: float = float(window_size)  # s
-            self.samples_per_window = int(np.floor(self.sampling_rate * self.window_size))
+            self.samples_per_window: int = int(np.floor(self.sampling_rate * self.window_size))
+            assert window_stride is None or window_stride > 0
+            if window_stride is None:
+                window_stride = deepcopy(self.window_size)
+            self.window_stride: float = float(window_stride)  # s
+            self.samples_per_stride: int = int(np.floor(self.sampling_rate * self.window_stride))
 
             assert isinstance(drop_last, bool)
-            self.drop_last = drop_last
+            self.drop_last: bool = drop_last
 
         # assert labels_to_use is None or isinstance(labels_to_use, str) or isinstance(labels_to_use, list)
         # if labels_to_use is None:
@@ -204,7 +204,7 @@ class EEGClassificationDataset(Dataset, ABC):
             for i_experiment in range(len(self.eegs_data)):
                 for i_window_start in range(0,
                                             len(self.eegs_data[i_experiment]),
-                                            self.samples_per_window):
+                                            self.samples_per_stride):
                     window = self.eegs_data[i_experiment][i_window_start:i_window_start + self.samples_per_window, :]
                     if len(window) == self.samples_per_window or self.drop_last is False:
                         eegs_data_windowed += [window]
@@ -214,9 +214,6 @@ class EEGClassificationDataset(Dataset, ABC):
             self.labels_data = labels_data_windowed
             self.subject_ids_data = subject_ids_data_windowed
             assert len(self.eegs_data) == len(self.labels_data) == len(self.subject_ids_data)
-        # handle labels
-        self.labels_data = [[1 if label > 3 else 0 for label in w] if self.discretize_labels else w / 5
-                            for w in self.labels_data]
         # eventually pads uneven windows
         windows_size = max([len(w) for w in self.eegs_data])
         self.eegs_data = [w if w.shape[0] == windows_size
@@ -224,8 +221,10 @@ class EEGClassificationDataset(Dataset, ABC):
                           for w in self.eegs_data]
         assert all([len(w) == windows_size for w in self.eegs_data])
         # converts to tensor
-        self.eegs_data: torch.Tensor = torch.stack([torch.from_numpy(w) for w in self.eegs_data]).float()
-        self.labels_data: torch.Tensor = torch.stack([torch.as_tensor(w) for w in self.labels_data]).long()
+        # self.eegs_data: torch.Tensor = torch.stack([torch.from_numpy(w) for w in self.eegs_data]).float()
+        # self.labels_data: torch.Tensor = torch.stack([torch.as_tensor(w) for w in self.labels_data]).long()
+        self.eegs_data: np.ndarray = np.stack([torch.from_numpy(w) for w in self.eegs_data])
+        self.labels_data: np.ndarray = np.stack([torch.as_tensor(w) for w in self.labels_data])
 
     # def train_dataloader(self):
     #     return DataLoader(self.train_split, batch_size=self.batch_size, shuffle=True,
@@ -259,5 +258,60 @@ class EEGClassificationDataset(Dataset, ABC):
                                tight_layout=True)
         sns.countplot(x=subject_ids_samples,
                       palette="rocket", ax=ax)
+        plt.show()
+        fig.clf()
+
+    def plot_labels_distribution(
+            self,
+            title: str = "distribution of labels",
+            scale: int = 5,
+    ) -> None:
+        # builds the dataframe
+        df = pd.DataFrame()
+        for x in self:
+            for i_label, label in enumerate(self.labels):
+                df = pd.concat([df, pd.DataFrame([{
+                    "label": label,
+                    "value": x["labels"][i_label]
+                }])], ignore_index=True).sort_values(by="value", ascending=True)
+        if self.discretize_labels:
+            fig, ax = plt.subplots(nrows=1, ncols=1,
+                                   figsize=(scale, scale),
+                                   tight_layout=True)
+            fig.suptitle(title)
+            # plots
+            sns.histplot(
+                data=df,
+                x="label",
+                hue="value",
+                multiple="stack" if self.discretize_labels is True else "fill",
+                palette="rocket",
+                discrete=self.discretize_labels,
+                ax=ax
+            )
+            ax.set_xlabel("label")
+            ax.set_ylabel("count")
+        else:
+            fig, axs = plt.subplots(nrows=1, ncols=len(self.labels),
+                                    figsize=(scale * len(self.labels), scale),
+                                    tight_layout=True)
+            fig.suptitle(title)
+            # plots
+            for i_label, label in enumerate(self.labels):
+                ax = axs[i_label]
+                sns.histplot(
+                    data=df[df["label"] == label],
+                    bins=16,
+                    palette="rocket",
+                    ax=ax
+                )
+                ax.set_xlabel(label)
+                ax.set_ylabel("count")
+                ax.get_legend().remove()
+            # adjusts the ylim
+            max_ylim = max([ax.get_ylim()[-1] for ax in axs])
+            for ax in axs:
+                ax.set_ylim([0, max_ylim])
+
         plt.show()
         fig.clf()

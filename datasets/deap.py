@@ -50,6 +50,9 @@ class DEAPDataset(EEGClassificationDataset):
                 eegs += [subject_data["data"][i_experiment]]  # (s c)
                 # loads the labels for the experiment
                 labels += [subject_data["labels"][i_experiment]]  # (l)
+            # eventually discretizes the labels
+            labels = [[1 if label > 5 else 0 for label in w] if self.discretize_labels else (w - 1) / 8
+                      for w in labels]
             return eegs, labels, subject_id
 
         with Pool(processes=len(self.subject_ids)) as pool:
@@ -71,3 +74,9 @@ class DEAPDataset(EEGClassificationDataset):
                        for s in os.listdir(join(path, "data_preprocessed_python"))]
         subject_ids.sort()
         return subject_ids
+
+
+if __name__ == "__main__":
+    dataset = DEAPDataset(path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "deap"),
+                          discretize_labels=True)
+    dataset.plot_labels_distribution()

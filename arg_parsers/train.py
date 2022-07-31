@@ -20,6 +20,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=None,
                         type=float,
                         help="Duration of the windows in seconds")
+    parser.add_argument("--windows_stride",
+                        default=None,
+                        type=float,
+                        help="Duration of stride of the windows in seconds")
     parser.add_argument("--discretize_labels",
                         default=False,
                         action="store_true",
@@ -125,11 +129,11 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         help="Learning rate of the model")
 
     parser.add_argument("--mels",
-                        default=8,
+                        default=32,
                         type=int,
                         help="Number of mel banks")
     parser.add_argument("--mel_window_size",
-                        default=1,
+                        default=0.5,
                         type=float,
                         help="Size of spectrogram's windows")
     parser.add_argument("--mel_window_stride",
@@ -144,6 +148,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     if isinstance(args.checkpoints_path, str) and not isdir(args.checkpoints_path):
         makedirs(args.checkpoints_path)
     assert args.windows_size is None or args.windows_size > 0
+    assert args.windows_stride is None or args.windows_stride > 0
     assert args.batch_size >= 1
     assert args.min_epochs >= 1
     assert args.max_epochs >= 1 and args.max_epochs >= args.min_epochs

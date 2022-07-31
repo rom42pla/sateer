@@ -52,6 +52,9 @@ class DREAMERDataset(EEGClassificationDataset):
                 labels += [np.asarray([subject_data[k][i_experiment]
                                        for k in ["ScoreArousal", "ScoreValence",
                                                  "ScoreDominance"]])]  # (l)
+            # eventually discretizes the labels
+            labels = [[1 if label > 3 else 0 for label in w] if self.discretize_labels else (w - 1) / 4
+                      for w in labels]
             return eegs, labels, subject_id
 
         with Pool(processes=len(self.subject_ids)) as pool:
@@ -73,3 +76,9 @@ class DREAMERDataset(EEGClassificationDataset):
         subject_ids: List[str] = [f"s{i}" for i in range(len(data))]
         subject_ids.sort()
         return subject_ids
+
+
+if __name__ == "__main__":
+    dataset = DREAMERDataset(path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "dreamer"),
+                             discretize_labels=False)
+    dataset.plot_labels_distribution()
