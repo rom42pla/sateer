@@ -448,11 +448,9 @@ class GetSinusoidalPositionalEmbeddings(nn.Module):
         pe[:, 0::2] = torch.sin(position.float() * div_term)
         pe[:, 1::2] = torch.cos(position.float() * div_term)
         del position, div_term
-        print("pippo swollo", x.shape)
-        pe = pe[:x.shape[1]].repeat(x.shape[0], 1, 1)
-        print("pippo swollo 2", pe.shape)
+        pe = pe[:x.shape[1]].repeat(x.shape[0], 1, 1)[:, :x.shape[1]]
         assert pe.shape == x.shape
-        return pe[:x.shape[1]]
+        return pe
 
 
 class GetLearnedPositionalEmbeddings(nn.Module):
@@ -471,9 +469,7 @@ class GetLearnedPositionalEmbeddings(nn.Module):
 
     def forward(self, x: torch.Tensor):
         assert len(x.shape) == 3  # (b s c)
-        print("pippo swollo", x.shape)
         pe = self.embedder(torch.arange(x.shape[1], device=x.device)).repeat(x.shape[0], 1, 1)
-        print("pippo swollo 2", pe.shape)
         assert pe.shape == x.shape
         return pe
 
