@@ -61,7 +61,6 @@ dataset: EEGClassificationDataset = dataset_class(
     drop_last=True,
     discretize_labels=not args['dont_discretize_labels'],
     normalize_eegs=not args['dont_normalize_eegs'],
-    learning_rate=2e-4,
 )
 shuffled_indices = torch.randperm(len(dataset))
 dataset_train = Subset(dataset, shuffled_indices[:int(len(dataset) * args['train_set_size'])])
