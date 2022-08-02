@@ -177,7 +177,7 @@ class FouriEEGTransformer(pl.LightningModule):
                               ),
         )
 
-        self.encoder = FouriEncoder(embeddings_dim=self.hidden_size,
+        self.encoder = FouriEncoder(hidden_size=self.hidden_size,
                                     num_encoders=self.num_encoders,
                                     dropout_p=self.dropout_p,
                                     mixing_sublayer_type=self.mixing_sublayer_type,
@@ -193,10 +193,18 @@ class FouriEEGTransformer(pl.LightningModule):
                 dim_feedforward=self.hidden_size * 4,
                 dropout=dropout_p,
                 activation=F.selu,
-                nhead=8,
+                nhead=self.num_attention_heads,
             ),
             num_layers=num_decoders,
         )
+        # replaces dropouts with alpha-dropout in the decoder
+        for _, module in self.decoder.layers.named_children():
+            for attr_str in dir(module):
+                target_attr = getattr(module, attr_str)
+                if type(target_attr) == nn.Dropout:
+                    setattr(module, attr_str,
+                            nn.AlphaDropout(self.dropout_p))
+
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
                 ("linear1", nn.Linear(in_features=self.hidden_size,
@@ -372,8 +380,10 @@ if __name__ == "__main__":
         in_channels=32,
         sampling_rate=sampling_rate,
         labels=4,
+        dropout_p=0.2,
         hidden_size=512,
         num_encoders=2,
+        num_decoders=2,
         positional_embedding_type="learned",
         mixing_sublayer_type="attention",
         # use_masking=True, mask_perc_min=0.1, mask_perc_max=0.3,

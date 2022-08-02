@@ -19,10 +19,11 @@ from torchaudio import transforms
 class FouriEncoder(nn.Module):
     def __init__(
             self,
-            embeddings_dim: int,
+            hidden_size: int,
             num_encoders: int = 6,
             dropout_p: float = 0.1,
             mixing_sublayer_type: str = "fourier",
+            num_attention_heads: int = 8,
     ):
         super().__init__()
 
@@ -30,9 +31,12 @@ class FouriEncoder(nn.Module):
         assert isinstance(num_encoders, int) and num_encoders >= 1, \
             f"there must be at least one encoder, not {num_encoders}"
         self.num_encoders = num_encoders
-        assert isinstance(embeddings_dim, int) and embeddings_dim >= 1, \
-            f"embeddings must be greater than 0, not {embeddings_dim}"
-        self.embeddings_dim = embeddings_dim
+        assert isinstance(hidden_size, int) and hidden_size >= 1, \
+            f"embeddings must be greater than 0, not {hidden_size}"
+        self.hidden_size = hidden_size
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1 \
+               and self.hidden_size % num_attention_heads == 0
+        self.num_attention_heads = num_attention_heads
         assert 0 <= dropout_p < 1, \
             f"dropout must be in [0, 1], not {dropout_p}"
         self.dropout_p = dropout_p
@@ -42,11 +46,12 @@ class FouriEncoder(nn.Module):
         # architecture
         self.encoder_blocks = nn.Sequential(OrderedDict([*[(f"enc{i}",
                                                             FouriEncoderBlock(
-                                                                in_features=self.embeddings_dim,
-                                                                mid_features=self.embeddings_dim * 4,
-                                                                out_features=self.embeddings_dim,
+                                                                in_features=self.hidden_size,
+                                                                mid_features=self.hidden_size * 4,
+                                                                out_features=self.hidden_size,
                                                                 dropout_p=self.dropout_p,
                                                                 mixing_sublayer_type=self.mixing_sublayer_type,
+                                                                num_attention_heads=self.num_attention_heads,
                                                             ))
                                                            for i in range(self.num_encoders)],
                                                          # ("pool", nn.Linear(in_features=self.embeddings_dim,
@@ -56,7 +61,7 @@ class FouriEncoder(nn.Module):
 
     def forward(self, x: torch.Tensor):
         # prepares the input
-        assert x.shape[-1] == self.embeddings_dim
+        assert x.shape[-1] == self.hidden_size
         assert len(x.shape) in {2, 3}
         is_batched = True if len(x.shape) == 3 else False
         if not is_batched:
@@ -83,6 +88,7 @@ class FouriEncoderBlock(nn.Module):
             dropout_p: Union[int, float] = 0,
             mixing_sublayer_type: str = "fourier",
             max_position_embeddings: int = 512,
+            num_attention_heads: int = 8,
     ):
         super().__init__()
         assert isinstance(in_features, int) and in_features >= 1
@@ -93,6 +99,9 @@ class FouriEncoderBlock(nn.Module):
         self.out_features = out_features
         assert isinstance(max_position_embeddings, int) and max_position_embeddings >= 1
         self.max_position_embeddings = max_position_embeddings
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1 \
+               and self.in_features % num_attention_heads == 0
+        self.num_attention_heads = num_attention_heads
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p
         mixing_sublayer_mapping = {
@@ -106,7 +115,8 @@ class FouriEncoderBlock(nn.Module):
         self.mixing_sublayer = mixing_sublayer_mapping[
             self.mixing_sublayer_type](hidden_size=self.in_features,
                                        max_position_embeddings=max_position_embeddings,
-                                       dropout_p=dropout_p)
+                                       dropout_p=dropout_p,
+                                       num_attention_heads=self.num_attention_heads)
 
         self.layer_norm_1 = nn.LayerNorm([in_features, ])
         self.feed_forward_layer = FouriFeedForward(in_features=self.in_features,
