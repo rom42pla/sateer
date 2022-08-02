@@ -68,7 +68,7 @@ dataset_val = Subset(dataset, shuffled_indices[int(len(dataset) * args['train_se
 
 defaults = {}
 for parameter, default, search_space in [
-    ("mels", 8, [8, 16, 32]),
+    ("mels", 16, [8, 16, 32]),
     ("mel_window_size", 1, [0.1, 0.2, 0.5, 1]),
     ("mel_window_stride", 0.05, [0.05, 0.1, 0.25, 0.5]),
 
@@ -148,3 +148,4 @@ logs = pd.DataFrame([
 logs.to_csv(join(experiment_path, "results.csv"), index=False)
 plot_ablation(logs=logs,
               experiment_path=experiment_path)
+plot_ablation(experiment_path)

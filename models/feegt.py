@@ -32,7 +32,7 @@ class FouriEEGTransformer(pl.LightningModule):
             sampling_rate: int,
             labels: Union[int, List[str]],
 
-            mels: int = 8,
+            mels: int = 16,
             mel_window_size: Union[int, float] = 1,
             mel_window_stride: Union[int, float] = 0.05,
 
