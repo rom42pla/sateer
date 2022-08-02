@@ -246,6 +246,7 @@ class FouriEEGTransformer(pl.LightningModule):
             # adds start and end tokens
             x = self.add_start_end_tokens(x)
             # adds positional embeddings and type embeddings
+            print(x.shape, self.position_embedder(x).shape, self.token_type_embedder(x, special_tokens_indices=[0, -1]).shape)
             x = x + \
                 self.position_embedder(x) + \
                 self.token_type_embedder(x, special_tokens_indices=[0, -1])  # (b s d)
