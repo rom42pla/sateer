@@ -117,7 +117,7 @@ def train_k_fold(
         max_epochs: int = 1000,
         precision: int = 32,
         auto_lr_finder: bool = False,
-        gradient_clipping: bool = False,
+        gradient_clipping: bool = True,
         stochastic_weight_average: bool = False,
         progress_bar: bool = True,
         **kwargs,
@@ -215,7 +215,7 @@ def train(
         max_epochs: int = 1000,
         precision: int = 32,
         auto_lr_finder: bool = False,
-        gradient_clipping: bool = False,
+        gradient_clipping: bool = True,
         stochastic_weight_average: bool = False,
         **kwargs,
 ) -> pd.DataFrame:
