@@ -34,8 +34,7 @@ class FouriEncoder(nn.Module):
         assert isinstance(hidden_size, int) and hidden_size >= 1, \
             f"embeddings must be greater than 0, not {hidden_size}"
         self.hidden_size = hidden_size
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1 \
-               and self.hidden_size % num_attention_heads == 0
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
         self.num_attention_heads = num_attention_heads
         assert 0 <= dropout_p < 1, \
             f"dropout must be in [0, 1], not {dropout_p}"
@@ -99,8 +98,7 @@ class FouriEncoderBlock(nn.Module):
         self.out_features = out_features
         assert isinstance(max_position_embeddings, int) and max_position_embeddings >= 1
         self.max_position_embeddings = max_position_embeddings
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1 \
-               and self.in_features % num_attention_heads == 0
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
         self.num_attention_heads = num_attention_heads
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p
@@ -377,8 +375,7 @@ class AttentionTransform(nn.Module):
         self.max_position_embeddings = max_position_embeddings
         assert isinstance(hidden_size, int) and hidden_size >= 1
         self.hidden_size = hidden_size
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1 \
-               and self.hidden_size % num_attention_heads == 0
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
         self.num_attention_heads = num_attention_heads
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p

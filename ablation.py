@@ -95,7 +95,9 @@ def objective(trial: Trial):
     for parameter in defaults.keys():
         if parameter in tested_parameters:
             parameter_type = type(defaults[parameter]["default"])
-            if args["grid_search"] is False and parameter_type in [int, float]:
+            if args["grid_search"] is False \
+                    and parameter_type in [int, float] \
+                    and parameter not in {"hidden_size"}:
                 if parameter_type is int:
                     suggested_value = trial.suggest_int(
                         parameter,
@@ -128,7 +130,6 @@ def objective(trial: Trial):
         dataset_val=dataset_val,
         model=model,
         experiment_path=join(experiment_path, f"trial_{trial.number}"),
-        precision=16,
         **args
     )
     for k, v in trial_args.items():

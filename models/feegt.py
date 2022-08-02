@@ -89,8 +89,7 @@ class FouriEEGTransformer(pl.LightningModule):
         self.num_encoders: int = num_encoders
         assert isinstance(num_decoders, int) and num_decoders >= 1
         self.num_decoders = num_decoders
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1 \
-               and self.hidden_size % num_attention_heads == 0
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
         self.num_attention_heads = num_attention_heads
         assert isinstance(positional_embedding_type, str) and positional_embedding_type in {"sinusoidal", "learned"}
         self.positional_embedding_type = positional_embedding_type
