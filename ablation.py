@@ -156,7 +156,7 @@ else:
         sampler=TPESampler(),
         direction="maximize",
     )
-    study.optimize(objective, n_trials=20)
+    study.optimize(objective, n_trials=50)
 
 # frees some memory
 del dataset
