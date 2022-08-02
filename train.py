@@ -57,7 +57,7 @@ if args['model'] == "feegt":
         labels=dataset.labels,
         num_encoders=args['num_encoders'],
         num_decoders=args['num_decoders'],
-        window_embedding_dim=args['window_embedding_dim'],
+        hidden_size=args['window_embedding_dim'],
         use_masking=not args['disable_masking'],
         learning_rate=args['learning_rate'],
         dropout_p=args['dropout_p'],

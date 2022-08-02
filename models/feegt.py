@@ -21,33 +21,38 @@ import torch.autograd.profiler as profiler
 from torch.profiler import profile, ProfilerActivity
 from torchaudio import transforms
 
-from models.fourinet import FouriEncoder, FouriEncoderBlock, FouriDecoder
+from models.layers import FouriEncoder, FouriEncoderBlock, FouriDecoder, AddGaussianNoise, MelSpectrogram, \
+    GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings
 
 
 class FouriEEGTransformer(pl.LightningModule):
-    def __init__(self,
-                 in_channels: int,
-                 sampling_rate: int,
-                 labels: Union[int, List[str]],
+    def __init__(
+            self,
+            in_channels: int,
+            sampling_rate: int,
+            labels: Union[int, List[str]],
 
-                 window_embedding_dim: int = 512,
-                 num_encoders: int = 1,
-                 num_decoders: int = 1,
-                 dropout_p: Union[int, float] = 0.2,
-                 noise_strength: Union[int, float] = 0,
+            mels: int = 8,
+            mel_window_size: Union[int, float] = 1,
+            mel_window_stride: Union[int, float] = 0.05,
 
-                 learning_rate: float = 1e-4,
+            mixing_sublayer_type: str = "fourier",
+            hidden_size: int = 768,
+            num_encoders: int = 12,
+            num_decoders: int = 12,
+            num_attention_heads: int = 8,
+            positional_embedding_type: str = "sinusoidal",
+            max_position_embeddings: int = 512,
+            dropout_p: Union[int, float] = 0.1,
 
-                 use_masking: bool = True,
-                 mask_perc_min: float = 0.05,
-                 mask_perc_max: float = 0.3,
+            noise_strength: Union[int, float] = 0,
+            # use_masking: bool = True,
+            # mask_perc_min: float = 0.05,
+            # mask_perc_max: float = 0.3,
 
-                 mels: int = 8,
-                 mel_window_size: Union[int, float] = 1,
-                 mel_window_stride: Union[int, float] = 0.05,
-                 mix_fourier_with_tokens: bool = True,
-
-                 device: Optional[str] = None):
+            learning_rate: float = 1e-4,
+            device: Optional[str] = None
+    ):
         super().__init__()
 
         # metas
@@ -74,41 +79,64 @@ class FouriEEGTransformer(pl.LightningModule):
         assert mel_window_stride > 0
         self.mel_window_size = mel_window_size
         self.mel_window_stride = mel_window_stride
-        assert isinstance(mix_fourier_with_tokens, bool)
-        self.mix_fourier_with_tokens = mix_fourier_with_tokens
-
-        # regularization
-        assert isinstance(use_masking, bool)
-        self.use_masking = use_masking
-        if self.use_masking is True:
-            assert isinstance(mask_perc_min, float) and 0 <= mask_perc_min < 1
-            assert isinstance(mask_perc_max, float) and 0 <= mask_perc_max < 1 and mask_perc_max >= mask_perc_min
-            self.mask_perc_max, self.mask_perc_min = mask_perc_max, mask_perc_min
-        else:
-            self.mask_perc_max, self.mask_perc_min = None, None
-        assert 0 <= dropout_p < 1
-        self.dropout_p = dropout_p
-        assert noise_strength >= 0
-        self.noise_strength = noise_strength
+        assert isinstance(mixing_sublayer_type, str)
+        self.mixing_sublayer_type = mixing_sublayer_type
 
         # model architecture
+        assert isinstance(hidden_size, int) and hidden_size >= 1
+        self.hidden_size = hidden_size
         assert isinstance(num_encoders, int) and num_encoders >= 1
         self.num_encoders: int = num_encoders
         assert isinstance(num_decoders, int) and num_decoders >= 1
         self.num_decoders = num_decoders
-        assert isinstance(window_embedding_dim, int) and window_embedding_dim >= 1
-        self.window_embedding_dim = window_embedding_dim
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1 \
+               and self.hidden_size % num_attention_heads == 0
+        self.num_attention_heads = num_attention_heads
+        assert isinstance(positional_embedding_type, str) and positional_embedding_type in {"sinusoidal", "learned"}
+        self.positional_embedding_type = positional_embedding_type
+        assert isinstance(max_position_embeddings, int) and max_position_embeddings >= 1
+        self.max_position_embeddings = max_position_embeddings
+        assert 0 <= dropout_p < 1
+        self.dropout_p = dropout_p
+
+        # regularization
+        # assert isinstance(use_masking, bool)
+        # self.use_masking = use_masking
+        # if self.use_masking is True:
+        #     assert isinstance(mask_perc_min, float) and 0 <= mask_perc_min < 1
+        #     assert isinstance(mask_perc_max, float) and 0 <= mask_perc_max < 1 and mask_perc_max >= mask_perc_min
+        #     self.mask_perc_max, self.mask_perc_min = mask_perc_max, mask_perc_min
+        # else:
+        #     self.mask_perc_max, self.mask_perc_min = None, None
+        assert noise_strength >= 0
+        self.noise_strength = noise_strength
 
         # optimization
         assert isinstance(learning_rate, float) and learning_rate > 0
         self.learning_rate = learning_rate
+        assert device is None or device in {"cuda", "cpu"}
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.special_tokens_vocab = {
             k: i
-            for i, k in enumerate(["start", "end", "mask"])
+            for i, k in enumerate(["start", "end"])
+            # for i, k in enumerate(["start", "end", "mask"])
         }
-        self.tokens_embedder = nn.Embedding(len(self.special_tokens_vocab), self.window_embedding_dim)
-        self.labels_embedder = nn.Embedding(len(self.labels), self.window_embedding_dim)
+        self.tokens_embedder = nn.Embedding(len(self.special_tokens_vocab), self.hidden_size)
+        if self.positional_embedding_type == "sinusoidal":
+            self.position_embedder = GetSinusoidalPositionalEmbeddings(
+                max_position_embeddings=self.max_position_embeddings,
+            )
+        elif self.positional_embedding_type == "learned":
+            self.position_embedder = GetLearnedPositionalEmbeddings(
+                max_position_embeddings=self.max_position_embeddings,
+                hidden_size=self.hidden_size
+            )
+        self.labels_embedder = nn.Embedding(len(self.labels), self.hidden_size)
+        self.token_type_embedder = GetTokenTypeEmbeddings(
+            hidden_size=self.hidden_size,
+        )
         self.add_noise = nn.Sequential(
             AddGaussianNoise(strength=self.noise_strength)
         )
@@ -143,14 +171,16 @@ class FouriEEGTransformer(pl.LightningModule):
             # nn.Linear(in_features=self.mels, out_features=1),
             Rearrange("b s c m -> b s (c m)"),
             FouriEncoderBlock(in_features=self.in_channels * self.mels,
-                              mid_features=self.window_embedding_dim * 4,
-                              out_features=self.window_embedding_dim,
+                              mid_features=self.hidden_size * 4,
+                              out_features=self.hidden_size,
+                              mixing_sublayer_type=self.mixing_sublayer_type,
                               ),
         )
 
-        self.encoder = FouriEncoder(embeddings_dim=self.window_embedding_dim,
+        self.encoder = FouriEncoder(embeddings_dim=self.hidden_size,
                                     num_encoders=self.num_encoders,
                                     dropout_p=self.dropout_p,
+                                    mixing_sublayer_type=self.mixing_sublayer_type,
                                     )
         # self.decoder = FouriDecoder(embeddings_dim=self.window_embedding_dim,
         #                             num_decoders=self.num_decoders,
@@ -159,8 +189,8 @@ class FouriEEGTransformer(pl.LightningModule):
         self.decoder = nn.TransformerDecoder(
             decoder_layer=nn.TransformerDecoderLayer(
                 batch_first=True,
-                d_model=self.window_embedding_dim,
-                dim_feedforward=self.window_embedding_dim * 4,
+                d_model=self.hidden_size,
+                dim_feedforward=self.hidden_size * 4,
                 dropout=dropout_p,
                 activation=F.selu,
                 nhead=8,
@@ -169,11 +199,11 @@ class FouriEEGTransformer(pl.LightningModule):
         )
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
-                ("linear1", nn.Linear(in_features=self.window_embedding_dim,
-                                      out_features=self.window_embedding_dim * 4)),
+                ("linear1", nn.Linear(in_features=self.hidden_size,
+                                      out_features=self.hidden_size * 4)),
                 ("activation1", nn.SELU()),
                 ("dropout", nn.AlphaDropout(p=self.dropout_p)),
-                ("linear2", nn.Linear(in_features=self.window_embedding_dim * 4,
+                ("linear2", nn.Linear(in_features=self.hidden_size * 4,
                                       out_features=2)),
                 # ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
             ]))
@@ -181,9 +211,6 @@ class FouriEEGTransformer(pl.LightningModule):
         ])
 
         self.float()
-        assert device is None or device in {"cuda", "cpu"}
-        if device is None:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
         self.to(device)
         self.save_hyperparameters()
 
@@ -206,12 +233,14 @@ class FouriEEGTransformer(pl.LightningModule):
 
         with profiler.record_function("encoder"):
             # eventually adds masking
-            if self.training and self.use_masking:
-                x = self.apply_random_mask(x)
+            # if self.training and self.use_masking:
+            #     x = self.apply_random_mask(x)
             # adds start and end tokens
             x = self.add_start_end_tokens(x)
-            # adds positional embeddings
-            x = self.add_positional_embeddings(x)  # (b s d)
+            # adds positional embeddings and type embeddings
+            x = x + \
+                self.position_embedder(x) + \
+                self.token_type_embedder(x, special_tokens_indices=[0, -1])  # (b s d)
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
 
@@ -239,18 +268,6 @@ class FouriEEGTransformer(pl.LightningModule):
                 labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
         return labels_pred
 
-    def add_positional_embeddings(self, x: torch.Tensor):
-        sequence_length, embeddings_dim = x.shape[-2], x.shape[-1]
-        pe = torch.zeros(sequence_length, embeddings_dim, device=self.device)
-        position = torch.arange(0, sequence_length, device=self.device).unsqueeze(1)
-        div_term = torch.exp((torch.arange(0, embeddings_dim, 2, dtype=torch.float, device=self.device) *
-                              -(math.log(10000.0) / embeddings_dim)))
-        pe[:, 0::2] = torch.sin(position.float() * div_term)
-        pe[:, 1::2] = torch.cos(position.float() * div_term)
-        x = x + pe
-        del pe, position, div_term
-        return x
-
     def add_start_end_tokens(self, x: torch.Tensor):
         # generates start and end tokens
         start_token, end_token = self.tokens_embedder(torch.as_tensor([
@@ -264,18 +281,18 @@ class FouriEEGTransformer(pl.LightningModule):
         del start_token, end_token
         return x
 
-    def apply_random_mask(self, x: torch.Tensor):
-        # generates mask token
-        mask_token = self.tokens_embedder(torch.as_tensor([
-            self.special_tokens_vocab["mask"],
-        ], device=self.device))[0]
-        # applies the mask
-        mask_rand = torch.rand(*x.shape[:2],
-                               dtype=torch.float, device=self.device)
-        mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
-        x[mask] = mask_token
-        del mask_token, mask_rand, mask
-        return x
+    # def apply_random_mask(self, x: torch.Tensor):
+    #     # generates mask token
+    #     mask_token = self.tokens_embedder(torch.as_tensor([
+    #         self.special_tokens_vocab["mask"],
+    #     ], device=self.device))[0]
+    #     # applies the mask
+    #     mask_rand = torch.rand(*x.shape[:2],
+    #                            dtype=torch.float, device=self.device)
+    #     mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
+    #     x[mask] = mask_token
+    #     del mask_token, mask_rand, mask
+    #     return x
 
     def training_step(self, batch, batch_idx):
         return self.step(batch)
@@ -342,98 +359,6 @@ class FouriEEGTransformer(pl.LightningModule):
         print(best_epoch)
 
 
-class AddGaussianNoise(nn.Module):
-    def __init__(self, strength: float = 0.1):
-        super().__init__()
-        assert strength >= 0
-        self.strength = strength
-
-    def forward(self, x: torch.Tensor):
-        noise = torch.normal(mean=torch.zeros_like(x, device=x.device, requires_grad=False) + x.mean(),
-                             std=torch.zeros_like(x, device=x.device, requires_grad=False) + x.std())
-        noise = noise * self.strength
-        return x + noise
-
-
-class MelSpectrogram(nn.Module):
-    def __init__(self,
-                 sampling_rate: Union[int, float, torch.Tensor],
-                 window_size: Union[int, float] = 0.5,
-                 window_stride: Union[int, float] = 0.05,
-                 min_freq: int = 0,
-                 max_freq: int = 50,
-                 mels: int = 8,
-                 ):
-        super().__init__()
-        # sampling rate
-        assert any([isinstance(sampling_rate, t) for t in (int, float, torch.Tensor)])
-        if isinstance(sampling_rate, torch.Tensor):
-            if not torch.allclose(sampling_rate, sampling_rate[0]):
-                raise NotImplementedError(f"all the elements in a batch must have the same sampling rate")
-            sampling_rate = sampling_rate[0].detach().item()
-        self.sampling_rate = sampling_rate
-        # frequencies
-        assert isinstance(min_freq, int) and isinstance(max_freq, int) and \
-               0 <= min_freq <= max_freq
-        self.min_freq: int = min_freq
-        self.max_freq: int = max_freq
-        assert isinstance(mels, int) \
-               and mels > 0
-        self.mels = mels
-
-        # window
-        assert window_size > 0
-        self.window_size = math.floor(window_size * self.sampling_rate)
-        assert window_stride > 0
-        self.window_stride = math.floor(window_stride * self.sampling_rate)
-
-    def forward(self, eegs: torch.Tensor):
-        assert isinstance(eegs, torch.Tensor) and len(eegs.shape) in {2, 3}
-        eegs = einops.rearrange(eegs, "s c -> c s" if len(eegs.shape) == 2 else "b s c -> b c s")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            mel_fn = transforms.MelSpectrogram(
-                sample_rate=self.sampling_rate,
-                f_min=self.min_freq,
-                f_max=self.max_freq,
-                n_mels=self.mels,
-                center=True,
-                n_fft=128,
-                normalized=True,
-                power=1,
-                win_length=self.window_size,
-                hop_length=self.window_stride,
-                pad=self.window_stride // 2,
-            ).to(eegs.device)
-            spectrogram = mel_fn(eegs)  # (b c m s)
-        spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
-        return spectrogram
-
-    @staticmethod
-    def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
-        assert len(spectrogram.shape) == 3  # s c m
-        import matplotlib.pyplot as plt
-        lines = int(math.ceil(math.sqrt(spectrogram.shape[1])))
-        fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
-                                tight_layout=True)
-        min_value, max_value = spectrogram.min(), spectrogram.max()
-
-        for i_ax, ax in enumerate(axs.flat):
-            if i_ax < spectrogram.shape[1]:
-                im = ax.imshow(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
-                               vmin=min_value, vmax=max_value, aspect="auto", cmap=plt.get_cmap("hot"))
-                divider = make_axes_locatable(ax)
-                cax = divider.append_axes("right", size="5%", pad=0.05)
-                fig.colorbar(im, cax=cax, orientation="vertical")
-                ax.set_title(f"electrode {i_ax}")
-                ax.set_xlabel("sample")
-                ax.set_ylabel("mels")
-                ax.invert_yaxis()
-            else:
-                ax.set_visible(False)
-        plt.show(block=False)
-
-
 if __name__ == "__main__":
     batch_size = 64
     sampling_rate = 128
@@ -443,11 +368,16 @@ if __name__ == "__main__":
         "labels": torch.ones(batch_size, 4, dtype=torch.long),
         "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
     }
-    model = FouriEEGTransformer(in_channels=32, sampling_rate=sampling_rate,
-                                labels=4, window_embedding_dim=512,
-                                num_encoders=2, use_masking=True,
-                                mask_perc_min=0.1, mask_perc_max=0.3,
-                                mix_fourier_with_tokens=True)
+    model = FouriEEGTransformer(
+        in_channels=32,
+        sampling_rate=sampling_rate,
+        labels=4,
+        hidden_size=512,
+        num_encoders=2,
+        positional_embedding_type="learned",
+        mixing_sublayer_type="attention",
+        # use_masking=True, mask_perc_min=0.1, mask_perc_max=0.3,
+    )
     model.training = True
     print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:

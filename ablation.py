@@ -126,7 +126,7 @@ def objective(trial: Trial):
 
         num_encoders=trial_args['num_encoders'],
         num_decoders=trial_args['num_decoders'],
-        window_embedding_dim=trial_args['embeddings_dim'],
+        hidden_size=trial_args['embeddings_dim'],
         use_masking=trial_args['masking'],
         dropout_p=trial_args['dropout_p'],
         noise_strength=trial_args['noise_strength'],

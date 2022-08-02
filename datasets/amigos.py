@@ -75,4 +75,4 @@ if __name__ == "__main__":
                             discretize_labels=True, normalize_eegs=True, split_in_windows=True)
     print("loaded", len(dataset))
     dataset.plot_labels_distribution()
-    # dataset.plot_amplitudes_distribution()
+    dataset.plot_amplitudes_distribution()
