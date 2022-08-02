@@ -448,7 +448,9 @@ class GetSinusoidalPositionalEmbeddings(nn.Module):
         pe[:, 0::2] = torch.sin(position.float() * div_term)
         pe[:, 1::2] = torch.cos(position.float() * div_term)
         del position, div_term
+        print("pippo swollo", x.shape)
         pe = pe[:x.shape[1]].repeat(x.shape[0], 1, 1)
+        print("pippo swollo 2", pe.shape)
         assert pe.shape == x.shape
         return pe[:x.shape[1]]
 
