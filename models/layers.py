@@ -338,6 +338,7 @@ class LinearTransform(nn.Module):
             self,
             max_position_embeddings: int = 512,
             hidden_size: int = 768,
+            **kwargd
     ):
         super().__init__()
         assert isinstance(max_position_embeddings, int) and max_position_embeddings >= 1
@@ -369,6 +370,7 @@ class AttentionTransform(nn.Module):
             hidden_size: int = 768,
             num_attention_heads: int = 8,
             dropout_p: Union[int, float] = 0.1,
+            **kwargs
     ):
         super().__init__()
         assert isinstance(max_position_embeddings, int) and max_position_embeddings >= 1

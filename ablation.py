@@ -74,7 +74,7 @@ for parameter, default, search_space in [
 
     ("mixing_sublayer_type", "fourier", ["fourier", "identity", "linear", "attention"]),
 
-    ("hidden_size", 512, [128, 256, 512, 768]),
+    ("hidden_size", 512, [256, 512, 768]),
     ("num_encoders", 2, [2, 4, 8, 12]),
     ("num_decoders", 2, [2, 4, 8, 12]),
     ("num_attention_heads", 8, [4, 8]),
