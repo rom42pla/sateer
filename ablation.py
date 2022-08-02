@@ -61,6 +61,7 @@ dataset: EEGClassificationDataset = dataset_class(
     drop_last=True,
     discretize_labels=not args['dont_discretize_labels'],
     normalize_eegs=not args['dont_normalize_eegs'],
+    learning_rate=2e-4,
 )
 shuffled_indices = torch.randperm(len(dataset))
 dataset_train = Subset(dataset, shuffled_indices[:int(len(dataset) * args['train_set_size'])])
@@ -75,10 +76,10 @@ for parameter, default, search_space in [
     ("mixing_sublayer_type", "fourier", ["fourier", "identity", "linear", "attention"]),
 
     ("hidden_size", 512, [128, 256, 512, 768]),
-    ("num_encoders", 4, [2, 4, 8, 12]),
-    ("num_decoders", 4, [2, 4, 8, 12]),
-    ("num_attention_heads", 4, [2, 4, 8]),
-    ("positional_embedding_type", "learned", ["sinusoidal", "learned"]),
+    ("num_encoders", 2, [2, 4, 8, 12]),
+    ("num_decoders", 2, [2, 4, 8, 12]),
+    ("num_attention_heads", 8, [4, 8]),
+    ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.5]),
     ("noise_strength", 0.1, [0, 0.1, 0.2]),
 ]:
