@@ -469,7 +469,9 @@ class GetLearnedPositionalEmbeddings(nn.Module):
 
     def forward(self, x: torch.Tensor):
         assert len(x.shape) == 3  # (b s c)
+        print("pippo swollo", x.shape)
         pe = self.embedder(torch.arange(x.shape[1], device=x.device)).repeat(x.shape[0], 1, 1)
+        print("pippo swollo 2", pe.shape)
         assert pe.shape == x.shape
         return pe
 
