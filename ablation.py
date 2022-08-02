@@ -1,9 +1,10 @@
 import gc
 import logging
+import re
 from datetime import datetime
 from os import makedirs
 from os.path import join
-from pprint import pformat
+from pprint import pformat, pprint
 from typing import Union, Dict, Iterable
 
 import numpy as np
@@ -31,12 +32,8 @@ logging.info(f"line args:\n{pformat(args)}")
 
 # gets testing attributes
 tested_parameters = [
-    k for k, v in args.items()
-    if k in ["test_num_encoders", "test_embeddings_dim",
-             "test_masking", "test_noise", "test_dropout_p",
-             "test_mix_fourier",
-             "test_mels", "test_mel_window_size", "test_mel_window_stride"]
-       and v is True
+    "_".join(k.split("_")[1:]) for k, v in args.items()
+    if re.fullmatch(r"test_.*", k) and v is True
 ]
 logging.info(f"tested parameters:\n{pformat(tested_parameters)}")
 assert len(tested_parameters) > 0
@@ -58,64 +55,47 @@ save_to_json(tested_parameters, path=join(experiment_path, "tested_args.json"))
 dataset_class = parse_dataset_class(name=args["dataset_type"])
 dataset: EEGClassificationDataset = dataset_class(
     path=args['dataset_path'],
-    split_in_windows=True if args['windows_size'] is not None else False,
-    window_size=args['windows_size'], drop_last=True,
-    discretize_labels=args['discretize_labels'],
-    normalize_eegs=args['normalize_eegs'],
+    split_in_windows=True,
+    window_size=args['windows_size'],
+    window_stride=args['windows_stride'],
+    drop_last=True,
+    discretize_labels=not args['dont_discretize_labels'],
+    normalize_eegs=not args['dont_normalize_eegs'],
 )
 shuffled_indices = torch.randperm(len(dataset))
 dataset_train = Subset(dataset, shuffled_indices[:int(len(dataset) * args['train_set_size'])])
 dataset_val = Subset(dataset, shuffled_indices[int(len(dataset) * args['train_set_size']):])
 
-defaults = {
-    "num_encoders": 1,
-    "num_decoders": 1,
-    "embeddings_dim": 128,
-    "masking": True,
-    "dropout_p": 0.25,
-    "noise_strength": 0.1,
-    "mix_fourier_with_tokens": True,
-    "mels": 8,
-    "mel_window_size": 1,
-    "mel_window_stride": 0.1,
-}
+defaults = {}
+for parameter, default, search_space in [
+    ("mels", 8, [8, 16, 32]),
+    ("mel_window_size", 1, [0.1, 0.2, 0.5, 1]),
+    ("mel_window_stride", 0.05, [0.05, 0.1, 0.25, 0.5]),
+
+    ("mixing_sublayer_type", "fourier", ["fourier", "identity", "linear", "attention"]),
+
+    ("hidden_size", 512, [128, 256, 512, 768]),
+    ("num_encoders", 4, [2, 4, 8, 12]),
+    ("num_decoders", 4, [2, 4, 8, 12]),
+    ("num_attention_heads", 4, [2, 4, 8]),
+    ("positional_embedding_type", "learned", ["sinusoidal", "learned"]),
+    ("dropout_p", 0.2, [0, 0.1, 0.2, 0.5]),
+    ("noise_strength", 0.1, [0, 0.1, 0.2]),
+]:
+    defaults[parameter] = {
+        "search_space": search_space,
+        "default": default,
+    }
 
 
 def objective(trial: Trial):
     gc.collect()
 
-    trial_args = {
-        "num_encoders":
-            trial.suggest_int("num_encoders", 1, 4)
-            if args['test_num_encoders'] else defaults['num_encoders'],
-        "num_decoders":
-            trial.suggest_int("num_decoders", 1, 4)
-            if args['test_num_decoders'] else defaults['num_decoders'],
-        "embeddings_dim":
-            trial.suggest_categorical("embeddings_dim", [128, 256, 512])
-            if args['test_embeddings_dim'] else defaults['embeddings_dim'],
-        "masking":
-            trial.suggest_categorical("masking", [True, False])
-            if args['test_masking'] else defaults['masking'],
-        "dropout_p":
-            trial.suggest_float("dropout_p", 0, 0.99)
-            if args['test_dropout_p'] else defaults['dropout_p'],
-        "noise_strength":
-            trial.suggest_float("noise_strength", 0, 0.99)
-            if args['test_noise'] else defaults['noise_strength'],
-        "mix_fourier_with_tokens":
-            trial.suggest_categorical("mix_fourier_with_tokens", [True, False])
-            if args['test_mix_fourier'] else defaults['mix_fourier_with_tokens'],
-        "mels":
-            trial.suggest_categorical("mels", [4, 8, 12, 16])
-            if args['test_mels'] else defaults['mels'],
-        "mel_window_size":
-            trial.suggest_float("mel_window_size", 0.1, 1)
-            if args['test_mel_window_size'] else defaults['mel_window_size'],
-        "mel_window_stride":
-            trial.suggest_float("mel_window_stride", 0.05, 0.5)
-            if args['test_mel_window_stride'] else defaults['mel_window_stride'],
-    }
+    trial_args = {}
+    for parameter in defaults.keys():
+        trial_args[parameter] = trial.suggest_categorical(parameter,
+                                                          defaults[parameter]["search_space"]) \
+            if parameter in tested_parameters else defaults[parameter]["default"]
     logging.info(f"started trial {trial.number} with parameters:\n{pformat(trial_args)}")
 
     model: pl.LightningModule = FouriEEGTransformer(
@@ -123,17 +103,7 @@ def objective(trial: Trial):
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
         learning_rate=args['learning_rate'],
-
-        num_encoders=trial_args['num_encoders'],
-        num_decoders=trial_args['num_decoders'],
-        hidden_size=trial_args['embeddings_dim'],
-        use_masking=trial_args['masking'],
-        dropout_p=trial_args['dropout_p'],
-        noise_strength=trial_args['noise_strength'],
-        mix_fourier_with_tokens=trial_args['mix_fourier_with_tokens'],
-        mels=trial_args['mels'],
-        mel_window_size=trial_args['mel_window_size'],
-        mel_window_stride=trial_args['mel_window_stride'],
+        **trial_args
     )
     logs = train(
         dataset_train=dataset_train,
@@ -152,16 +122,8 @@ def objective(trial: Trial):
 
 if args['grid_search'] is True:
     search_space = {
-        "num_encoders": [1, 2, 4, 6] if args['test_num_encoders'] else [1],
-        "num_decoders": [1, 2, 4, 6] if args['test_num_decoders'] else [1],
-        "embeddings_dim": [128, 256, 512] if args['test_embeddings_dim'] else [128],
-        "masking": [True, False] if args['test_masking'] else [True],
-        "dropout_p": [0, 0.1, 0.25, 0.5] if args['test_dropout_p'] else [0.25],
-        "noise_strength": [0, 0.1, 0.25] if args['test_noise'] else [0.1],
-        "mix_fourier_with_tokens": [True, False] if args['test_mix_fourier'] else [True],
-        "mels": [4, 8, 16] if args['test_mels'] else [8],
-        "mel_window_size": [0.1, 0.25, 0.5, 1] if args['test_mel_window_size'] else [1],
-        "mel_window_stride": [0.1, 0.25, 0.5, 1] if args['test_mel_window_stride'] else [0.1],
+        parameter: values["search_space"] if parameter in tested_parameters else [values["default"]]
+        for parameter, values in defaults.items()
     }
     study = optuna.create_study(
         sampler=optuna.samplers.GridSampler(search_space),

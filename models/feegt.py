@@ -380,13 +380,20 @@ if __name__ == "__main__":
         in_channels=32,
         sampling_rate=sampling_rate,
         labels=4,
-        dropout_p=0.2,
+
+        mels=8,
+        mel_window_size=1,
+        mel_window_stride=0.05,
+
+        mixing_sublayer_type="fourier",
+
         hidden_size=512,
-        num_encoders=2,
-        num_decoders=2,
+        num_encoders=4,
+        num_decoders=4,
+        num_attention_heads=8,
         positional_embedding_type="learned",
-        mixing_sublayer_type="attention",
-        # use_masking=True, mask_perc_min=0.1, mask_perc_max=0.3,
+        max_position_embeddings=512,
+        dropout_p=0.25,
     )
     model.training = True
     print(model)

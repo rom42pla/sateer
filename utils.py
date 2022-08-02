@@ -229,7 +229,6 @@ def train(
                                             batch_size=batch_size, shuffle=False,
                                             num_workers=os.cpu_count() - 1,
                                             pin_memory=True if torch.cuda.is_available() else False)
-
     # frees some memory
     gc.collect()
 
