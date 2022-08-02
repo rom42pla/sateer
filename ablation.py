@@ -72,7 +72,7 @@ for parameter, default, search_space in [
     ("mel_window_size", 1, [0.1, 0.2, 0.5, 1]),
     ("mel_window_stride", 0.05, [0.05, 0.1, 0.25, 0.5]),
 
-    ("mixing_sublayer_type", "fourier", ["fourier", "identity", "linear", "attention"]),
+    ("mixing_sublayer_type", "fourier", ["fourier", "identity", "attention"]),
 
     ("hidden_size", 512, [256, 512, 768]),
     ("num_encoders", 2, [2, 4, 8, 12]),
@@ -93,9 +93,27 @@ def objective(trial: Trial):
 
     trial_args = {}
     for parameter in defaults.keys():
-        trial_args[parameter] = trial.suggest_categorical(parameter,
-                                                          defaults[parameter]["search_space"]) \
-            if parameter in tested_parameters else defaults[parameter]["default"]
+        if parameter in tested_parameters:
+            parameter_type = type(defaults[parameter]["default"])
+            if args["grid_search"] is False and parameter_type in [int, float]:
+                if parameter_type is int:
+                    suggested_value = trial.suggest_int(
+                        parameter,
+                        min(defaults[parameter]["search_space"]),
+                        max(defaults[parameter]["search_space"]),
+                    )
+                elif parameter_type is float:
+                    suggested_value = trial.suggest_float(
+                        parameter,
+                        min(defaults[parameter]["search_space"]),
+                        max(defaults[parameter]["search_space"]),
+                    )
+            else:
+                suggested_value = trial.suggest_categorical(parameter,
+                                                            defaults[parameter]["search_space"])
+            trial_args[parameter] = suggested_value
+        else:
+            trial_args[parameter] = defaults[parameter]["default"]
     logging.info(f"started trial {trial.number} with parameters:\n{pformat(trial_args)}")
 
     model: pl.LightningModule = FouriEEGTransformer(
@@ -110,6 +128,7 @@ def objective(trial: Trial):
         dataset_val=dataset_val,
         model=model,
         experiment_path=join(experiment_path, f"trial_{trial.number}"),
+        precision=16,
         **args
     )
     for k, v in trial_args.items():
@@ -126,14 +145,16 @@ if args['grid_search'] is True:
         for parameter, values in defaults.items()
     }
     study = optuna.create_study(
+        study_name=args['study_name'],
         sampler=optuna.samplers.GridSampler(search_space),
         direction="maximize"
     )
     study.optimize(objective)
 else:
     study = optuna.create_study(
+        study_name=args['study_name'],
         sampler=TPESampler(),
-        direction="maximize"
+        direction="maximize",
     )
     study.optimize(objective, n_trials=20)
 
