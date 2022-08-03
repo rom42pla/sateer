@@ -36,6 +36,7 @@ class FouriEEGTransformer(pl.LightningModule):
             mel_window_size: Union[int, float] = 1,
             mel_window_stride: Union[int, float] = 0.05,
 
+            encoder_only: bool = False,
             mixing_sublayer_type: str = "fourier",
             hidden_size: int = 768,
             num_encoders: int = 12,
@@ -84,12 +85,15 @@ class FouriEEGTransformer(pl.LightningModule):
         self.mixing_sublayer_type = mixing_sublayer_type
 
         # model architecture
+        assert isinstance(encoder_only, bool)
+        self.encoder_only = encoder_only
         assert isinstance(hidden_size, int) and hidden_size >= 1
         self.hidden_size = hidden_size
         assert isinstance(num_encoders, int) and num_encoders >= 1
         self.num_encoders: int = num_encoders
-        assert isinstance(num_decoders, int) and num_decoders >= 1
-        self.num_decoders = num_decoders
+        if self.encoder_only is False:
+            assert isinstance(num_decoders, int) and num_decoders >= 1
+            self.num_decoders = num_decoders
         assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
         self.num_attention_heads = num_attention_heads
         assert isinstance(positional_embedding_type, str) and positional_embedding_type in {"sinusoidal", "learned"}
@@ -133,10 +137,11 @@ class FouriEEGTransformer(pl.LightningModule):
                 max_position_embeddings=self.max_position_embeddings,
                 hidden_size=self.hidden_size
             )
-        self.labels_embedder = nn.Embedding(len(self.labels), self.hidden_size)
         self.token_type_embedder = GetTokenTypeEmbeddings(
             hidden_size=self.hidden_size,
         )
+        if self.encoder_only is False:
+            self.labels_embedder = nn.Embedding(len(self.labels), self.hidden_size)
         self.add_noise = nn.Sequential(
             AddGaussianNoise(strength=self.noise_strength)
         )
@@ -186,24 +191,25 @@ class FouriEEGTransformer(pl.LightningModule):
         #                             num_decoders=self.num_decoders,
         #                             dropout_p=self.dropout_p,
         #                             )
-        self.decoder = nn.TransformerDecoder(
-            decoder_layer=nn.TransformerDecoderLayer(
-                batch_first=True,
-                d_model=self.hidden_size,
-                dim_feedforward=self.hidden_size * 4,
-                dropout=dropout_p,
-                activation=F.selu,
-                nhead=self.num_attention_heads,
-            ),
-            num_layers=num_decoders,
-        )
-        # replaces dropouts with alpha-dropout in the decoder
-        for _, module in self.decoder.layers.named_children():
-            for attr_str in dir(module):
-                target_attr = getattr(module, attr_str)
-                if type(target_attr) == nn.Dropout:
-                    setattr(module, attr_str,
-                            nn.AlphaDropout(self.dropout_p))
+        if self.encoder_only is False:
+            self.decoder = nn.TransformerDecoder(
+                decoder_layer=nn.TransformerDecoderLayer(
+                    batch_first=True,
+                    d_model=self.hidden_size,
+                    dim_feedforward=self.hidden_size * 4,
+                    dropout=dropout_p,
+                    activation=F.selu,
+                    nhead=self.num_attention_heads,
+                ),
+                num_layers=num_decoders,
+            )
+            # replaces dropouts with alpha-dropout in the decoder
+            for _, module in self.decoder.layers.named_children():
+                for attr_str in dir(module):
+                    target_attr = getattr(module, attr_str)
+                    if type(target_attr) == nn.Dropout:
+                        setattr(module, attr_str,
+                                nn.AlphaDropout(self.dropout_p))
 
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
@@ -252,24 +258,31 @@ class FouriEEGTransformer(pl.LightningModule):
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
 
-        with profiler.record_function("decoder"):
-            # adds the labels for the tokens
-            label_tokens = self.labels_embedder(
-                torch.as_tensor(list(range(len(self.labels))),
-                                device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
-            # # adds start and end tokens
-            # label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
-            # # adds positional embeddings
-            # label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
-            x_decoded = self.decoder(
-                label_tokens,
-                x_encoded
-            )  # (b l d)
+        if self.encoder_only is False:
+            with profiler.record_function("decoder"):
+                # adds the labels for the tokens
+                label_tokens = self.labels_embedder(
+                    torch.as_tensor(list(range(len(self.labels))),
+                                    device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
+                # # adds start and end tokens
+                # label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
+                # # adds positional embeddings
+                # label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
+                x_decoded = self.decoder(
+                    label_tokens,
+                    x_encoded
+                )  # (b l d)
 
         with profiler.record_function("predictions"):
-            labels_pred = torch.stack([net(x_decoded[:, i_label, :])
-                                       for i_label, net in enumerate(self.classification)],
-                                      dim=1)  # (b l d)
+            if self.encoder_only is True:
+                labels_pred = torch.stack([net(x_encoded[:, 0, :])
+                                           for i_label, net in enumerate(self.classification)],
+                                          dim=1)  # (b l d)
+            else:
+                labels_pred = torch.stack([net(x_decoded[:, i_label if self.encoder_only else 0, :])
+                                           for i_label, net in enumerate(self.classification)],
+                                          dim=1)  # (b l d)
+
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
             if self.training is False:
@@ -386,16 +399,15 @@ if __name__ == "__main__":
         mel_window_stride=0.05,
 
         mixing_sublayer_type="fourier",
-
         hidden_size=512,
         num_encoders=4,
         num_decoders=4,
+        encoder_only=False,
         num_attention_heads=8,
         positional_embedding_type="learned",
         max_position_embeddings=512,
         dropout_p=0.25,
     )
-    model = model.half()
     model.training = True
     print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:

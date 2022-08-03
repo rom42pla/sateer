@@ -74,11 +74,11 @@ for parameter, default, search_space in [
 
     ("mixing_sublayer_type", "fourier", ["fourier", "identity", "attention"]),
 
+    ("encoder_only", False, [True, False]),
     ("hidden_size", 512, [256, 512, 768]),
     ("num_layers", 2, [2, 4, 6, 8]),
-    # ("num_attention_heads", 8, [4, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
-    ("dropout_p", 0.2, [0, 0.1, 0.2, 0.5]),
+    ("dropout_p", 0.2, [0, 0.1, 0.2, 0.3]),
     ("noise_strength", 0.1, [0, 0.1, 0.2]),
 ]:
     defaults[parameter] = {
@@ -168,10 +168,10 @@ del dataset
 gc.collect()
 
 # saves the results of the ablation
-logs = pd.DataFrame([
-    {**trial.params, "acc_mean_val": trial.value} for trial in study.trials
-]).sort_values(by="acc_mean_val", ascending=False)
-logs.to_csv(join(experiment_path, "results.csv"), index=False)
-plot_ablation(logs=logs,
-              experiment_path=experiment_path)
+# logs = pd.DataFrame([
+#     {**trial.params, "acc_mean_val": trial.value} for trial in study.trials
+# ]).sort_values(by="acc_mean_val", ascending=False)
+# logs.to_csv(join(experiment_path, "results.csv"), index=False)
+# plot_ablation(logs=logs,
+#               experiment_path=experiment_path)
 plot_ablation(experiment_path)

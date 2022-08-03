@@ -74,10 +74,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         "mel_window_size",
         "mel_window_stride",
 
+        "encoder_only",
         "mixing_sublayer_type",
         "hidden_size",
         "num_layers",
-        # "num_attention_heads",
         "positional_embedding_type",
         "dropout_p",
         "noise_strength",
