@@ -437,7 +437,7 @@ class FouriFeedForward(nn.Module):
 class GetSinusoidalPositionalEmbeddings(nn.Module):
     def __init__(
             self,
-            max_position_embeddings: int = 512
+            max_position_embeddings: int = 1024
     ):
         super().__init__()
         assert isinstance(max_position_embeddings, int) and max_position_embeddings >= 1

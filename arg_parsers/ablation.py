@@ -79,8 +79,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         "hidden_size",
         "num_layers",
         "positional_embedding_type",
+
         "dropout_p",
         "noise_strength",
+        "masking",
     ]:
         parser.add_argument(f"--test_{parameter}",
                             default=False,

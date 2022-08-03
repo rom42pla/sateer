@@ -1,3 +1,6 @@
+import warnings
+
+import numpy as np
 import pandas as pd
 import json
 import re
@@ -102,49 +105,60 @@ def plot_ablation(
     logs = logs.sort_values(by=["trial", "epoch"]).drop("Unnamed: 0", axis=1)
     # parses tested parameters
     tested_parameters = read_json(path=join(path, "tested_args.json"))
+    # loops through parameters
     for parameter in tested_parameters:
         fig, (ax_loss, ax_acc) = plt.subplots(nrows=1, ncols=2,
                                               figsize=(2 * scale, scale),
                                               tight_layout=True)
-        for column in ["loss_train", "loss_val"]:
-            sns.lineplot(
-                data=logs,
-                x=parameter,
-                y=column,
-                palette="rocket",
-                ax=ax_loss,
-            )
-        for column in ["acc_mean_train", "acc_mean_val"]:
-            sns.lineplot(
-                data=logs,
-                x=parameter,
-                y=column,
-                palette="rocket",
-                ax=ax_acc,
-            )
-        # sns.lineplot(
-        #     data=logs,
-        #     x=parameter,
-        #     y="acc_mean_val",
-        #     color="g",
-        #     ax=ax_acc,
-        # )
+        # rearrange the dataframe for seaborn
+        logs_train = logs.copy().rename(columns={"loss_train": "loss",
+                                                 "acc_mean_train": "acc_mean"})
+        logs_train["phase"] = "train"
+        logs_val = logs.copy().rename(columns={"loss_val": "loss",
+                                               "acc_mean_val": "acc_mean"})
+        logs_val["phase"] = "val"
+        logs_grouped = pd.concat([logs_train, logs_val], axis=0)
+        # plots
+        sns.barplot(
+            data=logs_grouped,
+            x=parameter,
+            y="loss",
+            hue="phase",
+            palette="rocket",
+            ax=ax_loss,
+        )
+        sns.barplot(
+            data=logs_grouped,
+            x=parameter,
+            y="acc_mean",
+            hue="phase",
+            palette="rocket",
+            ax=ax_acc,
+        )
+        # labels
         for ax in [ax_loss, ax_acc]:
             ax.grid()
             ax.set_xlabel(parameter.replace("_", " ").capitalize())
+            # for container in ax.containers:
+            #     ax.bar_label(container, label_type="edge", padding=-32)
         ax_loss.set_ylabel("loss")
         ax_acc.set_ylabel("accuracy (mean)")
-        ax_loss.legend(labels=[
-            f"training ($\mu={logs.groupby('trial').min()['loss_train'].mean():.3f}$)", "_",
-            f"validation ($\mu={logs.groupby('trial').min()['loss_val'].mean():.3f}$)", "_"
-        ])
-        ax_acc.legend(labels=[
-            f"training ($\mu={logs.groupby('trial').max()['acc_mean_train'].mean():.3f}$)", "_",
-            f"validation ($\mu={logs.groupby('trial').max()['acc_mean_val'].mean():.3f}$)", "_"
-        ])
+        ax_loss.set_ylim(0.5, None)
+        ax_acc.set_ylim(0.5, 1)
+        # legends
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            ax_loss.legend(["_" for _ in range(4)] + [
+                f"training ($\mu={logs.groupby('trial').min()['loss_train'].mean():.3f}$)",
+                f"validation ($\mu={logs.groupby('trial').min()['loss_val'].mean():.3f}$)",
+            ])
+            ax_acc.legend(["_" for _ in range(4)] + [
+                f"training ($\mu={logs.groupby('trial').max()['acc_mean_train'].mean():.3f}$)",
+                f"validation ($\mu={logs.groupby('trial').max()['acc_mean_val'].mean():.3f}$)",
+            ])
         plt.savefig(join(plots_path, f"{parameter}.png"))
         plt.show()
 
 
 if __name__ == "__main__":
-    plot_ablation(path=join("checkpoints", "ablation", "20220803_090711_dreamer_embeddings"))
+    plot_ablation(path=join("checkpoints", "ablation_saved", "dreamer_embeddings"))

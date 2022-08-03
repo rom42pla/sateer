@@ -43,11 +43,11 @@ class FouriEEGTransformer(pl.LightningModule):
             num_decoders: int = 12,
             num_attention_heads: int = 8,
             positional_embedding_type: str = "sinusoidal",
-            max_position_embeddings: int = 512,
+            max_position_embeddings: int = 2048,
             dropout_p: Union[int, float] = 0.1,
 
             noise_strength: Union[int, float] = 0,
-            # use_masking: bool = True,
+            use_masking: bool = True,
             # mask_perc_min: float = 0.05,
             # mask_perc_max: float = 0.3,
 
@@ -104,8 +104,8 @@ class FouriEEGTransformer(pl.LightningModule):
         self.dropout_p = dropout_p
 
         # regularization
-        # assert isinstance(use_masking, bool)
-        # self.use_masking = use_masking
+        assert isinstance(use_masking, bool)
+        self.use_masking = use_masking
         # if self.use_masking is True:
         #     assert isinstance(mask_perc_min, float) and 0 <= mask_perc_min < 1
         #     assert isinstance(mask_perc_max, float) and 0 <= mask_perc_max < 1 and mask_perc_max >= mask_perc_min
@@ -211,6 +211,27 @@ class FouriEEGTransformer(pl.LightningModule):
                         setattr(module, attr_str,
                                 nn.AlphaDropout(self.dropout_p))
 
+        # self.reconstructer = nn.TransformerDecoder(
+        #     decoder_layer=nn.TransformerDecoderLayer(
+        #         batch_first=True,
+        #         d_model=self.hidden_size,
+        #         dim_feedforward=self.hidden_size * 4,
+        #         dropout=dropout_p,
+        #         activation=F.selu,
+        #         nhead=self.num_attention_heads,
+        #     ),
+        #     num_layers=num_decoders,
+        # )
+        if self.use_masking:
+            self.reconstructer = FouriDecoder(
+                embeddings_dim=self.hidden_size,
+                num_decoders=num_decoders,
+                dropout_p=dropout_p,
+                attention_type="linear",
+            )
+            self.pre_reconstructer_pooler = nn.Linear(self.in_channels, self.hidden_size)
+            self.reconstructer_pooler = nn.Linear(self.hidden_size, self.in_channels)
+
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
                 ("linear1", nn.Linear(in_features=self.hidden_size,
@@ -219,7 +240,6 @@ class FouriEEGTransformer(pl.LightningModule):
                 ("dropout", nn.AlphaDropout(p=self.dropout_p)),
                 ("linear2", nn.Linear(in_features=self.hidden_size * 4,
                                       out_features=2)),
-                # ("reshape", Rearrange("b (c d) -> b c d", c=len(self.labels))),
             ]))
             for _ in range(len(self.labels))
         ])
@@ -229,10 +249,21 @@ class FouriEEGTransformer(pl.LightningModule):
         self.save_hyperparameters()
 
     def forward(self,
-                eegs: torch.Tensor):
-        assert eegs.shape[-1] == self.in_channels
+                input_eegs: torch.Tensor):
+        assert input_eegs.shape[-1] == self.in_channels
+        eegs = input_eegs.clone()
         if eegs.device != self.device:
             eegs = eegs.to(self.device)  # (b s c)
+        # initializes the outputs
+        outputs = {}
+        # eventually adds masking
+        if self.use_masking:
+            eegs_before_masking = eegs.clone()
+            self.mask_perc_max = 0.1
+            unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
+            unmasked_indices = torch.randperm(eegs.shape[1],
+                                              requires_grad=False, device=self.device)[:unmasked_elements]
+            eegs = eegs[:, unmasked_indices]
         # cast from microvolts to volts
         eegs *= 1e6
         # eventually adds gaussian noise
@@ -246,17 +277,26 @@ class FouriEEGTransformer(pl.LightningModule):
             x = self.merge_mels(spectrogram)  # (b s c)
 
         with profiler.record_function("encoder"):
-            # eventually adds masking
-            # if self.training and self.use_masking:
-            #     x = self.apply_random_mask(x)
             # adds start and end tokens
-            x = self.add_start_end_tokens(x)
+            # x = self.add_start_end_tokens(x)
             # adds positional embeddings and type embeddings
             x = x + \
-                self.position_embedder(x) + \
-                self.token_type_embedder(x, special_tokens_indices=[0, -1])  # (b s d)
+                self.position_embedder(x)  # + \
+            # self.token_type_embedder(x, special_tokens_indices=[0, -1])  # (b s d)
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
+        # reconstruction
+        if self.use_masking:
+            with profiler.record_function("reconstruction"):
+                eegs_to_reconstruct = torch.zeros_like(eegs_before_masking, requires_grad=False, device=self.device)
+                eegs_to_reconstruct[:, unmasked_indices] = eegs_before_masking[:, unmasked_indices]
+                eegs_to_reconstruct = self.pre_reconstructer_pooler(eegs_to_reconstruct)
+                eegs_to_reconstruct = eegs_to_reconstruct + \
+                                      self.position_embedder(eegs_to_reconstruct)
+                eegs_reconstructed = self.reconstructer(eegs_to_reconstruct, x_encoded)
+                eegs_reconstructed = self.reconstructer_pooler(eegs_reconstructed)
+                assert eegs_reconstructed.shape == eegs_before_masking.shape
+                outputs["eegs_reconstructed"] = eegs_reconstructed
 
         if self.encoder_only is False:
             with profiler.record_function("decoder"):
@@ -287,7 +327,8 @@ class FouriEEGTransformer(pl.LightningModule):
             assert len(labels_pred.shape) == 3
             if self.training is False:
                 labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
-        return labels_pred
+            outputs["labels_pred"] = labels_pred
+        return outputs
 
     def add_start_end_tokens(self, x: torch.Tensor):
         # generates start and end tokens
@@ -326,19 +367,23 @@ class FouriEEGTransformer(pl.LightningModule):
         phase: str = "train" if self.training is True else "val"
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
-        labels_pred = self(eegs=eegs)  # (b l d)
-        losses = [F.cross_entropy(labels_pred[:, i_label, :], labels[:, i_label],
-                                  label_smoothing=0.1 if phase == "train" else 0.0)
-                  for i_label in range(labels.shape[-1])]
-        accs: torch.Tensor = torch.as_tensor(
-            [torchmetrics.functional.accuracy(F.softmax(labels_pred[:, i_label, :], dim=-1) if phase == "val"
-                                              else labels_pred[:, i_label, :],
-                                              labels[:, i_label], average="micro")
+        net_outputs = self(eegs)  # (b l d)
+        results = {}
+        results["loss_classification"] = sum(
+            [F.cross_entropy(net_outputs["labels_pred"][:, i_label, :], labels[:, i_label],
+                             label_smoothing=0.1 if phase == "train" else 0.0)
              for i_label in range(labels.shape[-1])])
-        return {
-            "loss": sum(losses),
-            "accs": accs,
-        }
+        results["loss"] = results["loss_classification"]
+        results["accs_classification"]: torch.Tensor = torch.as_tensor(
+            [torchmetrics.functional.accuracy(
+                F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                else net_outputs["labels_pred"][:, i_label, :],
+                labels[:, i_label], average="micro")
+                for i_label in range(labels.shape[-1])])
+        if self.use_masking:
+            results["loss_reconstruction"] = F.mse_loss(input=net_outputs["eegs_reconstructed"], target=eegs)
+            results["loss"] = results["loss"] + results["loss_classification"]
+        return results
 
     def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
         self.log_stats(outputs)
@@ -353,11 +398,16 @@ class FouriEEGTransformer(pl.LightningModule):
     def log_stats(self, outputs: List[Dict[str, torch.Tensor]]):
         # name of the current phase
         phase: str = "train" if self.training is True else "val"
-        # loss
+        # losses
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False)
+        self.log(f"loss_classification_{phase}", torch.stack([e["loss_classification"] for e in outputs]).mean(),
+                 prog_bar=True if phase == "val" else False)
+        if self.use_masking:
+            self.log(f"loss_reconstruction_{phase}", torch.stack([e["loss_reconstruction"] for e in outputs]).mean(),
+                     prog_bar=True if phase == "val" else False)
         # classification metrics
-        accs = torch.stack([e["accs"] for e in outputs])
+        accs = torch.stack([e["accs_classification"] for e in outputs])
         self.log(f"acc_mean_{phase}", accs.mean(),
                  prog_bar=True)
         for i_label, label in enumerate(self.labels):
@@ -381,7 +431,7 @@ class FouriEEGTransformer(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    batch_size = 64
+    batch_size = 16
     sampling_rate = 128
     seconds = 10
     batch = {
@@ -405,13 +455,13 @@ if __name__ == "__main__":
         encoder_only=False,
         num_attention_heads=8,
         positional_embedding_type="sinusoidal",
-        max_position_embeddings=512,
+        max_position_embeddings=2048,
         dropout_p=0.25,
+        use_masking=True,
     )
     model.training = True
     print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         model.training_step(batch, 0)
     print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=8))
-
     # print(torchvision.models.resnet18())
