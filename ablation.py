@@ -75,8 +75,8 @@ for parameter, default, search_space in [
     ("mixing_sublayer_type", "fourier", ["fourier", "identity", "attention"]),
 
     ("hidden_size", 512, [256, 512, 768]),
-    ("num_encoders", 2, [2, 4, 8, 12]),
-    ("num_decoders", 2, [2, 4, 8, 12]),
+    ("num_encoders", 2, [2, 4, 8]),
+    ("num_decoders", 2, [2, 4, 8]),
     # ("num_attention_heads", 8, [4, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.5]),
@@ -97,7 +97,7 @@ def objective(trial: Trial):
             parameter_type = type(defaults[parameter]["default"])
             if args["grid_search"] is False \
                     and parameter_type in [int, float] \
-                    and parameter not in {"hidden_size"}:
+                    and parameter not in {"hidden_size", "mels"}:
                 if parameter_type is int:
                     suggested_value = trial.suggest_int(
                         parameter,
