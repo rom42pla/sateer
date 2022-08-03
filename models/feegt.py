@@ -394,6 +394,7 @@ if __name__ == "__main__":
         max_position_embeddings=512,
         dropout_p=0.25,
     )
+    model = model.half()
     model.training = True
     print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:

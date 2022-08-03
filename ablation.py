@@ -133,6 +133,7 @@ def objective(trial: Trial):
         model=model,
         experiment_path=join(experiment_path, f"trial_{trial.number}"),
         limit_train_batches=0.5,
+        precision=16,
         **args
     )
     for k, v in trial_args.items():

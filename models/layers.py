@@ -319,7 +319,13 @@ class FastFourierTransform(nn.Module):
         super().__init__()
 
     def forward(self, x):
+        print(x.dtype)
+        is_half = True if x.dtype == torch.float16 else False
+        if is_half:
+            x = x.type(torch.float32)
         x = functorch.vmap(torch.fft.fftn)(x).real
+        if is_half:
+            x = x.type(torch.float16)
         return x
 
 
@@ -556,7 +562,7 @@ class MelSpectrogram(nn.Module):
                 hop_length=self.window_stride,
                 pad=self.window_stride // 2,
             ).to(eegs.device)
-            spectrogram = mel_fn(eegs)  # (b c m s)
+            spectrogram = mel_fn(eegs.float())  # (b c m s)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
 
