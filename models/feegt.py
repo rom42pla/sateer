@@ -51,7 +51,8 @@ class FouriEEGTransformer(pl.LightningModule):
             # mask_perc_max: float = 0.3,
 
             learning_rate: float = 1e-4,
-            device: Optional[str] = None
+            device: Optional[str] = None,
+            **kwargs
     ):
         super().__init__()
 

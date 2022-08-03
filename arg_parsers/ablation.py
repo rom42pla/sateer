@@ -76,8 +76,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
 
         "mixing_sublayer_type",
         "hidden_size",
-        "num_encoders",
-        "num_decoders",
+        "num_layers",
         # "num_attention_heads",
         "positional_embedding_type",
         "dropout_p",

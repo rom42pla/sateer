@@ -75,8 +75,7 @@ for parameter, default, search_space in [
     ("mixing_sublayer_type", "fourier", ["fourier", "identity", "attention"]),
 
     ("hidden_size", 512, [256, 512, 768]),
-    ("num_encoders", 2, [2, 4, 8]),
-    ("num_decoders", 2, [2, 4, 8]),
+    ("num_layers", 2, [2, 4, 6, 8]),
     # ("num_attention_heads", 8, [4, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.5]),
@@ -125,6 +124,8 @@ def objective(trial: Trial):
         learning_rate=args['learning_rate'],
 
         num_attention_heads=4,
+        num_encoders=trial_args["num_layers"],
+        num_decoders=trial_args["num_layers"],
         **trial_args
     )
     logs = train(
