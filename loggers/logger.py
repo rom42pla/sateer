@@ -5,13 +5,14 @@ from typing import Optional, Union, List, Dict, Any
 
 from pytorch_lightning.loggers.base import LightningLoggerBase, rank_zero_experiment
 from pytorch_lightning.utilities.distributed import rank_zero_only
+from pytorch_lightning.loggers.logger import Logger
 
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-class FouriEEGTransformerLogger(LightningLoggerBase):
+class FouriEEGTransformerLogger(Logger):
     def __init__(
             self,
             path: Optional[str] = None,
