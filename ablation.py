@@ -72,7 +72,7 @@ for parameter, default, search_space in [
     ("mel_window_size", 1, [0.1, 0.2, 0.5, 1]),
     ("mel_window_stride", 0.05, [0.05, 0.1, 0.25, 0.5]),
 
-    ("mixing_sublayer_type", "fourier", ["fourier", "identity", "attention"]),
+    ("mixing_sublayer_type", "attention", ["fourier", "identity", "attention"]),
 
     ("encoder_only", False, [True, False]),
     ("hidden_size", 512, [256, 512, 768]),

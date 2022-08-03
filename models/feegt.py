@@ -398,13 +398,13 @@ if __name__ == "__main__":
         mel_window_size=1,
         mel_window_stride=0.05,
 
-        mixing_sublayer_type="fourier",
+        mixing_sublayer_type="attention",
         hidden_size=512,
         num_encoders=4,
         num_decoders=4,
         encoder_only=False,
         num_attention_heads=8,
-        positional_embedding_type="learned",
+        positional_embedding_type="sinusoidal",
         max_position_embeddings=512,
         dropout_p=0.25,
     )
