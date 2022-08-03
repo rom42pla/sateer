@@ -319,7 +319,6 @@ class FastFourierTransform(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        print(x.dtype)
         is_half = True if x.dtype == torch.float16 else False
         if is_half:
             x = x.type(torch.float32)
@@ -342,7 +341,7 @@ class LinearTransform(nn.Module):
             self,
             max_position_embeddings: int = 512,
             hidden_size: int = 768,
-            **kwargd
+            **kwargs
     ):
         super().__init__()
         assert isinstance(max_position_embeddings, int) and max_position_embeddings >= 1
@@ -562,7 +561,13 @@ class MelSpectrogram(nn.Module):
                 hop_length=self.window_stride,
                 pad=self.window_stride // 2,
             ).to(eegs.device)
+            is_half = True if eegs.dtype == torch.float16 else False
+            if is_half:
+                eegs = eegs.type(torch.float32)
             spectrogram = mel_fn(eegs.float())  # (b c m s)
+            if is_half:
+                spectrogram = spectrogram.type(torch.float16)
+
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
 
