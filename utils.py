@@ -211,6 +211,7 @@ def train(
         auto_lr_finder: bool = False,
         gradient_clipping: bool = True,
         stochastic_weight_average: bool = False,
+        limit_train_batches: float = 1.0,
         **kwargs,
 ) -> pd.DataFrame:
     initial_weights = deepcopy(model.state_dict().__str__())
@@ -240,6 +241,7 @@ def train(
         enable_checkpointing=False,
         gradient_clip_val=1 if gradient_clipping else 0,
         auto_lr_find=auto_lr_finder,
+        limit_train_batches=limit_train_batches,
         callbacks=init_callbacks(swa=stochastic_weight_average)
     )
     # eventually selects a starting learning rate
