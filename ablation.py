@@ -133,7 +133,7 @@ def objective(trial: Trial):
         dataset_val=dataset_val,
         model=model,
         experiment_path=join(experiment_path, f"trial_{trial.number}"),
-        precision=16,
+        precision=32,
         **args
     )
     for k, v in trial_args.items():
