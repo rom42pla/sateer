@@ -77,7 +77,7 @@ for parameter, default, search_space in [
     ("hidden_size", 512, [256, 512, 768]),
     ("num_encoders", 2, [2, 4, 8, 12]),
     ("num_decoders", 2, [2, 4, 8, 12]),
-    ("num_attention_heads", 8, [4, 8]),
+    # ("num_attention_heads", 8, [4, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.5]),
     ("noise_strength", 0.1, [0, 0.1, 0.2]),
@@ -123,6 +123,8 @@ def objective(trial: Trial):
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
         learning_rate=args['learning_rate'],
+
+        num_attention_heads=4,
         **trial_args
     )
     logs = train(

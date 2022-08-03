@@ -78,7 +78,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         "hidden_size",
         "num_encoders",
         "num_decoders",
-        "num_attention_heads",
+        # "num_attention_heads",
         "positional_embedding_type",
         "dropout_p",
         "noise_strength",
