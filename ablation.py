@@ -79,7 +79,7 @@ for parameter, default, search_space in [
     ("num_layers", 4, [2, 4, 6, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.3]),
-    ("noise_strength", 0.2, [0, 0.1, 0.2]),
+    ("noise_strength", 0, [0, 0.1, 0.2]),
     ("masking", False, [True, False]),
 ]:
     defaults[parameter] = {

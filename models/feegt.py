@@ -182,11 +182,22 @@ class FouriEEGTransformer(pl.LightningModule):
                               ),
         )
 
-        self.encoder = FouriEncoder(hidden_size=self.hidden_size,
-                                    num_encoders=self.num_encoders,
-                                    dropout_p=self.dropout_p,
-                                    mixing_sublayer_type=self.mixing_sublayer_type,
-                                    )
+        # self.encoder = FouriEncoder(hidden_size=self.hidden_size,
+        #                             num_encoders=self.num_encoders,
+        #                             dropout_p=self.dropout_p,
+        #                             mixing_sublayer_type=self.mixing_sublayer_type,
+        #                             )
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer=nn.TransformerEncoderLayer(
+                batch_first=True,
+                d_model=self.hidden_size,
+                dim_feedforward=self.hidden_size * 4,
+                dropout=self.dropout_p,
+                activation=F.selu,
+                nhead=self.num_attention_heads,
+            ),
+            num_layers=num_encoders,
+        )
         # self.decoder = FouriDecoder(embeddings_dim=self.window_embedding_dim,
         #                             num_decoders=self.num_decoders,
         #                             dropout_p=self.dropout_p,
@@ -197,7 +208,7 @@ class FouriEEGTransformer(pl.LightningModule):
                     batch_first=True,
                     d_model=self.hidden_size,
                     dim_feedforward=self.hidden_size * 4,
-                    dropout=dropout_p,
+                    dropout=self.dropout_p,
                     activation=F.selu,
                     nhead=self.num_attention_heads,
                 ),
@@ -258,12 +269,16 @@ class FouriEEGTransformer(pl.LightningModule):
         outputs = {}
         # eventually adds masking
         if self.use_masking:
-            eegs_before_masking = eegs.clone()
-            self.mask_perc_max = 0.1
-            unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
-            unmasked_indices = torch.randperm(eegs.shape[1],
-                                              requires_grad=False, device=self.device)[:unmasked_elements]
-            eegs = eegs[:, unmasked_indices]
+            with profiler.record_function("augmentation"):
+                for i_batch, batch in enumerate(eegs):
+                    # flipping
+                    if torch.rand(1, device=eegs.device) <= 0.25:
+                        eegs[i_batch] = torch.flip(eegs[i_batch], dims=[1])
+            # self.mask_perc_max = 0.1
+            # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
+            # unmasked_indices = torch.randperm(eegs.shape[1],
+            #                                   requires_grad=False, device=self.device)[:unmasked_elements]
+            # eegs = eegs[:, unmasked_indices]
         # cast from microvolts to volts
         eegs *= 1e6
         # eventually adds gaussian noise
@@ -433,9 +448,9 @@ class FouriEEGTransformer(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    batch_size = 16
+    batch_size = 1024
     sampling_rate = 128
-    seconds = 10
+    seconds = 1
     batch = {
         "eegs": torch.randn(batch_size, seconds * sampling_rate, 32, dtype=torch.float32) * 1e-6,
         "labels": torch.ones(batch_size, 4, dtype=torch.long),
