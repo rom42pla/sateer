@@ -270,10 +270,21 @@ class FouriEEGTransformer(pl.LightningModule):
         # eventually adds masking
         if self.use_masking:
             with profiler.record_function("augmentation"):
-                for i_batch, batch in enumerate(eegs):
+                # cropping
+                if torch.rand(1, device=eegs.device) <= 0.25:
+                    crop_amount = int(torch.rand(1, device=eegs.device) * 0.5 * eegs.shape[1])
+                    # from left
+                    if torch.rand(1, device=eegs.device) <= 0.5:
+                        eegs = eegs[:, crop_amount:]
+                    # from right
+                    else:
+                        eegs = eegs[:, :-crop_amount]
+
+                # for i_batch, batch in enumerate(eegs):
                     # flipping
-                    if torch.rand(1, device=eegs.device) <= 0.25:
-                        eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
+                    # if torch.rand(1, device=eegs.device) <= 0.25:
+                    #     eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
+
             # self.mask_perc_max = 0.1
             # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
             # unmasked_indices = torch.randperm(eegs.shape[1],
