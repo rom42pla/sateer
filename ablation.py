@@ -68,18 +68,18 @@ dataset_val = Subset(dataset, shuffled_indices[int(len(dataset) * args['train_se
 
 defaults = {}
 for parameter, default, search_space in [
-    ("mels", 16, [8, 16, 32]),
+    ("mels", 16, [8, 16, 32, 48, 64]),
     ("mel_window_size", 1, [0.1, 0.2, 0.5, 1]),
-    ("mel_window_stride", 0.05, [0.05, 0.1, 0.25, 0.5]),
+    ("mel_window_stride", 0.1, [0.05, 0.1, 0.25, 0.5]),
 
     ("mixing_sublayer_type", "attention", ["fourier", "identity", "attention"]),
 
     ("encoder_only", False, [True, False]),
     ("hidden_size", 512, [256, 512, 768]),
-    ("num_layers", 2, [2, 4, 6, 8]),
+    ("num_layers", 4, [2, 4, 6, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.3]),
-    ("noise_strength", 0.1, [0, 0.1, 0.2]),
+    ("noise_strength", 0.2, [0, 0.1, 0.2]),
     ("masking", False, [True, False]),
 ]:
     defaults[parameter] = {

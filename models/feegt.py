@@ -37,14 +37,14 @@ class FouriEEGTransformer(pl.LightningModule):
             mel_window_stride: Union[int, float] = 0.05,
 
             encoder_only: bool = False,
-            mixing_sublayer_type: str = "fourier",
-            hidden_size: int = 768,
-            num_encoders: int = 12,
-            num_decoders: int = 12,
+            mixing_sublayer_type: str = "attention",
+            hidden_size: int = 512,
+            num_encoders: int = 4,
+            num_decoders: int = 4,
             num_attention_heads: int = 8,
             positional_embedding_type: str = "sinusoidal",
             max_position_embeddings: int = 2048,
-            dropout_p: Union[int, float] = 0.1,
+            dropout_p: Union[int, float] = 0.2,
 
             noise_strength: Union[int, float] = 0,
             use_masking: bool = True,
@@ -286,17 +286,17 @@ class FouriEEGTransformer(pl.LightningModule):
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
         # reconstruction
-        if self.use_masking:
-            with profiler.record_function("reconstruction"):
-                eegs_to_reconstruct = torch.zeros_like(eegs_before_masking, requires_grad=False, device=self.device)
-                eegs_to_reconstruct[:, unmasked_indices] = eegs_before_masking[:, unmasked_indices]
-                eegs_to_reconstruct = self.pre_reconstructer_pooler(eegs_to_reconstruct)
-                eegs_to_reconstruct = eegs_to_reconstruct + \
-                                      self.position_embedder(eegs_to_reconstruct)
-                eegs_reconstructed = self.reconstructer(eegs_to_reconstruct, x_encoded)
-                eegs_reconstructed = self.reconstructer_pooler(eegs_reconstructed)
-                assert eegs_reconstructed.shape == eegs_before_masking.shape
-                outputs["eegs_reconstructed"] = eegs_reconstructed
+        # if self.use_masking:
+        #     with profiler.record_function("reconstruction"):
+        #         eegs_to_reconstruct = torch.zeros_like(eegs_before_masking, requires_grad=False, device=self.device)
+        #         eegs_to_reconstruct[:, unmasked_indices] = eegs_before_masking[:, unmasked_indices]
+        #         eegs_to_reconstruct = self.pre_reconstructer_pooler(eegs_to_reconstruct)
+        #         eegs_to_reconstruct = eegs_to_reconstruct + \
+        #                               self.position_embedder(eegs_to_reconstruct)
+        #         eegs_reconstructed = self.reconstructer(eegs_to_reconstruct, x_encoded)
+        #         eegs_reconstructed = self.reconstructer_pooler(eegs_reconstructed)
+        #         assert eegs_reconstructed.shape == eegs_before_masking.shape
+        #         outputs["eegs_reconstructed"] = eegs_reconstructed
 
         if self.encoder_only is False:
             with profiler.record_function("decoder"):
@@ -308,6 +308,8 @@ class FouriEEGTransformer(pl.LightningModule):
                 # label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
                 # # adds positional embeddings
                 # label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
+                label_tokens = label_tokens + \
+                               self.position_embedder(label_tokens)  # (b l d)
                 x_decoded = self.decoder(
                     label_tokens,
                     x_encoded
@@ -380,7 +382,7 @@ class FouriEEGTransformer(pl.LightningModule):
                 else net_outputs["labels_pred"][:, i_label, :],
                 labels[:, i_label], average="micro")
                 for i_label in range(labels.shape[-1])])
-        if self.use_masking:
+        if self.use_masking and "loss_reconstruction" in results:
             results["loss_reconstruction"] = F.mse_loss(input=net_outputs["eegs_reconstructed"], target=eegs)
             results["loss"] = results["loss"] + results["loss_classification"]
         return results
@@ -403,7 +405,7 @@ class FouriEEGTransformer(pl.LightningModule):
                  prog_bar=True if phase == "val" else False)
         self.log(f"loss_classification_{phase}", torch.stack([e["loss_classification"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False)
-        if self.use_masking:
+        if self.use_masking and "loss_reconstruction" in outputs[0]:
             self.log(f"loss_reconstruction_{phase}", torch.stack([e["loss_reconstruction"] for e in outputs]).mean(),
                      prog_bar=True if phase == "val" else False)
         # classification metrics
