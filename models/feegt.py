@@ -273,7 +273,7 @@ class FouriEEGTransformer(pl.LightningModule):
                 for i_batch, batch in enumerate(eegs):
                     # flipping
                     if torch.rand(1, device=eegs.device) <= 0.25:
-                        eegs[i_batch] = torch.flip(eegs[i_batch], dims=[1])
+                        eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
             # self.mask_perc_max = 0.1
             # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
             # unmasked_indices = torch.randperm(eegs.shape[1],
