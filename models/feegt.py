@@ -272,7 +272,7 @@ class FouriEEGTransformer(pl.LightningModule):
             with profiler.record_function("augmentation"):
                 # cropping
                 if torch.rand(1, device=eegs.device) <= 0.25:
-                    crop_amount = int(torch.rand(1, device=eegs.device) * 0.5 * eegs.shape[1])
+                    crop_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
                     # from left
                     if torch.rand(1, device=eegs.device) <= 0.5:
                         eegs = eegs[:, crop_amount:]
