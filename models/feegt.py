@@ -43,7 +43,7 @@ class FouriEEGTransformer(pl.LightningModule):
             mel_window_size: Union[int, float] = 1,
             mel_window_stride: Union[int, float] = 0.05,
 
-            users_embeddings: bool = True,
+            users_embeddings: bool = False,
 
             encoder_only: bool = False,
             mixing_sublayer_type: str = "attention",
@@ -474,7 +474,7 @@ if __name__ == "__main__":
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
 
-        users_embeddings=True,
+        users_embeddings=False,
 
         mels=8,
         mel_window_size=1,
