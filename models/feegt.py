@@ -241,7 +241,6 @@ class FouriEEGTransformer(pl.LightningModule):
                 input_eegs: torch.Tensor):
         assert input_eegs.shape[-1] == self.in_channels
         eegs = input_eegs.clone()
-        print(eegs.shape, self.training, "start")
         if eegs.device != self.device:
             eegs = eegs.to(self.device)  # (b s c)
         # initializes the outputs
@@ -251,30 +250,28 @@ class FouriEEGTransformer(pl.LightningModule):
             with profiler.record_function("data augmentation"):
                 if self.cropping is True:
                     crop_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
-                    print("crop", crop_amount)
                     assert crop_amount < eegs.shape[1]
-                    # from left
-                    if torch.rand(1, device=eegs.device) <= 0.5:
-                        eegs = eegs[:, crop_amount:]
-                    # from right
-                    else:
-                        eegs = eegs[:, :-crop_amount]
+                    if crop_amount > 0:
+                        # from left
+                        if torch.rand(1, device=eegs.device) <= 0.5:
+                            eegs = eegs[:, crop_amount:]
+                        # from right
+                        else:
+                            eegs = eegs[:, :-crop_amount]
                 if self.flipping is True:
                     for i_batch, batch in enumerate(eegs):
                         if torch.rand(1, device=eegs.device) <= 0.25:
                             eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
                 if self.noise_strength > 0:
                     eegs = AddGaussianNoise(strength=self.noise_strength)(eegs)
-        print(eegs.shape, self.training)
 
-            # self.mask_perc_max = 0.1
-            # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
-            # unmasked_indices = torch.randperm(eegs.shape[1],
-            #                                   requires_grad=False, device=self.device)[:unmasked_elements]
-            # eegs = eegs[:, unmasked_indices]
+        # self.mask_perc_max = 0.1
+        # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
+        # unmasked_indices = torch.randperm(eegs.shape[1],
+        #                                   requires_grad=False, device=self.device)[:unmasked_elements]
+        # eegs = eegs[:, unmasked_indices]
         # cast from microvolts to volts
         eegs *= 1e6
-        print(eegs.shape, self.training)
         with profiler.record_function("spectrogram"):
             spectrogram = self.get_spectrogram(eegs)  # (b s c m)
 
