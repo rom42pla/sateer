@@ -1,6 +1,7 @@
 import gc
 import logging
 import math
+import time
 import warnings
 from collections import OrderedDict
 from pprint import pformat
@@ -46,8 +47,10 @@ class FouriEEGTransformer(pl.LightningModule):
             max_position_embeddings: int = 2048,
             dropout_p: Union[int, float] = 0.2,
 
-            noise_strength: Union[int, float] = 0,
-            use_masking: bool = True,
+            data_augmentation: bool = True,
+            cropping: bool = True,
+            flipping: bool = True,
+            noise_strength: Union[int, float] = 0.01,
             # mask_perc_min: float = 0.05,
             # mask_perc_max: float = 0.3,
 
@@ -104,16 +107,15 @@ class FouriEEGTransformer(pl.LightningModule):
         self.dropout_p = dropout_p
 
         # regularization
-        assert isinstance(use_masking, bool)
-        self.use_masking = use_masking
-        # if self.use_masking is True:
-        #     assert isinstance(mask_perc_min, float) and 0 <= mask_perc_min < 1
-        #     assert isinstance(mask_perc_max, float) and 0 <= mask_perc_max < 1 and mask_perc_max >= mask_perc_min
-        #     self.mask_perc_max, self.mask_perc_min = mask_perc_max, mask_perc_min
-        # else:
-        #     self.mask_perc_max, self.mask_perc_min = None, None
-        assert noise_strength >= 0
-        self.noise_strength = noise_strength
+        assert isinstance(data_augmentation, bool)
+        self.data_augmentation = data_augmentation
+        if self.data_augmentation is True:
+            assert isinstance(cropping, bool)
+            self.cropping = cropping
+            assert isinstance(flipping, bool)
+            self.flipping = flipping
+            assert noise_strength >= 0
+            self.noise_strength = noise_strength
 
         # optimization
         assert isinstance(learning_rate, float) and learning_rate > 0
@@ -142,9 +144,6 @@ class FouriEEGTransformer(pl.LightningModule):
         )
         if self.encoder_only is False:
             self.labels_embedder = nn.Embedding(len(self.labels), self.hidden_size)
-        self.add_noise = nn.Sequential(
-            AddGaussianNoise(strength=self.noise_strength)
-        )
 
         self.get_spectrogram = MelSpectrogram(sampling_rate=self.sampling_rate,
                                               min_freq=0, max_freq=50,
@@ -222,27 +221,6 @@ class FouriEEGTransformer(pl.LightningModule):
                         setattr(module, attr_str,
                                 nn.AlphaDropout(self.dropout_p))
 
-        # self.reconstructer = nn.TransformerDecoder(
-        #     decoder_layer=nn.TransformerDecoderLayer(
-        #         batch_first=True,
-        #         d_model=self.hidden_size,
-        #         dim_feedforward=self.hidden_size * 4,
-        #         dropout=dropout_p,
-        #         activation=F.selu,
-        #         nhead=self.num_attention_heads,
-        #     ),
-        #     num_layers=num_decoders,
-        # )
-        if self.use_masking:
-            self.reconstructer = FouriDecoder(
-                embeddings_dim=self.hidden_size,
-                num_decoders=num_decoders,
-                dropout_p=dropout_p,
-                attention_type="linear",
-            )
-            self.pre_reconstructer_pooler = nn.Linear(self.in_channels, self.hidden_size)
-            self.reconstructer_pooler = nn.Linear(self.hidden_size, self.in_channels)
-
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([
                 ("linear1", nn.Linear(in_features=self.hidden_size,
@@ -268,22 +246,23 @@ class FouriEEGTransformer(pl.LightningModule):
         # initializes the outputs
         outputs = {}
         # eventually adds masking
-        if self.use_masking:
-            with profiler.record_function("augmentation"):
-                # cropping
-                if torch.rand(1, device=eegs.device) <= 0.25:
+        if self.training and self.data_augmentation is True:
+            with profiler.record_function("data augmentation"):
+                if self.cropping is True:
                     crop_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
+                    assert crop_amount < eegs.shape[1]
                     # from left
                     if torch.rand(1, device=eegs.device) <= 0.5:
                         eegs = eegs[:, crop_amount:]
                     # from right
                     else:
                         eegs = eegs[:, :-crop_amount]
-
-                # for i_batch, batch in enumerate(eegs):
-                    # flipping
-                    # if torch.rand(1, device=eegs.device) <= 0.25:
-                    #     eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
+                if self.flipping is True:
+                    for i_batch, batch in enumerate(eegs):
+                        if torch.rand(1, device=eegs.device) <= 0.25:
+                            eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
+                if self.noise_strength > 0:
+                    eegs = AddGaussianNoise(strength=self.noise_strength)(eegs)
 
             # self.mask_perc_max = 0.1
             # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
@@ -292,9 +271,6 @@ class FouriEEGTransformer(pl.LightningModule):
             # eegs = eegs[:, unmasked_indices]
         # cast from microvolts to volts
         eegs *= 1e6
-        # eventually adds gaussian noise
-        if self.training:
-            eegs = self.add_noise(eegs)
 
         with profiler.record_function("spectrogram"):
             spectrogram = self.get_spectrogram(eegs)  # (b s c m)
@@ -395,22 +371,22 @@ class FouriEEGTransformer(pl.LightningModule):
         phase: str = "train" if self.training is True else "val"
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
+        starting_time = time.time()
         net_outputs = self(eegs)  # (b l d)
-        results = {}
-        results["loss_classification"] = sum(
-            [F.cross_entropy(net_outputs["labels_pred"][:, i_label, :], labels[:, i_label],
-                             label_smoothing=0.1 if phase == "train" else 0.0)
-             for i_label in range(labels.shape[-1])])
-        results["loss"] = results["loss_classification"]
-        results["accs_classification"]: torch.Tensor = torch.as_tensor(
-            [torchmetrics.functional.accuracy(
-                F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
-                else net_outputs["labels_pred"][:, i_label, :],
-                labels[:, i_label], average="micro")
-                for i_label in range(labels.shape[-1])])
-        if self.use_masking and "loss_reconstruction" in results:
-            results["loss_reconstruction"] = F.mse_loss(input=net_outputs["eegs_reconstructed"], target=eegs)
-            results["loss"] = results["loss"] + results["loss_classification"]
+        inference_time = time.time() - starting_time
+        results = {
+            "loss": sum(
+                [F.cross_entropy(net_outputs["labels_pred"][:, i_label, :], labels[:, i_label],
+                                 label_smoothing=0.1 if phase == "train" else 0.0)
+                 for i_label in range(labels.shape[-1])]),
+            "accs": torch.as_tensor(
+                [torchmetrics.functional.accuracy(
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                    else net_outputs["labels_pred"][:, i_label, :],
+                    labels[:, i_label], average="micro")
+                    for i_label in range(labels.shape[-1])]),
+            "time": time.time() - starting_time,
+        }
         return results
 
     def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
@@ -426,16 +402,14 @@ class FouriEEGTransformer(pl.LightningModule):
     def log_stats(self, outputs: List[Dict[str, torch.Tensor]]):
         # name of the current phase
         phase: str = "train" if self.training is True else "val"
+        # time
+        self.log(f"time_{phase}", sum([e["time"] for e in outputs]) / len(outputs),
+                 prog_bar=True if phase == "val" else False)
         # losses
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False)
-        self.log(f"loss_classification_{phase}", torch.stack([e["loss_classification"] for e in outputs]).mean(),
-                 prog_bar=True if phase == "val" else False)
-        if self.use_masking and "loss_reconstruction" in outputs[0]:
-            self.log(f"loss_reconstruction_{phase}", torch.stack([e["loss_reconstruction"] for e in outputs]).mean(),
-                     prog_bar=True if phase == "val" else False)
         # classification metrics
-        accs = torch.stack([e["accs_classification"] for e in outputs])
+        accs = torch.stack([e["accs"] for e in outputs])
         self.log(f"acc_mean_{phase}", accs.mean(),
                  prog_bar=True)
         for i_label, label in enumerate(self.labels):
@@ -485,7 +459,7 @@ if __name__ == "__main__":
         positional_embedding_type="sinusoidal",
         max_position_embeddings=2048,
         dropout_p=0.25,
-        use_masking=True,
+        data_augmentation=True,
     )
     model.training = True
     print(model)

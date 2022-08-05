@@ -513,40 +513,38 @@ class AddGaussianNoise(nn.Module):
 
 
 class MelSpectrogram(nn.Module):
-    def __init__(self,
-                 sampling_rate: Union[int, float, torch.Tensor],
-                 window_size: Union[int, float] = 0.5,
-                 window_stride: Union[int, float] = 0.05,
-                 min_freq: int = 0,
-                 max_freq: int = 50,
-                 mels: int = 8,
-                 ):
+    def __init__(
+            self,
+            sampling_rate: int,
+            window_size: Union[int, float],
+            window_stride: Union[int, float],
+            mels: int = 8,
+            min_freq: int = 0,
+            max_freq: int = 50,
+    ):
         super().__init__()
-        # sampling rate
-        assert any([isinstance(sampling_rate, t) for t in (int, float, torch.Tensor)])
-        if isinstance(sampling_rate, torch.Tensor):
-            if not torch.allclose(sampling_rate, sampling_rate[0]):
-                raise NotImplementedError(f"all the elements in a batch must have the same sampling rate")
-            sampling_rate = sampling_rate[0].detach().item()
-        self.sampling_rate = sampling_rate
-        # frequencies
+        # assertions
+        assert isinstance(sampling_rate, int) and sampling_rate >= 1
+        self.sampling_rate: int = sampling_rate
         assert isinstance(min_freq, int) and isinstance(max_freq, int) and \
                0 <= min_freq <= max_freq
         self.min_freq: int = min_freq
         self.max_freq: int = max_freq
         assert isinstance(mels, int) \
                and mels > 0
-        self.mels = mels
-
-        # window
+        self.mels: int = mels
         assert window_size > 0
-        self.window_size = math.floor(window_size * self.sampling_rate)
+        self.window_size: int = math.floor(window_size * self.sampling_rate)
         assert window_stride > 0
-        self.window_stride = math.floor(window_stride * self.sampling_rate)
+        self.window_stride: int = math.floor(window_stride * self.sampling_rate)
 
-    def forward(self, eegs: torch.Tensor):
-        assert isinstance(eegs, torch.Tensor) and len(eegs.shape) in {2, 3}
-        eegs = einops.rearrange(eegs, "s c -> c s" if len(eegs.shape) == 2 else "b s c -> b c s")
+    def forward(
+            self,
+            eegs: torch.Tensor,
+    ):
+        assert len(eegs.shape) == 3
+        window_size = min(self.window_size, eegs.shape[1])
+        window_stride = min(self.window_stride, window_size // 2)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             mel_fn = transforms.MelSpectrogram(
@@ -558,18 +556,12 @@ class MelSpectrogram(nn.Module):
                 n_fft=128,
                 normalized=True,
                 power=1,
-                win_length=self.window_size,
-                hop_length=self.window_stride,
-                pad=self.window_stride // 2,
+                win_length=window_size,
+                hop_length=window_stride,
+                pad=window_stride // 2,
             ).to(eegs.device)
-            initial_type = eegs.dtype
-            is_half = True if initial_type in [torch.float16, torch.bfloat16] else False
-            if is_half:
-                eegs = eegs.type(torch.float32)
-            spectrogram = mel_fn(eegs.float())  # (b c m s)
-            if is_half:
-                spectrogram = spectrogram.type(initial_type)
-
+            eegs = einops.rearrange(eegs, "b s c -> b c s")
+            spectrogram = mel_fn(eegs)  # (b c m s)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
 

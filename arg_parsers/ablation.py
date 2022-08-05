@@ -82,7 +82,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
 
         "dropout_p",
         "noise_strength",
-        "masking",
+        "data_augmentation",
     ]:
         parser.add_argument(f"--test_{parameter}",
                             default=False,
