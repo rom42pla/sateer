@@ -287,18 +287,6 @@ class FouriEEGTransformer(pl.LightningModule):
             # self.token_type_embedder(x, special_tokens_indices=[0, -1])  # (b s d)
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
-        # reconstruction
-        # if self.use_masking:
-        #     with profiler.record_function("reconstruction"):
-        #         eegs_to_reconstruct = torch.zeros_like(eegs_before_masking, requires_grad=False, device=self.device)
-        #         eegs_to_reconstruct[:, unmasked_indices] = eegs_before_masking[:, unmasked_indices]
-        #         eegs_to_reconstruct = self.pre_reconstructer_pooler(eegs_to_reconstruct)
-        #         eegs_to_reconstruct = eegs_to_reconstruct + \
-        #                               self.position_embedder(eegs_to_reconstruct)
-        #         eegs_reconstructed = self.reconstructer(eegs_to_reconstruct, x_encoded)
-        #         eegs_reconstructed = self.reconstructer_pooler(eegs_reconstructed)
-        #         assert eegs_reconstructed.shape == eegs_before_masking.shape
-        #         outputs["eegs_reconstructed"] = eegs_reconstructed
 
         if self.encoder_only is False:
             with profiler.record_function("decoder"):

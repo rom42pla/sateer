@@ -81,8 +81,11 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         "positional_embedding_type",
 
         "dropout_p",
-        "noise_strength",
+
         "data_augmentation",
+        "cropping",
+        "flipping",
+        "noise_strength",
     ]:
         parser.add_argument(f"--test_{parameter}",
                             default=False,
