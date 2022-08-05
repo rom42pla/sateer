@@ -241,13 +241,13 @@ class FouriEEGTransformer(pl.LightningModule):
                 input_eegs: torch.Tensor):
         assert input_eegs.shape[-1] == self.in_channels
         eegs = input_eegs.clone()
-        print(eegs.shape)
+        print(eegs.shape, self.training)
         if eegs.device != self.device:
             eegs = eegs.to(self.device)  # (b s c)
         # initializes the outputs
         outputs = {}
         # eventually adds masking
-        if self.training and self.data_augmentation is True:
+        if self.training is True and self.data_augmentation is True:
             with profiler.record_function("data augmentation"):
                 if self.cropping is True:
                     crop_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
@@ -264,7 +264,7 @@ class FouriEEGTransformer(pl.LightningModule):
                             eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
                 if self.noise_strength > 0:
                     eegs = AddGaussianNoise(strength=self.noise_strength)(eegs)
-        print(eegs.shape)
+        print(eegs.shape, self.training)
 
             # self.mask_perc_max = 0.1
             # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
@@ -273,7 +273,7 @@ class FouriEEGTransformer(pl.LightningModule):
             # eegs = eegs[:, unmasked_indices]
         # cast from microvolts to volts
         eegs *= 1e6
-
+        print(eegs.shape, self.training)
         with profiler.record_function("spectrogram"):
             spectrogram = self.get_spectrogram(eegs)  # (b s c m)
 
