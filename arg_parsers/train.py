@@ -129,7 +129,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         action="store_true",
                         help="Whether to disable EEGs' flipping during data augmentation")
     parser.add_argument("--noise_strength",
-                        default=0.0,
+                        default=0.01,
                         type=float,
                         help="The amount of gaussian noise to add to the EEGs during data augmentation")
     parser.add_argument("--learning_rate",
