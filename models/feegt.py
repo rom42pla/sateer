@@ -241,6 +241,7 @@ class FouriEEGTransformer(pl.LightningModule):
                 input_eegs: torch.Tensor):
         assert input_eegs.shape[-1] == self.in_channels
         eegs = input_eegs.clone()
+        print(eegs.shape)
         if eegs.device != self.device:
             eegs = eegs.to(self.device)  # (b s c)
         # initializes the outputs
@@ -263,6 +264,7 @@ class FouriEEGTransformer(pl.LightningModule):
                             eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
                 if self.noise_strength > 0:
                     eegs = AddGaussianNoise(strength=self.noise_strength)(eegs)
+        print(eegs.shape)
 
             # self.mask_perc_max = 0.1
             # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
