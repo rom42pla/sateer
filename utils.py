@@ -104,8 +104,9 @@ def read_json(path: str) -> Dict:
 
 
 def train_k_fold(
-        dataset: Dataset, base_model: pl.LightningModule,
-        experiment_path: str, benchmark: bool = False,
+        dataset: Dataset,
+        base_model: pl.LightningModule,
+        experiment_path: str,
         k_folds: int = 10,
         batch_size: int = 64,
         max_epochs: int = 1000,
@@ -162,8 +163,7 @@ def train_k_fold(
             precision=precision,
             max_epochs=max_epochs,
             check_val_every_n_epoch=1,
-            logger=FouriEEGTransformerLogger(path=join(experiment_path, f"fold_{i_fold}"),
-                                             plot=benchmark),
+            logger=FouriEEGTransformerLogger(path=join(experiment_path, f"fold_{i_fold}")),
             log_every_n_steps=1,
             enable_progress_bar=progress_bar,
             enable_model_summary=False,
@@ -172,8 +172,6 @@ def train_k_fold(
             auto_lr_find=auto_lr_finder,
             callbacks=init_callbacks(swa=stochastic_weight_average),
         )
-        if benchmark:
-            print(model)
         # eventually selects a starting learning rate
         if auto_lr_finder is True:
             trainer.tune(model,
@@ -195,8 +193,6 @@ def train_k_fold(
             torch.cuda.empty_cache()
         del trainer, model, dataloader_train, dataloader_val
         gc.collect()
-        if benchmark:
-            break
     return logs
 
 
