@@ -241,7 +241,7 @@ class FouriEEGTransformer(pl.LightningModule):
                 input_eegs: torch.Tensor):
         assert input_eegs.shape[-1] == self.in_channels
         eegs = input_eegs.clone()
-        print(eegs.shape, self.training)
+        print(eegs.shape, self.training, "start")
         if eegs.device != self.device:
             eegs = eegs.to(self.device)  # (b s c)
         # initializes the outputs
@@ -251,6 +251,7 @@ class FouriEEGTransformer(pl.LightningModule):
             with profiler.record_function("data augmentation"):
                 if self.cropping is True:
                     crop_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
+                    print("crop", crop_amount)
                     assert crop_amount < eegs.shape[1]
                     # from left
                     if torch.rand(1, device=eegs.device) <= 0.5:
