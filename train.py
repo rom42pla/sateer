@@ -7,6 +7,7 @@ from pprint import pformat
 from typing import Union, Dict
 
 import pandas as pd
+import torch.cuda
 
 from torch.utils.data import Subset
 import pytorch_lightning as pl
@@ -44,33 +45,40 @@ dataset: EEGClassificationDataset = dataset_class(
     window_size=args['windows_size'],
     window_stride=args['windows_stride'],
     drop_last=True,
-    discretize_labels=args['discretize_labels'],
-    normalize_eegs=args['normalize_eegs'],
+    discretize_labels=not args['dont_discretize_labels'],
+    normalize_eegs=not args['dont_normalize_eegs'],
 )
-# dataset.plot_subjects_distribution()
 
 # sets up the model
-if args['model'] == "feegt":
-    model: pl.LightningModule = FouriEEGTransformer(
-        in_channels=len(dataset.electrodes),
-        sampling_rate=dataset.sampling_rate,
-        labels=dataset.labels,
-        num_encoders=args['num_encoders'],
-        num_decoders=args['num_decoders'],
-        hidden_size=args['window_embedding_dim'],
-        use_masking=not args['disable_masking'],
-        learning_rate=args['learning_rate'],
-        dropout_p=args['dropout_p'],
-        noise_strength=args['noise_strength'],
-        mels=args['mels'],
-        mel_window_size=args['mel_window_size'],
-        mel_window_stride=args['mel_window_stride']
-    )
-else:
-    raise NotImplementedError
+model: FouriEEGTransformer = FouriEEGTransformer(
+    in_channels=len(dataset.electrodes),
+    sampling_rate=dataset.sampling_rate,
+    labels=dataset.labels,
 
-# sets up the structures needed for the experiment
-logs: pd.DataFrame = pd.DataFrame()
+    mels=args['mels'],
+    mel_window_size=args['mel_window_size'],
+    mel_window_stride=args['mel_window_stride'],
+
+    users_embeddings=not args['disable_users_embeddings'],
+
+    encoder_only=args['encoder_only'],
+    mixing_sublayer_type=args['mixing_sublayer_type'],
+    hidden_size=args['hidden_size'],
+    num_encoders=args['num_encoders'],
+    num_decoders=args['num_decoders'],
+    num_attention_heads=args['num_attention_heads'],
+    positional_embedding_type=args['positional_embedding_type'],
+    max_position_embeddings=args['max_position_embeddings'],
+    dropout_p=args['dropout_p'],
+
+    data_augmentation=not args['disable_data_augmentation'],
+    cropping=not args['disable_cropping'],
+    flipping=not args['disable_flipping'],
+    noise_strength=args['noise_strength'],
+
+    learning_rate=args['learning_rate'],
+    device="cuda" if torch.cuda.is_available() else "cpu",
+)
 
 if args['setting'] == "cross_subject":
     if args['validation'] == "k_fold":
@@ -110,20 +118,20 @@ elif args['setting'] == "within_subject":
 del dataset
 gc.collect()
 
-# parses the logs into a single dataframe
-logs = merge_logs(experiment_path, setting=args['setting'])
-
-# plots some metrics
-plot_metrics(logs=logs,
-             metrics=["acc_mean_train", "acc_mean_val"],
-             labels=["training", "validation"],
-             y_label="accuracy",
-             mode="max",
-             experiment_path=experiment_path)
-
-plot_metrics(logs=logs,
-             metrics=["loss_train", "loss_val"],
-             labels=["training", "validation"],
-             y_label="loss",
-             mode="min",
-             experiment_path=experiment_path)
+# # parses the logs into a single dataframe
+# logs = merge_logs(experiment_path, setting=args['setting'])
+#
+# # plots some metrics
+# plot_metrics(logs=logs,
+#              metrics=["acc_mean_train", "acc_mean_val"],
+#              labels=["training", "validation"],
+#              y_label="accuracy",
+#              mode="max",
+#              experiment_path=experiment_path)
+#
+# plot_metrics(logs=logs,
+#              metrics=["loss_train", "loss_val"],
+#              labels=["training", "validation"],
+#              y_label="loss",
+#              mode="min",
+#              experiment_path=experiment_path)

@@ -60,7 +60,7 @@ class FouriEEGTransformer(pl.LightningModule):
             flipping: bool = False,
             noise_strength: Union[int, float] = 0.01,
 
-            learning_rate: float = 1e-4,
+            learning_rate: float = 2e-4,
             device: Optional[str] = None,
             **kwargs
     ):

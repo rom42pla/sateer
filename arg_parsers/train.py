@@ -24,17 +24,14 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=None,
                         type=float,
                         help="Duration of stride of the windows in seconds")
-    parser.add_argument("--discretize_labels",
+    parser.add_argument("--dont_discretize_labels",
                         default=False,
                         action="store_true",
                         help="Whether not to discretize labels in {0, 1}")
-    parser.add_argument("--normalize_eegs",
+    parser.add_argument("--dont_normalize_eegs",
                         default=False,
                         action="store_true",
                         help="Whether not to normalize the EEGs with zero mean and unit variance")
-    parser.add_argument("--limit_train_batches",
-                        default=1.0,
-                        help="Whether to limit the number of train batches")
     parser.add_argument("--checkpoints_path",
                         type=str,
                         help="Path to where to save the checkpoints")
@@ -69,71 +66,91 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=str,
                         choices={"cross_subject", "within_subject"},
                         help="The setting of the experiment, whether cross- or within-subject")
-    parser.add_argument("--precision",
-                        default=32,
-                        type=int,
-                        choices={16, 32},
-                        help="Whether to use 32- ore 16-bit precision")
-    parser.add_argument("--benchmark",
+
+    # architecture
+    parser.add_argument("--encoder_only",
                         default=False,
                         action="store_true",
-                        help="Whether to test a single training")
-
-    # model args
-    parser.add_argument("--model",
-                        default="feegt",
+                        help="Whether not to discard the decoder")
+    parser.add_argument("--mixing_sublayer_type",
+                        default="attention",
+                        choices={"attention", "fourier", "identity", "linear"},
                         type=str,
-                        choices={"feegt"},
-                        help="The model to use")
+                        help="Dimension of the internal embeddings")
     parser.add_argument("--num_encoders",
-                        default=2,
+                        default=4,
                         type=int,
-                        help="Number of encoders in FEEGT")
+                        help="Number of encoders")
     parser.add_argument("--num_decoders",
-                        default=2,
+                        default=4,
                         type=int,
-                        help="Number of decoders in FEEGT")
-    parser.add_argument("--window_embedding_dim",
+                        help="Number of decoders")
+    parser.add_argument("--num_attention_heads",
+                        default=8,
+                        type=int,
+                        help="Number of attention heads")
+    parser.add_argument("--hidden_size",
                         default=512,
                         type=int,
-                        help="Dimension of the internal windows embedding in FEEGT")
+                        help="Dimension of the internal embeddings")
+    parser.add_argument("--positional_embedding_type",
+                        default="sinusoidal",
+                        choices={"sinusoidal", "learned"},
+                        type=str,
+                        help="Dimension of the internal embeddings")
+    parser.add_argument("--max_position_embeddings",
+                        default=2048,
+                        type=int,
+                        help="The maximum possible length of the spectrograms")
+    parser.add_argument("--dropout_p",
+                        default=0.2,
+                        type=float,
+                        help="The amount of dropout to use")
+    parser.add_argument("--disable_users_embeddings",
+                        default=False,
+                        action="store_true",
+                        help="Whether not to use users' embeddings")
     parser.add_argument("--auto_lr_finder",
                         default=False,
                         action="store_true",
                         help="Whether to run an automatic learning range finder algorithm")
 
-    # regularization
-    parser.add_argument("--dropout_p",
-                        default=0.2,
-                        type=float,
-                        help="The amount of dropout to use")
-    parser.add_argument("--noise_strength",
-                        default=0,
-                        type=float,
-                        help="The amount of gaussian noise to add to the eegs")
-    parser.add_argument("--gradient_clipping",
+    # data augmentation
+    parser.add_argument("--disable_data_augmentation",
                         default=False,
+                        action="store_true",
+                        help="Whether to disable EEGs' data augmentation")
+    parser.add_argument("--disable_cropping",
+                        default=False,
+                        action="store_true",
+                        help="Whether to disable EEGs' random crop during data augmentation")
+    parser.add_argument("--disable_flipping",
+                        default=False,
+                        action="store_true",
+                        help="Whether to disable EEGs' flipping during data augmentation")
+    parser.add_argument("--noise_strength",
+                        default=0.0,
+                        type=float,
+                        help="The amount of gaussian noise to add to the EEGs during data augmentation")
+    parser.add_argument("--learning_rate",
+                        default=2e-4,
+                        type=float,
+                        help="Learning rate of the model")
+    parser.add_argument("--gradient_clipping",
+                        default=True,
                         action="store_true",
                         help="Whether to clip the gradients to 1")
     parser.add_argument("--stochastic_weight_average",
                         default=False,
                         action="store_true",
                         help="Whether to use the SWA algorithm")
-    parser.add_argument("--disable_masking",
-                        default=False,
-                        action="store_true",
-                        help="Whether not to mask a percentage of embeddings during training of FEEGT")
-    parser.add_argument("--learning_rate",
-                        default=1e-4,
-                        type=float,
-                        help="Learning rate of the model")
 
     parser.add_argument("--mels",
-                        default=32,
+                        default=16,
                         type=int,
                         help="Number of mel banks")
     parser.add_argument("--mel_window_size",
-                        default=0.5,
+                        default=1,
                         type=float,
                         help="Size of spectrogram's windows")
     parser.add_argument("--mel_window_stride",
@@ -154,14 +171,6 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     assert args.max_epochs >= 1 and args.max_epochs >= args.min_epochs
     if args.validation == "k_fold":
         assert args.k_folds >= 2
-    assert args.limit_train_batches is None or \
-           True in [isinstance(args.limit_train_batches, t) for t in [int, float, str]]
-    if isinstance(args.limit_train_batches, str):
-        if "." in args.limit_train_batches:
-            args.limit_train_batches = float(args.limit_train_batches)
-        else:
-            args.limit_train_batches = int(args.limit_train_batches)
-        assert args.limit_train_batches > 0
     if args.seed is None:
         args.seed = random.randint(0, 1000000)
 

@@ -84,7 +84,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
 
         "dropout_p",
 
-        "data_augmentation",
+        "dreamer_data_augmentation",
         "cropping",
         "flipping",
         "noise_strength",

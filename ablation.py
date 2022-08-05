@@ -81,7 +81,7 @@ for parameter, default, search_space in [
     ("num_layers", 4, [2, 4, 6, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.3]),
-    ("data_augmentation", True, [True, False]),
+    ("dreamer_data_augmentation", True, [True, False]),
     ("flipping", False, [True, False]),
     ("cropping", True, [True, False]),
     ("noise_strength", 0.01, [0, 0.01, 0.05]),

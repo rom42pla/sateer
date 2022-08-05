@@ -161,4 +161,4 @@ def plot_ablation(
 
 
 if __name__ == "__main__":
-    plot_ablation(path=join("checkpoints", "ablation_saved", "dreamer_mel_window"))
+    plot_ablation(path=join("checkpoints", "ablation_saved", "dreamer_data_augmentation"))
