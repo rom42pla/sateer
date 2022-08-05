@@ -1,7 +1,7 @@
 import math
 import warnings
 from collections import OrderedDict
-from typing import Union, List
+from typing import Union, List, Dict
 
 import functorch
 import torch
@@ -497,6 +497,27 @@ class GetTokenTypeEmbeddings(nn.Module):
         pe = self.embedder(indices).repeat(x.shape[0], 1, 1)
         assert pe.shape == x.shape
         return pe
+
+
+class GetUserEmbeddings(nn.Module):
+    def __init__(self,
+                 hidden_size: int):
+        super().__init__()
+        assert isinstance(hidden_size, int) and hidden_size >= 1, \
+            f"embeddings must be greater than 0, not {hidden_size}"
+        self.hidden_size = hidden_size
+        self.embeddings: Dict[str, torch.Tensor] = {}
+
+    def forward(self, ids: List[Union[int, str]]) -> torch.Tensor:
+        for id in ids:
+            if id not in self.embeddings.keys():
+                self.add_id(id)
+        embeddings = torch.stack([self.embeddings[id] for id in ids])
+        return embeddings
+
+    def add_id(self, id: Union[int, str]):
+        assert id not in self.embeddings.keys()
+        self.embeddings[id] = nn.Parameter(torch.randn(self.hidden_size, requires_grad=True))
 
 
 class AddGaussianNoise(nn.Module):

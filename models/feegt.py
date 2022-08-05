@@ -1,9 +1,11 @@
 import gc
 import logging
 import math
+import os
 import time
 import warnings
 from collections import OrderedDict
+from os.path import join
 from pprint import pformat
 from typing import Union, List, Optional, Dict
 
@@ -20,10 +22,14 @@ import torchmetrics
 import einops
 import torch.autograd.profiler as profiler
 from torch.profiler import profile, ProfilerActivity
+from torch.utils.data import DataLoader
 from torchaudio import transforms
 
+from datasets.deap import DEAPDataset
+from datasets.dreamer import DREAMERDataset
+from datasets.eeg_emrec import EEGClassificationDataset
 from models.layers import FouriEncoder, FouriEncoderBlock, FouriDecoder, AddGaussianNoise, MelSpectrogram, \
-    GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings
+    GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings, GetUserEmbeddings
 
 
 class FouriEEGTransformer(pl.LightningModule):
@@ -37,6 +43,8 @@ class FouriEEGTransformer(pl.LightningModule):
             mel_window_size: Union[int, float] = 1,
             mel_window_stride: Union[int, float] = 0.05,
 
+            users_embeddings: bool = True,
+
             encoder_only: bool = False,
             mixing_sublayer_type: str = "attention",
             hidden_size: int = 512,
@@ -49,10 +57,8 @@ class FouriEEGTransformer(pl.LightningModule):
 
             data_augmentation: bool = True,
             cropping: bool = True,
-            flipping: bool = True,
+            flipping: bool = False,
             noise_strength: Union[int, float] = 0.01,
-            # mask_perc_min: float = 0.05,
-            # mask_perc_max: float = 0.3,
 
             learning_rate: float = 1e-4,
             device: Optional[str] = None,
@@ -75,6 +81,9 @@ class FouriEEGTransformer(pl.LightningModule):
             assert labels > 0, \
                 f"there must be a positive number of labels, not {labels}"
             self.labels = [f"label_{i}" for i in range(labels)]
+
+        assert isinstance(users_embeddings, bool)
+        self.users_embeddings: bool = users_embeddings
 
         # preprocessing
         assert isinstance(mels, int) and mels >= 1, \
@@ -124,12 +133,19 @@ class FouriEEGTransformer(pl.LightningModule):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.special_tokens_vocab = {
-            k: i
-            for i, k in enumerate(["start", "end"])
-            # for i, k in enumerate(["start", "end", "mask"])
-        }
-        self.tokens_embedder = nn.Embedding(len(self.special_tokens_vocab), self.hidden_size)
+        self.special_tokens_vocab: Dict[str, int] = {}
+        # self.special_tokens_vocab["start"] = len(self.special_tokens_vocab)
+        # self.special_tokens_vocab["end"] = len(self.special_tokens_vocab)
+        self.special_tokens_vocab["ues"] = len(self.special_tokens_vocab)
+        # self.special_tokens_vocab = {
+        #     k: i
+        #     for i, k in enumerate(["start", "end"])
+        #     # for i, k in enumerate(["start", "end", "mask"])
+        # }
+        if len(self.special_tokens_vocab) > 0:
+            self.special_tokens_embedder = nn.Embedding(len(self.special_tokens_vocab), self.hidden_size)
+        if self.users_embeddings:
+            self.users_embedder = GetUserEmbeddings(hidden_size=self.hidden_size)
         if self.positional_embedding_type == "sinusoidal":
             self.position_embedder = GetSinusoidalPositionalEmbeddings(
                 max_position_embeddings=self.max_position_embeddings,
@@ -237,9 +253,20 @@ class FouriEEGTransformer(pl.LightningModule):
         self.to(device)
         self.save_hyperparameters()
 
-    def forward(self,
-                input_eegs: torch.Tensor):
+    def forward(
+            self,
+            input_eegs: torch.Tensor,
+            ids: Optional[Union[int, str, List[Union[int, str]]]] = None
+    ):
         assert input_eegs.shape[-1] == self.in_channels
+        if ids is not None:
+            if isinstance(ids, int) or isinstance(ids, str):
+                ids = [ids]
+            elif isinstance(ids, list):
+                assert all([isinstance(id, int) or isinstance(id, str)
+                            for id in ids])
+            else:
+                raise TypeError(f"ids must be a string, an integer or a list of such, not {type(ids)}")
         eegs = input_eegs.clone()
         if eegs.device != self.device:
             eegs = eegs.to(self.device)  # (b s c)
@@ -282,6 +309,16 @@ class FouriEEGTransformer(pl.LightningModule):
             # adds start and end tokens
             # x = self.add_start_end_tokens(x)
             # adds positional embeddings and type embeddings
+            if self.users_embeddings:
+                with profiler.record_function("user embeddings"):
+                    users_embeddings = self.users_embedder(ids).to(self.device)  # (b c)
+                    x = torch.cat([
+                        users_embeddings.unsqueeze(1),
+                        self.special_tokens_embedder(
+                            torch.as_tensor([self.special_tokens_vocab["ues"]],
+                                            device=self.device)).repeat(x.shape[0], 1, 1),
+                        x], dim=1)
+                    x = x + self.token_type_embedder(x, special_tokens_indices=[1])
             x = x + \
                 self.position_embedder(x)  # + \
             # self.token_type_embedder(x, special_tokens_indices=[0, -1])  # (b s d)
@@ -322,18 +359,18 @@ class FouriEEGTransformer(pl.LightningModule):
             outputs["labels_pred"] = labels_pred
         return outputs
 
-    def add_start_end_tokens(self, x: torch.Tensor):
-        # generates start and end tokens
-        start_token, end_token = self.tokens_embedder(torch.as_tensor([
-            self.special_tokens_vocab["start"],
-            self.special_tokens_vocab["end"],
-        ], device=x.device))
-        # adds start and end token
-        x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
-                       x,
-                       end_token.repeat(x.shape[0], 1, 1)], dim=1)  # (b s d)
-        del start_token, end_token
-        return x
+    # def add_start_end_tokens(self, x: torch.Tensor):
+    #     # generates start and end tokens
+    #     start_token, end_token = self.tokens_embedder(torch.as_tensor([
+    #         self.special_tokens_vocab["start"],
+    #         self.special_tokens_vocab["end"],
+    #     ], device=x.device))
+    #     # adds start and end token
+    #     x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
+    #                    x,
+    #                    end_token.repeat(x.shape[0], 1, 1)], dim=1)  # (b s d)
+    #     del start_token, end_token
+    #     return x
 
     # def apply_random_mask(self, x: torch.Tensor):
     #     # generates mask token
@@ -360,7 +397,7 @@ class FouriEEGTransformer(pl.LightningModule):
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
         starting_time = time.time()
-        net_outputs = self(eegs)  # (b l d)
+        net_outputs = self(eegs, ids=batch["subject_id"])  # (b l d)
         inference_time = time.time() - starting_time
         results = {
             "loss": sum(
@@ -414,25 +451,30 @@ class FouriEEGTransformer(pl.LightningModule):
         return optimizer
 
     def on_fit_end(self) -> None:
-        best_epoch = self.logger.logs.groupby('epoch').min().sort_values(by='acc_mean_val',
-                                                                         ascending=False).iloc[0:1, :][
-            ["loss_train", "loss_val", "acc_mean_train", "acc_mean_val"]]
-        print(best_epoch)
+        if self.logger is not None:
+            best_epoch = self.logger.logs.groupby('epoch').min().sort_values(by='acc_mean_val',
+                                                                             ascending=False).iloc[0:1, :][
+                ["loss_train", "loss_val", "acc_mean_train", "acc_mean_val"]]
+            print(best_epoch)
 
 
 if __name__ == "__main__":
-    batch_size = 1024
-    sampling_rate = 128
-    seconds = 1
-    batch = {
-        "eegs": torch.randn(batch_size, seconds * sampling_rate, 32, dtype=torch.float32) * 1e-6,
-        "labels": torch.ones(batch_size, 4, dtype=torch.long),
-        "sampling_rates": torch.zeros(batch_size, dtype=torch.long) + sampling_rate,
-    }
+    dataset: EEGClassificationDataset = DEAPDataset(
+        path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "deap"),
+        split_in_windows=True,
+        window_size=1,
+        window_stride=1,
+        drop_last=True,
+        discretize_labels=True,
+        normalize_eegs=True,
+    )
+    dataloader = DataLoader(dataset, batch_size=64, num_workers=os.cpu_count() - 2, shuffle=True)
     model = FouriEEGTransformer(
-        in_channels=32,
-        sampling_rate=sampling_rate,
-        labels=4,
+        in_channels=len(dataset.electrodes),
+        sampling_rate=dataset.sampling_rate,
+        labels=dataset.labels,
+
+        users_embeddings=True,
 
         mels=8,
         mel_window_size=1,
@@ -452,6 +494,19 @@ if __name__ == "__main__":
     model.training = True
     print(model)
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
-        model.training_step(batch, 0)
+        trainer = pl.Trainer(
+            accelerator="gpu" if torch.cuda.is_available() else "cpu",
+            max_epochs=1,
+            check_val_every_n_epoch=1,
+            logger=False,
+            log_every_n_steps=1,
+            enable_progress_bar=True,
+            enable_model_summary=False,
+            enable_checkpointing=False,
+            gradient_clip_val=1,
+            limit_train_batches=1,
+        )
+        trainer.fit(model,
+                    train_dataloaders=dataloader)
     print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=8))
     # print(torchvision.models.resnet18())

@@ -74,6 +74,8 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         "mel_window_size",
         "mel_window_stride",
 
+        "users_embeddings",
+
         "encoder_only",
         "mixing_sublayer_type",
         "hidden_size",

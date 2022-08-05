@@ -113,10 +113,11 @@ class EEGClassificationDataset(Dataset, ABC):
     def __len__(self) -> int:
         return len(self.eegs_data)
 
-    def __getitem__(self, i: int) -> Dict[str, Union[int, torch.Tensor]]:
+    def __getitem__(self, i: int) -> Dict[str, Union[int, str, torch.Tensor]]:
         return {
             "sampling_rates": self.sampling_rate,
-            "subject_id": self.subject_ids.index(self.subject_ids_data[i]),
+            # "subject_id": self.subject_ids.index(self.subject_ids_data[i]),
+            "subject_id": self.subject_ids_data[i],
             "eegs": self.eegs_data[i],
             "labels": self.labels_data[i],
         }
