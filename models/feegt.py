@@ -443,8 +443,26 @@ class FouriEEGTransformer(pl.LightningModule):
                 [F.cross_entropy(net_outputs["labels_pred"][:, i_label, :], labels[:, i_label],
                                  label_smoothing=0.1 if phase == "train" else 0.0)
                  for i_label in range(labels.shape[-1])]),
-            "accs": torch.as_tensor(
+            "acc": torch.as_tensor(
                 [torchmetrics.functional.accuracy(
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                    else net_outputs["labels_pred"][:, i_label, :],
+                    labels[:, i_label], average="micro")
+                    for i_label in range(labels.shape[-1])]),
+            "f1": torch.as_tensor(
+                [torchmetrics.functional.f1_score(
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                    else net_outputs["labels_pred"][:, i_label, :],
+                    labels[:, i_label], average="micro")
+                    for i_label in range(labels.shape[-1])]),
+            "precision": torch.as_tensor(
+                [torchmetrics.functional.precision(
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                    else net_outputs["labels_pred"][:, i_label, :],
+                    labels[:, i_label], average="micro")
+                    for i_label in range(labels.shape[-1])]),
+            "recall": torch.as_tensor(
+                [torchmetrics.functional.recall(
                     F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
                     else net_outputs["labels_pred"][:, i_label, :],
                     labels[:, i_label], average="micro")
@@ -473,13 +491,15 @@ class FouriEEGTransformer(pl.LightningModule):
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False)
         # classification metrics
-        accs = torch.stack([e["accs"] for e in outputs])
-        self.log(f"acc_mean_{phase}", accs.mean(),
-                 prog_bar=True)
-        for i_label, label in enumerate(self.labels):
-            self.log(f"acc_{label}_{phase}", accs[:, i_label].mean(),
-                     prog_bar=False)
-        del accs, outputs
+        for metric in ["acc", "f1", "precision", "recall"]:
+            metric_data = torch.stack([e[metric] for e in outputs])
+            self.log(f"{metric}_mean_{phase}", metric_data.mean(),
+                     prog_bar=True)
+            for i_label, label in enumerate(self.labels):
+                self.log(f"{metric}_{label}_{phase}", metric_data[:, i_label].mean(),
+                         prog_bar=False)
+            del metric_data
+        del outputs
 
     def optimizer_zero_grad(self, epoch, batch_idx, optimizer, optimizer_idx):
         optimizer.zero_grad(set_to_none=True)
