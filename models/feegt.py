@@ -147,10 +147,17 @@ class FouriEEGTransformer(pl.LightningModule):
         if self.users_embeddings:
             self.users_embedder = GetUserEmbeddings(hidden_size=self.hidden_size)
         if self.positional_embedding_type == "sinusoidal":
+            self.position_embedder_spectrogram = GetSinusoidalPositionalEmbeddings(
+                max_position_embeddings=self.max_position_embeddings,
+            )
             self.position_embedder = GetSinusoidalPositionalEmbeddings(
                 max_position_embeddings=self.max_position_embeddings,
             )
         elif self.positional_embedding_type == "learned":
+            self.position_embedder_spectrogram = GetLearnedPositionalEmbeddings(
+                max_position_embeddings=self.max_position_embeddings,
+                hidden_size=self.in_channels * self.mels
+            )
             self.position_embedder = GetLearnedPositionalEmbeddings(
                 max_position_embeddings=self.max_position_embeddings,
                 hidden_size=self.hidden_size
@@ -189,12 +196,25 @@ class FouriEEGTransformer(pl.LightningModule):
             # nn.Linear(in_features=self.window_embedding_dim, out_features=1),
             # nn.AlphaDropout(self.dropout_p),
             # nn.Linear(in_features=self.mels, out_features=1),
-            Rearrange("b s c m -> b s (c m)"),
-            FouriEncoderBlock(in_features=self.in_channels * self.mels,
-                              mid_features=self.hidden_size * 4,
-                              out_features=self.hidden_size,
-                              mixing_sublayer_type=self.mixing_sublayer_type,
-                              ),
+            nn.TransformerEncoder(
+                encoder_layer=nn.TransformerEncoderLayer(
+                    batch_first=True,
+                    d_model=self.in_channels * self.mels,
+                    dim_feedforward=self.hidden_size * 4,
+                    dropout=self.dropout_p,
+                    activation=F.selu,
+                    nhead=self.num_attention_heads,
+                ),
+                num_layers=1,
+            ),
+            nn.Linear(self.in_channels * self.mels, self.hidden_size),
+            nn.SELU(),
+            nn.Linear(self.hidden_size, self.hidden_size),
+            # FouriEncoderBlock(in_features=self.in_channels * self.mels,
+            #                   mid_features=self.hidden_size * 4,
+            #                   out_features=self.hidden_size,
+            #                   mixing_sublayer_type=self.mixing_sublayer_type,
+            #                   ),
         )
 
         # self.encoder = FouriEncoder(hidden_size=self.hidden_size,
@@ -258,7 +278,9 @@ class FouriEEGTransformer(pl.LightningModule):
             input_eegs: torch.Tensor,
             ids: Optional[Union[int, str, List[Union[int, str]]]] = None
     ):
+        # ensures that the inputs are well defined
         assert input_eegs.shape[-1] == self.in_channels
+        assert len(input_eegs.shape) in {2, 3}
         if ids is not None:
             if isinstance(ids, int) or isinstance(ids, str):
                 ids = [ids]
@@ -267,12 +289,23 @@ class FouriEEGTransformer(pl.LightningModule):
                             for id in ids])
             else:
                 raise TypeError(f"ids must be a string, an integer or a list of such, not {type(ids)}")
-        eegs = input_eegs.clone()
-        if eegs.device != self.device:
-            eegs = eegs.to(self.device)  # (b s c)
-        # initializes the outputs
-        outputs = {}
-        # eventually adds masking
+
+        # makes a fresh copy of the input to avoid errors
+        eegs = input_eegs.clone().to(self.device)  # (b s c) or (s c)
+
+        # cast from microvolts to volts
+        eegs *= 1e6
+
+        # eventually adds a batch dimension
+        is_batched = True if len(eegs.shape) == 3 else False
+        if not is_batched:
+            eegs = einops.rearrange(eegs, "s c -> () s c")
+
+        # initializes variables and structures
+        outputs: Dict[str, torch.Tensor] = {}
+        batch_size: int = eegs.shape[0]
+
+        # eventually adds data augmentation
         if self.training is True and self.data_augmentation is True:
             with profiler.record_function("data augmentation"):
                 if self.cropping is True:
@@ -292,23 +325,23 @@ class FouriEEGTransformer(pl.LightningModule):
                 if self.noise_strength > 0:
                     eegs = AddGaussianNoise(strength=self.noise_strength)(eegs)
 
-        # self.mask_perc_max = 0.1
-        # unmasked_elements = int(eegs.shape[1] * (1 - self.mask_perc_max))
-        # unmasked_indices = torch.randperm(eegs.shape[1],
-        #                                   requires_grad=False, device=self.device)[:unmasked_elements]
-        # eegs = eegs[:, unmasked_indices]
-        # cast from microvolts to volts
-        eegs *= 1e6
+        # converts the eegs to a spectrogram
         with profiler.record_function("spectrogram"):
             spectrogram = self.get_spectrogram(eegs)  # (b s c m)
 
+        # prepares the spectrogram for the encoder
         with profiler.record_function("preparation"):
+            spectrogram = einops.rearrange(spectrogram, "b s c m -> b s (c m)")
+            spectrogram = spectrogram \
+                          + self.position_embedder_spectrogram(spectrogram)
             x = self.merge_mels(spectrogram)  # (b s c)
+            assert len(x.shape) == 3, f"invalid number of dimensions ({x.shape} must be long 3)"
+            assert x.shape[-1] == self.hidden_size, \
+                f"invalid hidden size after merging ({x.shape[-1]} != {self.hidden_size})"
 
+        # pass the spectrogram through the encoder
         with profiler.record_function("encoder"):
-            # adds start and end tokens
-            # x = self.add_start_end_tokens(x)
-            # adds positional embeddings and type embeddings
+            # eventually adds positional embeddings and type embeddings
             if self.users_embeddings:
                 with profiler.record_function("user embeddings"):
                     users_embeddings = self.users_embedder(ids).to(self.device)  # (b c)
@@ -319,29 +352,35 @@ class FouriEEGTransformer(pl.LightningModule):
                                             device=self.device)).repeat(x.shape[0], 1, 1),
                         x], dim=1)
                     x = x + self.token_type_embedder(x, special_tokens_indices=[1])
+            # adds the positional embeddings
             x = x + \
-                self.position_embedder(x)  # + \
-            # self.token_type_embedder(x, special_tokens_indices=[0, -1])  # (b s d)
+                self.position_embedder(x)
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
+            assert len(x_encoded.shape) == 3, f"invalid number of dimensions ({x_encoded.shape} must be long 3)"
+            assert x_encoded.shape[-1] == self.hidden_size, \
+                f"invalid hidden size after encoder ({x_encoded.shape[-1]} != {self.hidden_size})"
 
+        # eventually pass the encoded spectrogram to the decoder
         if self.encoder_only is False:
             with profiler.record_function("decoder"):
-                # adds the labels for the tokens
+                # prepares the labels tensor
                 label_tokens = self.labels_embedder(
                     torch.as_tensor(list(range(len(self.labels))),
                                     device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
-                # # adds start and end tokens
-                # label_tokens = self.add_start_end_tokens(label_tokens)  # (b l d)
-                # # adds positional embeddings
-                # label_tokens = self.add_positional_embeddings(label_tokens)  # (b l d)
+                # adds the positional embeddings
                 label_tokens = label_tokens + \
                                self.position_embedder(label_tokens)  # (b l d)
+                # decoder pass
                 x_decoded = self.decoder(
                     label_tokens,
                     x_encoded
                 )  # (b l d)
+                assert len(x_decoded.shape) == 3, f"invalid number of dimensions ({x_decoded.shape} must be long 3)"
+                assert x_decoded.shape[-1] == self.hidden_size, \
+                    f"invalid hidden size after merging ({x_decoded.shape[-1]} != {self.hidden_size})"
 
+        # makes the predictions using the encoded or decoded data
         with profiler.record_function("predictions"):
             if self.encoder_only is True:
                 labels_pred = torch.stack([net(x_encoded[:, 0, :])
@@ -398,7 +437,6 @@ class FouriEEGTransformer(pl.LightningModule):
         labels: torch.Tensor = batch["labels"]
         starting_time = time.time()
         net_outputs = self(eegs, ids=batch["subject_id"])  # (b l d)
-        inference_time = time.time() - starting_time
         results = {
             "loss": sum(
                 [F.cross_entropy(net_outputs["labels_pred"][:, i_label, :], labels[:, i_label],

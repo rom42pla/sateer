@@ -159,7 +159,7 @@ def train_k_fold(
                      f"|dataloader_val| = {len(dataloader_val)}")
         # initializes the trainer
         trainer = pl.Trainer(
-            gpus=1 if torch.cuda.is_available() else 0,
+            accelerator="gpu" if torch.cuda.is_available() else "cpu",
             precision=precision,
             max_epochs=max_epochs,
             check_val_every_n_epoch=1,

@@ -2,6 +2,9 @@ import warnings
 
 import numpy as np
 import pandas as pd
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_colwidth', 16)
 import json
 import re
 from os import listdir, makedirs
@@ -14,6 +17,73 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
 from utils import read_json
+
+
+def plot_cross_subject(
+        path: str,
+        scale: int = 5
+):
+    # eventually creates the plots folder
+    plots_path: str = join(path, "plots")
+    if not exists(plots_path):
+        makedirs(plots_path)
+    # parses logs in the different folders for the experiment
+    logs: pd.DataFrame = pd.DataFrame()
+    for fold_folder in [f for f in listdir(path) if re.fullmatch(r"fold_[0-9]+", f)]:
+        if not "logs.csv" in listdir(join(path, fold_folder)):
+            continue
+        fold_logs: pd.DataFrame = pd.read_csv(join(path, fold_folder, "logs.csv"), index_col=False)
+        fold_logs = fold_logs.groupby("epoch").max().reset_index()
+        fold_logs["fold"] = int(fold_folder.split("_")[-1])
+        logs = pd.concat([logs, fold_logs], ignore_index=True)
+    logs = logs.sort_values(by=["fold", "epoch"]).drop("Unnamed: 0", axis=1)
+    # build our line for the final table
+    ours: pd.DataFrame = logs.groupby("fold").max().mean()
+    # parses line arguments
+    line_args = read_json(path=join(path, "line_args.json"))
+    # parses the competitors' table
+    competitors: pd.DataFrame = pd.read_csv(
+        f"https://docs.google.com/spreadsheets/d/1__LlQOL17InzSdcA5QCq3xAXhI4Kpcpo8l_VojkzeSA/gviz/tq?tqx=out:csv&sheet=0")
+    # builds competitors' lines for the final table
+    competitors = competitors.loc[competitors["dataset"] == line_args["dataset_type"]]
+    # competitors = competitors.loc[competitors["setting"] == "cross-subject"]
+    competitors = competitors.loc[competitors["validation"] == "10-fold"]
+    competitors = competitors.drop(["url", "setting", "validation"], axis=1).sort_values(
+        by=["windows_size", "windows_stride", "acc_valence"])
+    # merges our method and the competitors' ones
+    competitors = pd.concat([competitors, pd.DataFrame([{
+        "paper": "Ours",
+        "dataset": line_args["dataset_type"],
+        "windows_size": line_args["windows_size"],
+        "windows_stride": line_args["windows_stride"],
+        **{
+            f"acc_{column.split('_')[1]}": ours[column] * 100
+            for column in ours.index
+            if re.fullmatch(r"acc_.+_val", column)
+               and column != "acc_mean_val"
+        },
+    }])], ignore_index=True)
+    # rename the columns
+    competitors = competitors.rename({
+        "windows_size": "windows size (s)",
+        "windows_stride": "windows stride (s)",
+        **{
+            column: f"accuracy ({column.split('_')[1]})"
+            for column in competitors.columns
+            if re.fullmatch(r"acc_.+", column)
+        }
+    }, axis=1)
+    # capitalize all the columns
+    competitors = competitors.rename({
+        column: column.capitalize()
+        for column in competitors
+    }, axis=1)
+    # removes unused labels
+    competitors = competitors.dropna(axis=1, how="all")
+    # saves the table as .csv and latex table
+    competitors.to_csv(join(path, "competitors.csv"), index=False, float_format="%.2f")
+    competitors.to_latex(join(path, "competitors.tex"), index=False, float_format="%.2f", bold_rows=True)
+    print(competitors)
 
 
 def plot_metrics(logs: pd.DataFrame,
@@ -61,29 +131,6 @@ def plot_metrics(logs: pd.DataFrame,
         plt.savefig(join(experiment_path, "plots", f"{y_label}.png"))
     plt.show()
 
-
-# def plot_ablation(logs: pd.DataFrame,
-#                   experiment_path: Optional[str] = None):
-#     tested_parameters = [c for c in logs.columns
-#                          if c != "acc_mean_val"
-#                          and len(logs[c].unique()) > 1]
-#     if experiment_path is not None:
-#         if not isdir(join(experiment_path, "plots")):
-#             makedirs(join(experiment_path, "plots"))
-#     for parameter in tested_parameters:
-#         fig, ax = plt.subplots(nrows=1, ncols=1,
-#                                figsize=(5, 5),
-#                                tight_layout=True)
-#         sns.barplot(data=logs, x=parameter, y="acc_mean_val",
-#                     ax=ax, palette="rocket")
-#         ax.set_xlabel(parameter)
-#         ax.set_ylabel("accuracy")
-#         ax.set_ylim(0.4, 1)
-#         ax.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
-#         ax.grid(axis="y")
-#         if experiment_path is not None:
-#             plt.savefig(join(experiment_path, "plots", f"{parameter}.png"))
-#         plt.show()
 
 def plot_ablation(
         path: str,
@@ -161,4 +208,5 @@ def plot_ablation(
 
 
 if __name__ == "__main__":
-    plot_ablation(path=join("checkpoints", "ablation_saved", "dreamer_data_augmentation"))
+    # plot_ablation(path=join("checkpoints", "ablation_saved", "dreamer_data_augmentation"))
+    plot_cross_subject(path=join("checkpoints", "cross_saved", "dreamer_size_1_stride_1"))
