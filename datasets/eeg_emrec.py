@@ -26,7 +26,6 @@ class EEGClassificationDataset(Dataset, ABC):
                  labels: List[str],
                  subject_ids: List[str],
 
-                 split_in_windows: bool = False,
                  window_size: Optional[Union[float, int]] = 1,
                  window_stride: Optional[Union[float, int]] = None,
                  drop_last: Optional[bool] = False,
@@ -65,21 +64,16 @@ class EEGClassificationDataset(Dataset, ABC):
         self.subject_ids: List[str] = subject_ids
         self.subject_ids.sort()
 
-        assert isinstance(split_in_windows, bool)
-        self.split_in_windows: bool = split_in_windows
-
-        if self.split_in_windows is True:
-            assert window_size > 0
-            self.window_size: float = float(window_size)  # s
-            self.samples_per_window: int = int(np.floor(self.sampling_rate * self.window_size))
-            assert window_stride is None or window_stride > 0
-            if window_stride is None:
-                window_stride = deepcopy(self.window_size)
-            self.window_stride: float = float(window_stride)  # s
-            self.samples_per_stride: int = int(np.floor(self.sampling_rate * self.window_stride))
-
-            assert isinstance(drop_last, bool)
-            self.drop_last: bool = drop_last
+        assert window_size > 0
+        self.window_size: float = float(window_size)  # s
+        self.samples_per_window: int = int(np.floor(self.sampling_rate * self.window_size))
+        assert window_stride is None or window_stride > 0
+        if window_stride is None:
+            window_stride = deepcopy(self.window_size)
+        self.window_stride: float = float(window_stride)  # s
+        self.samples_per_stride: int = int(np.floor(self.sampling_rate * self.window_stride))
+        assert isinstance(drop_last, bool)
+        self.drop_last: bool = drop_last
 
         # assert labels_to_use is None or isinstance(labels_to_use, str) or isinstance(labels_to_use, list)
         # if labels_to_use is None:
@@ -106,20 +100,26 @@ class EEGClassificationDataset(Dataset, ABC):
         self.normalize_eegs: bool = normalize_eegs
 
         self.eegs_data, self.labels_data, self.subject_ids_data = self.load_data()
+        if self.normalize_eegs:
+            self.eegs_data = self.normalize(self.eegs_data)
+        self.windows = self.get_windows()
         assert len(self.eegs_data) == len(self.labels_data) == len(self.subject_ids_data)
         assert all([e.shape[-1] == len(self.electrodes) for e in self.eegs_data])
-        self.setup_data()
 
     def __len__(self) -> int:
-        return len(self.eegs_data)
+        return len(self.windows)
 
-    def __getitem__(self, i: int) -> Dict[str, Union[int, str, torch.Tensor]]:
+    def __getitem__(self, i: int) -> Dict[str, Union[int, str, np.ndarray]]:
+        window = self.windows[i]
+        eegs = self.eegs_data[window["experiment"]][window["start"]:window["end"]].astype(np.float32)
+        # eventually pad the eegs
+        if eegs.shape[0] != self.sampling_rate:
+            eegs = np.concatenate([eegs, np.zeros(self.sampling_rate - eegs.shape[0], eegs.shape[1])])
         return {
             "sampling_rates": self.sampling_rate,
-            # "subject_id": self.subject_ids.index(self.subject_ids_data[i]),
-            "subject_id": self.subject_ids_data[i],
-            "eegs": self.eegs_data[i],
-            "labels": self.labels_data[i],
+            "subject_id": window["subject_id"],
+            "eegs": eegs,
+            "labels": window["labels"],
         }
 
     def prepare_data(self) -> None:
@@ -134,50 +134,60 @@ class EEGClassificationDataset(Dataset, ABC):
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray], List[str]]:
         pass
 
-    def setup_data(self) -> None:
-        # eventually normalize the eegs
-        if self.normalize_eegs:
-            # loops through the experiments
-            for i_experiment, experiment in enumerate(self.eegs_data):
-                # scales the experiment to zero mean and unit variance
-                scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
-                                                                  verbose=False, ch_types="eeg"),
-                                             scalings="mean")
-                scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
-                experiment_scaled = einops.rearrange(
-                    scaler.transform(einops.rearrange(experiment,
-                                                      "s c -> () c s")),
-                    "b c s -> s (b c)")
-                # scales to microvolts
-                experiment_scaled *= 1e-6
-                self.eegs_data[i_experiment] = experiment_scaled
-        # eventually split the experiments in windows
-        if self.split_in_windows:
-            eegs_data_windowed: List[np.ndarray] = []
-            labels_data_windowed: List[np.ndarray] = []
-            subject_ids_data_windowed: List[str] = []
-            for i_experiment in range(len(self.eegs_data)):
-                for i_window_start in range(0,
-                                            len(self.eegs_data[i_experiment]),
-                                            self.samples_per_stride):
-                    window = self.eegs_data[i_experiment][i_window_start:i_window_start + self.samples_per_window, :]
-                    if len(window) == self.samples_per_window or self.drop_last is False:
-                        eegs_data_windowed += [window]
-                        labels_data_windowed += [self.labels_data[i_experiment]]
-                        subject_ids_data_windowed += [self.subject_ids_data[i_experiment]]
-            self.eegs_data = eegs_data_windowed
-            self.labels_data = labels_data_windowed
-            self.subject_ids_data = subject_ids_data_windowed
-            assert len(self.eegs_data) == len(self.labels_data) == len(self.subject_ids_data)
+    def normalize(self, eegs: List[np.ndarray]):
+        # loops through the experiments
+        for i_experiment, experiment in enumerate(eegs):
+            # scales the experiment to zero mean and unit variance
+            scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
+                                                              verbose=False, ch_types="eeg"),
+                                         scalings="mean")
+            scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
+            experiment_scaled = einops.rearrange(
+                scaler.transform(einops.rearrange(experiment,
+                                                  "s c -> () c s")),
+                "b c s -> s (b c)")
+            # scales to microvolts
+            experiment_scaled *= 1e-6
+            eegs[i_experiment] = experiment_scaled
+        return eegs
+
+    def get_windows(self) -> List[Dict[str, Union[int, str]]]:
+        windows: List[Dict[str, Union[int, str]]] = []
+        for i_experiment in range(len(self.eegs_data)):
+            for i_window_start in range(0,
+                                        len(self.eegs_data[i_experiment]),
+                                        self.samples_per_stride):
+                window = {
+                    "experiment": i_experiment,
+                    "start": i_window_start,
+                    "end": i_window_start + self.samples_per_window,
+                    "subject_id": self.subject_ids_data[i_experiment],
+                    "labels": np.asarray(self.labels_data[i_experiment]),
+                }
+                if self.drop_last is True and (window["end"] - window["start"]) != self.samples_per_window:
+                    continue
+                windows += [window]
+        return windows
+        # print(window)
+        # exit()
+        # window = self.eegs_data[i_experiment][i_window_start:i_window_start + self.samples_per_window, :]
+        # if len(window) == self.samples_per_window or self.drop_last is False:
+        #     eegs_data_windowed += [window]
+        #     labels_data_windowed += [self.labels_data[i_experiment]]
+        #     subject_ids_data_windowed += [self.subject_ids_data[i_experiment]]
+        # self.eegs_data = eegs_data_windowed
+        # self.labels_data = labels_data_windowed
+        # self.subject_ids_data = subject_ids_data_windowed
+        # assert len(self.eegs_data) == len(self.labels_data) == len(self.subject_ids_data)
         # eventually pads uneven windows
-        windows_size = max([len(w) for w in self.eegs_data])
-        self.eegs_data = [w if w.shape[0] == windows_size
-                          else np.vstack((w, np.zeros((windows_size - w.shape[0], w.shape[1]))))
-                          for w in self.eegs_data]
-        assert all([len(w) == windows_size for w in self.eegs_data])
+        # windows_size = max([len(w) for w in self.eegs_data])
+        # self.eegs_data = [w if w.shape[0] == windows_size
+        #                   else np.vstack((w, np.zeros((windows_size - w.shape[0], w.shape[1]))))
+        #                   for w in self.eegs_data]
+        # assert all([len(w) == windows_size for w in self.eegs_data])
         # converts to tensor
-        self.eegs_data: np.ndarray = np.stack(self.eegs_data).astype(np.float32)
-        self.labels_data: np.ndarray = np.stack(self.labels_data).astype(np.long)
+        # self.eegs_data: np.ndarray = np.stack(self.eegs_data).astype(np.float32)
+        # self.labels_data: np.ndarray = np.stack(self.labels_data).astype(np.long)
 
     def plot_samples(self) -> None:
         raw_mne_array = mne.io.RawArray(einops.rearrange(self[0][0], "s c -> c s"),

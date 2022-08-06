@@ -518,12 +518,11 @@ class FouriEEGTransformer(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    dataset: EEGClassificationDataset = DEAPDataset(
-        path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "deap"),
-        split_in_windows=True,
+    dataset: EEGClassificationDataset = DREAMERDataset(
+        path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "dreamer"),
         window_size=1,
         window_stride=1,
-        drop_last=True,
+        drop_last=False,
         discretize_labels=True,
         normalize_eegs=True,
     )
