@@ -486,7 +486,7 @@ class FouriEEGTransformer(pl.LightningModule):
         phase: str = "train" if self.training is True else "val"
         # time
         self.log(f"time_{phase}", sum([e["time"] for e in outputs]) / len(outputs),
-                 prog_bar=True if phase == "val" else False)
+                 prog_bar=False)
         # losses
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False)
@@ -494,7 +494,7 @@ class FouriEEGTransformer(pl.LightningModule):
         for metric in ["acc", "f1", "precision", "recall"]:
             metric_data = torch.stack([e[metric] for e in outputs])
             self.log(f"{metric}_mean_{phase}", metric_data.mean(),
-                     prog_bar=True)
+                     prog_bar=True if metric == "acc" else False)
             for i_label, label in enumerate(self.labels):
                 self.log(f"{metric}_{label}_{phase}", metric_data[:, i_label].mean(),
                          prog_bar=False)
