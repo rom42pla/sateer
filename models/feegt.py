@@ -94,8 +94,6 @@ class FouriEEGTransformer(pl.LightningModule):
             assert labels_classes > 0, \
                 f"there must be a positive number of classes, not {labels_classes}"
             self.labels_classes = [labels_classes for _ in self.labels]
-        print(self.labels_classes)
-        exit()
         assert isinstance(users_embeddings, bool)
         self.users_embeddings: bool = users_embeddings
 
