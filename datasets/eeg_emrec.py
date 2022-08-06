@@ -114,7 +114,8 @@ class EEGClassificationDataset(Dataset, ABC):
         eegs = self.eegs_data[window["experiment"]][window["start"]:window["end"]].astype(np.float32)
         # eventually pad the eegs
         if eegs.shape[0] != self.sampling_rate:
-            eegs = np.concatenate([eegs, np.zeros(self.sampling_rate - eegs.shape[0], eegs.shape[1])])
+            eegs = np.concatenate([eegs,
+                                   np.zeros([self.sampling_rate - eegs.shape[0], eegs.shape[1]])])
         return {
             "sampling_rates": self.sampling_rate,
             "subject_id": window["subject_id"],
@@ -168,26 +169,6 @@ class EEGClassificationDataset(Dataset, ABC):
                     continue
                 windows += [window]
         return windows
-        # print(window)
-        # exit()
-        # window = self.eegs_data[i_experiment][i_window_start:i_window_start + self.samples_per_window, :]
-        # if len(window) == self.samples_per_window or self.drop_last is False:
-        #     eegs_data_windowed += [window]
-        #     labels_data_windowed += [self.labels_data[i_experiment]]
-        #     subject_ids_data_windowed += [self.subject_ids_data[i_experiment]]
-        # self.eegs_data = eegs_data_windowed
-        # self.labels_data = labels_data_windowed
-        # self.subject_ids_data = subject_ids_data_windowed
-        # assert len(self.eegs_data) == len(self.labels_data) == len(self.subject_ids_data)
-        # eventually pads uneven windows
-        # windows_size = max([len(w) for w in self.eegs_data])
-        # self.eegs_data = [w if w.shape[0] == windows_size
-        #                   else np.vstack((w, np.zeros((windows_size - w.shape[0], w.shape[1]))))
-        #                   for w in self.eegs_data]
-        # assert all([len(w) == windows_size for w in self.eegs_data])
-        # converts to tensor
-        # self.eegs_data: np.ndarray = np.stack(self.eegs_data).astype(np.float32)
-        # self.labels_data: np.ndarray = np.stack(self.labels_data).astype(np.long)
 
     def plot_samples(self) -> None:
         raw_mne_array = mne.io.RawArray(einops.rearrange(self[0][0], "s c -> c s"),
