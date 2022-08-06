@@ -28,7 +28,7 @@ from torchaudio import transforms
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
 from datasets.eeg_emrec import EEGClassificationDataset
-from models.layers import FouriEncoder, FouriEncoderBlock, FouriDecoder, AddGaussianNoise, MelSpectrogram, \
+from models.layers import LinearEncoder, LinearEncoderBlock, LinearDecoder, AddGaussianNoise, MelSpectrogram, \
     GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings, GetUserEmbeddings
 
 
@@ -191,72 +191,53 @@ class FouriEEGTransformer(pl.LightningModule):
         #     Rearrange("b s c m -> b s (c m)"),
         # )
         self.merge_mels = nn.Sequential(
-            # nn.Linear(in_features=128//2 + 1, out_features=self.window_embedding_dim),
-            # nn.SELU(),
-            # nn.Linear(in_features=self.window_embedding_dim, out_features=1),
-            # nn.AlphaDropout(self.dropout_p),
-            # nn.Linear(in_features=self.mels, out_features=1),
-            # nn.TransformerEncoder(
-            #     encoder_layer=nn.TransformerEncoderLayer(
-            #         batch_first=True,
-            #         d_model=self.in_channels * self.mels,
-            #         dim_feedforward=self.hidden_size,
-            #         dropout=self.dropout_p,
-            #         activation=F.selu,
-            #         nhead=self.num_attention_heads,
-            #     ),
-            #     num_layers=2,
-            # ),
             nn.Linear(self.in_channels * self.mels, self.hidden_size),
-            # nn.SELU(),
-            # nn.AlphaDropout(p=self.dropout_p),
-            # nn.Linear(self.hidden_size * 4, self.hidden_size),
-            # FouriEncoderBlock(in_features=self.in_channels * self.mels,
-            #                   mid_features=self.hidden_size * 4,
-            #                   out_features=self.hidden_size,
-            #                   mixing_sublayer_type=self.mixing_sublayer_type,
-            #                   ),
         )
 
-        # self.encoder = FouriEncoder(hidden_size=self.hidden_size,
-        #                             num_encoders=self.num_encoders,
-        #                             dropout_p=self.dropout_p,
-        #                             mixing_sublayer_type=self.mixing_sublayer_type,
-        #                             )
-        self.encoder = nn.TransformerEncoder(
-            encoder_layer=nn.TransformerEncoderLayer(
-                batch_first=True,
-                d_model=self.hidden_size,
-                dim_feedforward=self.hidden_size * 4,
-                dropout=self.dropout_p,
-                activation=F.selu,
-                nhead=self.num_attention_heads,
-            ),
-            num_layers=num_encoders,
-        )
+        self.encoder = LinearEncoder(hidden_size=self.hidden_size,
+                                     num_encoders=self.num_encoders,
+                                     dropout_p=self.dropout_p,
+                                     )
+        # self.encoder = nn.TransformerEncoder(
+        #     encoder_layer=nn.TransformerEncoderLayer(
+        #         batch_first=True,
+        #         d_model=self.hidden_size,
+        #         dim_feedforward=self.hidden_size * 4,
+        #         dropout=self.dropout_p,
+        #         activation=F.selu,
+        #         nhead=self.num_attention_heads,
+        #     ),
+        #     num_layers=num_encoders,
+        # )
         # self.decoder = FouriDecoder(embeddings_dim=self.window_embedding_dim,
         #                             num_decoders=self.num_decoders,
         #                             dropout_p=self.dropout_p,
         #                             )
         if self.encoder_only is False:
-            self.decoder = nn.TransformerDecoder(
-                decoder_layer=nn.TransformerDecoderLayer(
-                    batch_first=True,
-                    d_model=self.hidden_size,
-                    dim_feedforward=self.hidden_size * 4,
-                    dropout=self.dropout_p,
-                    activation=F.selu,
-                    nhead=self.num_attention_heads,
-                ),
-                num_layers=num_decoders,
+            self.decoder = LinearDecoder(
+                hidden_size=self.hidden_size,
+                num_decoders=self.num_encoders,
+                dropout_p=self.dropout_p,
+                num_attention_heads=self.num_attention_heads,
             )
-            # replaces dropouts with alpha-dropout in the decoder
-            for _, module in self.decoder.layers.named_children():
-                for attr_str in dir(module):
-                    target_attr = getattr(module, attr_str)
-                    if type(target_attr) == nn.Dropout:
-                        setattr(module, attr_str,
-                                nn.AlphaDropout(self.dropout_p))
+            # self.decoder = nn.TransformerDecoder(
+            #     decoder_layer=nn.TransformerDecoderLayer(
+            #         batch_first=True,
+            #         d_model=self.hidden_size,
+            #         dim_feedforward=self.hidden_size * 4,
+            #         dropout=self.dropout_p,
+            #         activation=F.selu,
+            #         nhead=self.num_attention_heads,
+            #     ),
+            #     num_layers=num_decoders,
+            # )
+            # # replaces dropouts with alpha-dropout in the decoder
+            # for _, module in self.decoder.layers.named_children():
+            #     for attr_str in dir(module):
+            #         target_attr = getattr(module, attr_str)
+            #         if type(target_attr) == nn.Dropout:
+            #             setattr(module, attr_str,
+            #                     nn.AlphaDropout(self.dropout_p))
 
         self.classification = nn.ModuleList([
             nn.Sequential(OrderedDict([

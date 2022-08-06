@@ -16,14 +16,13 @@ from torch.profiler import profile
 from torchaudio import transforms
 
 
-class FouriEncoder(nn.Module):
+class LinearEncoder(nn.Module):
     def __init__(
             self,
             hidden_size: int,
-            num_encoders: int = 6,
-            dropout_p: float = 0.1,
-            mixing_sublayer_type: str = "fourier",
+            num_encoders: int = 4,
             num_attention_heads: int = 8,
+            dropout_p: float = 0.2,
     ):
         super().__init__()
 
@@ -39,154 +38,130 @@ class FouriEncoder(nn.Module):
         assert 0 <= dropout_p < 1, \
             f"dropout must be in [0, 1], not {dropout_p}"
         self.dropout_p = dropout_p
-        assert isinstance(mixing_sublayer_type, str)
-        self.mixing_sublayer_type = mixing_sublayer_type
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+        self.num_attention_heads: int = num_attention_heads
 
         # architecture
-        self.encoder_blocks = nn.Sequential(OrderedDict([*[(f"enc{i}",
-                                                            FouriEncoderBlock(
-                                                                in_features=self.hidden_size,
-                                                                mid_features=self.hidden_size * 4,
-                                                                out_features=self.hidden_size,
-                                                                dropout_p=self.dropout_p,
-                                                                mixing_sublayer_type=self.mixing_sublayer_type,
-                                                                num_attention_heads=self.num_attention_heads,
-                                                            ))
-                                                           for i in range(self.num_encoders)],
-                                                         # ("pool", nn.Linear(in_features=self.embeddings_dim,
-                                                         #                    out_features=self.embeddings_dim)),
-                                                         # ("act", nn.SELU()),
-                                                         ]))
+        self.encoder_blocks = nn.ModuleList([
+            LinearEncoderBlock(
+                in_features=self.hidden_size,
+                out_features=self.hidden_size,
+                dropout_p=self.dropout_p,
+                num_attention_heads=self.num_attention_heads,
+            )
+            for _ in range(self.num_encoders)
+        ])
 
     def forward(self, x: torch.Tensor):
         # prepares the input
         assert x.shape[-1] == self.hidden_size
-        assert len(x.shape) in {2, 3}
-        is_batched = True if len(x.shape) == 3 else False
-        if not is_batched:
-            x = einops.rearrange(x, "s c -> () s c")
         input_shape = x.shape
 
         # encoders pass
-        x = self.encoder_blocks(x)
+        for encoder_block in self.encoder_blocks:
+            x = encoder_block(x)
 
-        if not is_batched:
-            x = einops.rearrange(x, "b s c -> (b s) c")
         assert x.shape == input_shape, \
             f"output shape {x.shape} is different from input shape {input_shape}"
         return x
 
 
-class FouriEncoderBlock(nn.Module):
+class LinearEncoderBlock(nn.Module):
 
     def __init__(
             self,
             in_features: int,
-            mid_features: int,
             out_features: int,
-            dropout_p: Union[int, float] = 0,
-            mixing_sublayer_type: str = "fourier",
-            max_position_embeddings: int = 512,
-            num_attention_heads: int = 8,
+            num_attention_heads: int = 4,
+            dropout_p: Union[int, float] = 0.2,
     ):
         super().__init__()
         assert isinstance(in_features, int) and in_features >= 1
-        assert isinstance(mid_features, int) and mid_features >= 1
         assert isinstance(out_features, int) and out_features >= 1
-        self.in_features = in_features
-        self.mid_features = mid_features
-        self.out_features = out_features
-        assert isinstance(max_position_embeddings, int) and max_position_embeddings >= 1
-        self.max_position_embeddings = max_position_embeddings
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
-        self.num_attention_heads = num_attention_heads
+        self.in_features: int = in_features
+        self.out_features: int = out_features
         assert 0 <= dropout_p < 1
-        self.dropout_p = dropout_p
-        mixing_sublayer_mapping = {
-            "fourier": FastFourierTransform,
-            "identity": IdentityTransform,
-            "linear": LinearTransform,
-            "attention": AttentionTransform,
-        }
-        assert isinstance(mixing_sublayer_type, str) and mixing_sublayer_type in mixing_sublayer_mapping.keys()
-        self.mixing_sublayer_type = mixing_sublayer_type
-        self.mixing_sublayer = mixing_sublayer_mapping[
-            self.mixing_sublayer_type](hidden_size=self.in_features,
-                                       max_position_embeddings=max_position_embeddings,
-                                       dropout_p=dropout_p,
-                                       num_attention_heads=self.num_attention_heads)
+        self.dropout_p: float = dropout_p
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+        self.num_attention_heads: int = num_attention_heads
 
+        # section 1
+        self.attention_fn_1 = LinearMultiheadAttention(
+            hidden_size=self.in_features,
+            num_attention_heads=self.num_attention_heads,
+            dropout_p=self.dropout_p
+        )
         self.layer_norm_1 = nn.LayerNorm([in_features, ])
-        self.feed_forward_layer = FouriFeedForward(in_features=self.in_features,
-                                                   mid_features=self.mid_features,
-                                                   out_features=self.out_features,
-                                                   dropout_p=self.dropout_p)
+
+        # section 2
+        self.feed_forward_layer = FeedForward(
+            in_features=self.in_features,
+            out_features=self.out_features,
+            dropout_p=self.dropout_p
+        )
         if self.in_features != self.out_features:
             self.up_projection = nn.Sequential(
-                nn.Linear(in_features=self.in_features, out_features=self.mid_features),
+                nn.Linear(in_features=self.in_features, out_features=self.in_features * 4),
                 nn.SELU(),
-                nn.Linear(in_features=self.mid_features, out_features=self.out_features)
+                nn.Linear(in_features=self.in_features * 4, out_features=self.out_features)
             )
         self.layer_norm_2 = nn.LayerNorm([out_features, ])
 
     def forward(self, x):
-        # mixing sublayer
-        x = self.layer_norm_1(x + self.mixing_sublayer(x))
-        # feed-forward
+        # section 1
+        x = self.layer_norm_1(x + self.attention_fn_1(x, x, x))
+
+        # section 2
         x = self.layer_norm_2((x if self.in_features == self.out_features else self.up_projection(x)) +
                               self.feed_forward_layer(x))
         return x
 
 
-class FouriDecoder(nn.Module):
-    def __init__(self,
-                 embeddings_dim: int,
-                 num_decoders: int = 6,
-                 dropout_p: float = 0.1,
+class LinearDecoder(nn.Module):
+    def __init__(
+            self,
+            hidden_size: int,
+            num_decoders: int = 6,
+            dropout_p: float = 0.1,
 
-                 num_heads: int = 4,
-                 attention_type: str = "quadratic",
-                 ):
+            num_attention_heads: int = 4,
+    ):
         super().__init__()
 
         # model architecture
         assert isinstance(num_decoders, int) and num_decoders >= 1, \
             f"there must be at least one decoder, not {num_decoders}"
         self.num_decoders: int = num_decoders
-        assert isinstance(embeddings_dim, int) and embeddings_dim >= 1, \
-            f"embeddings must be greater than 0, not {embeddings_dim}"
-        self.embeddings_dim = embeddings_dim
+        assert isinstance(hidden_size, int) and hidden_size >= 1, \
+            f"embeddings must be greater than 0, not {hidden_size}"
+        self.hidden_size = hidden_size
         assert 0 <= dropout_p < 1, \
             f"dropout must be in [0, 1], not {dropout_p}"
         self.dropout_p = dropout_p
 
-        assert isinstance(num_heads, int) and num_heads >= 1
-        self.num_heads: int = num_heads
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+        self.num_attention_heads: int = num_attention_heads
 
-        self.decoder_blocks = nn.ModuleList(
-            [FouriDecoderBlock(in_features=self.embeddings_dim,
-                               mid_features=self.embeddings_dim,
-                               out_features=self.embeddings_dim,
-                               dropout_p=self.dropout_p,
-                               num_heads=self.num_heads,
-                               attention_type=attention_type)
-             for _ in range(self.num_decoders)])
+        self.decoder_blocks = nn.ModuleList([
+            LinearDecoderBlock(
+                in_features=self.hidden_size,
+                out_features=self.hidden_size,
+                dropout_p=self.dropout_p,
+                num_attention_heads=self.num_attention_heads,
+            )
+            for _ in range(self.num_decoders)
+        ])
         self.postprocessing = nn.Sequential(OrderedDict([
-            ("pool", nn.Linear(in_features=self.embeddings_dim,
-                               out_features=self.embeddings_dim)),
+            ("pool", nn.Linear(in_features=self.hidden_size,
+                               out_features=self.hidden_size)),
             ("act", nn.SELU()),
         ]))
 
     def forward(self, tgt: torch.Tensor, src: torch.Tensor):
         # prepares the input
-        assert tgt.shape[-1] == src.shape[-1] == self.embeddings_dim
+        assert tgt.shape[-1] == src.shape[-1] == self.hidden_size
         assert len(src.shape) == len(tgt.shape)
-        assert len(tgt.shape) in {2, 3} and len(src.shape) in {2, 3}
 
-        is_batched = True if len(src.shape) == 3 else False
-        if not is_batched:
-            src = einops.rearrange(src, "s c -> () s c")
-            tgt = einops.rearrange(tgt, "s c -> () s c")
         input_shape = tgt.shape
 
         # decoders pass
@@ -194,80 +169,72 @@ class FouriDecoder(nn.Module):
             tgt = decoder_block(tgt=tgt, src=src)
         tgt = self.postprocessing(tgt)
 
-        if not is_batched:
-            tgt = einops.rearrange(tgt, "b s c -> (b s) c")
         assert tgt.shape == input_shape, \
             f"output shape {tgt.shape} is different from input shape {input_shape}"
         return tgt
 
 
-class FouriDecoderBlock(nn.Module):
+class LinearDecoderBlock(nn.Module):
 
     def __init__(
             self,
             in_features: int,
-            mid_features: int,
             out_features: int,
-            dropout_p: Union[int, float] = 0,
-
-            num_heads: int = 4,
-            attention_type: str = "linear",
+            num_attention_heads: int = 4,
+            dropout_p: Union[int, float] = 0.2,
     ):
         super().__init__()
         assert isinstance(in_features, int) and in_features >= 1
-        assert isinstance(mid_features, int) and mid_features >= 1
         assert isinstance(out_features, int) and out_features >= 1
         self.in_features: int = in_features
-        self.mid_features: int = mid_features
         self.out_features: int = out_features
         assert 0 <= dropout_p < 1
         self.dropout_p: float = dropout_p
-        assert isinstance(num_heads, int) and num_heads >= 1
-        self.num_heads: int = num_heads
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+        self.num_attention_heads: int = num_attention_heads
 
-        self.fourier_layer = FastFourierTransform()
+        # section 1
+        self.attention_fn_1: LinearMultiheadAttention = LinearMultiheadAttention(
+            hidden_size=self.in_features,
+            num_attention_heads=self.num_attention_heads,
+            dropout_p=self.dropout_p,
+        )
         self.layer_norm_1 = nn.LayerNorm([in_features, ])
 
-        if attention_type == "linear":
-            self.attention_fn: LinearMultiheadAttention = LinearMultiheadAttention(embeddings_dim=self.in_features,
-                                                                                   num_heads=self.num_heads)
-        elif attention_type == "quadratic":
-            self.attention_fn: nn.MultiheadAttention = nn.MultiheadAttention(embed_dim=self.in_features,
-                                                                             num_heads=self.num_heads,
-                                                                             batch_first=True)
-        else:
-            raise NotImplementedError
-        self.attention_type = attention_type
-
+        # section 2
+        self.attention_fn_2: LinearMultiheadAttention = LinearMultiheadAttention(
+            hidden_size=self.in_features,
+            num_attention_heads=self.num_attention_heads,
+            dropout_p=self.dropout_p,
+        )
         self.layer_norm_2 = nn.LayerNorm([in_features, ])
-        self.feed_forward_layer = FouriFeedForward(in_features=self.in_features,
-                                                   mid_features=self.mid_features,
-                                                   out_features=self.out_features,
-                                                   dropout_p=dropout_p)
+
+        # section 3
+        self.feed_forward_layer = FeedForward(
+            in_features=self.in_features,
+            out_features=self.out_features,
+            dropout_p=self.dropout_p
+        )
         if self.in_features != self.out_features:
             self.up_projection = nn.Sequential(
-                nn.Linear(in_features=self.in_features, out_features=self.mid_features),
+                nn.Linear(in_features=self.in_features, out_features=self.in_features * 4),
                 nn.SELU(),
-                nn.Linear(in_features=self.mid_features, out_features=self.out_features)
+                nn.Linear(in_features=self.in_features * 4, out_features=self.out_features)
             )
         self.layer_norm_3 = nn.LayerNorm([out_features, ])
 
-    def forward(self,
-                tgt: torch.Tensor,
-                src: torch.Tensor,
-                ):
-        # fourier pass
-        tgt = self.layer_norm_1(tgt + self.fourier_layer(tgt))
-        # attention
-        if self.attention_type == "linear":
-            attentions = self.attention_fn(tgt, src, src)
-        elif self.attention_type == "quadratic":
-            mask = torch.triu(torch.full((tgt.shape[1], src.shape[1]), float('-inf'), device=tgt.device), diagonal=1)
-            attentions, _ = self.attention_fn(tgt, src, src, attn_mask=mask)
-        else:
-            raise NotImplementedError
-        tgt = self.layer_norm_2(tgt + attentions)
-        # fc pass
+    def forward(
+            self,
+            tgt: torch.Tensor,
+            src: torch.Tensor,
+    ):
+        # section 1
+        tgt = self.layer_norm_1(tgt + self.attention_fn_1(tgt, tgt, tgt))
+
+        # section 2
+        tgt = self.layer_norm_2(tgt + self.attention_fn_2(tgt, src, src))
+
+        # section 3
         tgt_fwd = self.feed_forward_layer(tgt)
         if self.in_features != self.out_features:
             tgt = self.up_projection(tgt)
@@ -278,25 +245,25 @@ class FouriDecoderBlock(nn.Module):
 class LinearMultiheadAttention(nn.Module):
     def __init__(
             self,
-            embeddings_dim: int,
-            num_heads: int,
+            hidden_size: int,
+            num_attention_heads: int,
             dropout_p: float = 0.0,
     ):
         super().__init__()
-        assert isinstance(embeddings_dim, int) and embeddings_dim >= 1
-        self.embeddings_dim: int = embeddings_dim
-        assert isinstance(num_heads, int) and num_heads >= 1
-        self.num_heads: int = num_heads
+        assert isinstance(hidden_size, int) and hidden_size >= 1
+        self.hidden_size: int = hidden_size
+        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+        self.num_attention_heads: int = num_attention_heads
         assert 0 <= dropout_p < 1
         self.dropout_p: float = float(dropout_p)
 
-        self.q_weights = nn.Parameter(torch.randn(self.num_heads, self.embeddings_dim, self.embeddings_dim))
-        self.k_weights = nn.Parameter(torch.randn(self.num_heads, self.embeddings_dim, self.embeddings_dim))
-        self.v_weights = nn.Parameter(torch.randn(self.num_heads, self.embeddings_dim, self.embeddings_dim))
+        self.q_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
+        self.k_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
+        self.v_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
 
         self.out_reshaper = nn.Sequential(
             Rearrange("b h s d -> b s d h"),
-            nn.AdaptiveMaxPool2d(output_size=(self.embeddings_dim, 1)),
+            nn.AdaptiveMaxPool2d(output_size=(self.hidden_size, 1)),
             Rearrange("b s d h -> b s (d h)"),
             # Rearrange("b h s d -> b s (h d)"),
         )
@@ -396,34 +363,30 @@ class AttentionTransform(nn.Module):
         return x
 
 
-class FouriFeedForward(nn.Module):
-    def __init__(self, in_features: int, mid_features: int, out_features: int,
-                 dropout_p: Union[int, float] = 0.1):
+class FeedForward(nn.Module):
+    def __init__(
+            self,
+            in_features: int,
+            out_features: int,
+            dropout_p: Union[int, float] = 0.2
+    ):
         super().__init__()
         assert isinstance(in_features, int) and in_features >= 1
-        assert isinstance(mid_features, int) and mid_features >= 1
         assert isinstance(out_features, int) and out_features >= 1
         self.in_features = in_features
-        self.mid_features = mid_features
         self.out_features = out_features
         assert 0 <= dropout_p < 1
         self.dropout_p = dropout_p
 
-        self.linear_1 = nn.Linear(self.in_features, self.mid_features)
-        # self.linear_1 = nn.Sequential(
-        #     Rearrange("b s c -> b c s"),
-        #     nn.Conv1d(in_channels=self.in_features, out_channels=self.mid_features,
-        #               kernel_size=7, stride=1, padding=3),
-        #     Rearrange("b c s -> b s c"),
-        # )
+        self.linear_1 = nn.Linear(
+            in_features=self.in_features,
+            out_features=self.in_features * 4
+        )
         self.activation = nn.SELU()
-        self.linear_2 = nn.Linear(self.mid_features, self.out_features)
-        # self.linear_2 = nn.Sequential(
-        #     Rearrange("b s c -> b c s"),
-        #     nn.Conv1d(in_channels=self.mid_features, out_channels=self.out_features,
-        #               kernel_size=5, stride=1, padding=2),
-        #     Rearrange("b c s -> b s c"),
-        # )
+        self.linear_2 = nn.Linear(
+            in_features=self.in_features * 4,
+            out_features=self.out_features
+        )
         self.dropout = nn.AlphaDropout(p=self.dropout_p)
 
     def forward(self, x):
@@ -624,7 +587,7 @@ if __name__ == "__main__":
 
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with profiler.record_function("full attention"):
-            _ = FouriDecoder(embeddings_dim, 8, attention_type="quadratic")(batch_target["eegs"], batch["eegs"])
+            _ = LinearDecoder(embeddings_dim, 8, attention_type="quadratic")(batch_target["eegs"], batch["eegs"])
 
         # with profiler.record_function("linear attention"):
         #     _ = FouriDecoder(embeddings_dim, 8, attention_type="linear")(batch_target["eegs"], batch["eegs"])
