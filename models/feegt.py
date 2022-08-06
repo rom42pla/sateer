@@ -196,17 +196,17 @@ class FouriEEGTransformer(pl.LightningModule):
             # nn.Linear(in_features=self.window_embedding_dim, out_features=1),
             # nn.AlphaDropout(self.dropout_p),
             # nn.Linear(in_features=self.mels, out_features=1),
-            nn.TransformerEncoder(
-                encoder_layer=nn.TransformerEncoderLayer(
-                    batch_first=True,
-                    d_model=self.in_channels * self.mels,
-                    dim_feedforward=self.hidden_size,
-                    dropout=self.dropout_p,
-                    activation=F.selu,
-                    nhead=self.num_attention_heads,
-                ),
-                num_layers=2,
-            ),
+            # nn.TransformerEncoder(
+            #     encoder_layer=nn.TransformerEncoderLayer(
+            #         batch_first=True,
+            #         d_model=self.in_channels * self.mels,
+            #         dim_feedforward=self.hidden_size,
+            #         dropout=self.dropout_p,
+            #         activation=F.selu,
+            #         nhead=self.num_attention_heads,
+            #     ),
+            #     num_layers=2,
+            # ),
             nn.Linear(self.in_channels * self.mels, self.hidden_size),
             # nn.SELU(),
             # nn.AlphaDropout(p=self.dropout_p),
@@ -333,8 +333,8 @@ class FouriEEGTransformer(pl.LightningModule):
         # prepares the spectrogram for the encoder
         with profiler.record_function("preparation"):
             spectrogram = einops.rearrange(spectrogram, "b s c m -> b s (c m)")
-            spectrogram = spectrogram \
-                          + self.position_embedder_spectrogram(spectrogram)
+            # spectrogram = spectrogram \
+            #               + self.position_embedder_spectrogram(spectrogram)
             x = self.merge_mels(spectrogram)  # (b s c)
             assert len(x.shape) == 3, f"invalid number of dimensions ({x.shape} must be long 3)"
             assert x.shape[-1] == self.hidden_size, \
