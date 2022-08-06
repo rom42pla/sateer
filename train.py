@@ -41,7 +41,6 @@ save_to_json(args, path=join(experiment_path, "line_args.json"))
 dataset_class = parse_dataset_class(name=args["dataset_type"])
 dataset: EEGClassificationDataset = dataset_class(
     path=args['dataset_path'],
-    split_in_windows=True if args['windows_size'] is not None else False,
     window_size=args['windows_size'],
     window_stride=args['windows_stride'],
     drop_last=True,
