@@ -28,7 +28,7 @@ from torchaudio import transforms
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
 from datasets.eeg_emrec import EEGClassificationDataset
-from models.layers import LinearEncoder, LinearEncoderBlock, LinearDecoder, AddGaussianNoise, MelSpectrogram, \
+from models.layers import AddGaussianNoise, MelSpectrogram, \
     GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings, GetUserEmbeddings
 
 
@@ -38,6 +38,7 @@ class FouriEEGTransformer(pl.LightningModule):
             in_channels: int,
             sampling_rate: int,
             labels: Union[int, List[str]],
+            labels_classes: Union[int, List[int]] = 2,
 
             mels: int = 16,
             mel_window_size: Union[int, float] = 1,
@@ -82,6 +83,19 @@ class FouriEEGTransformer(pl.LightningModule):
                 f"there must be a positive number of labels, not {labels}"
             self.labels = [f"label_{i}" for i in range(labels)]
 
+        assert isinstance(labels_classes, int) or isinstance(labels_classes, list), \
+            f"the labels classes must be a list of integers or a positive integer, not {labels_classes}"
+        if isinstance(labels_classes, list):
+            assert all([isinstance(labels_class, int) for labels_class in labels_classes]), \
+                f"if the name of the labels are given ({labels_classes}), they must all be strings"
+            assert len(labels_classes) == len(labels)
+            self.labels_classes = labels_classes
+        else:
+            assert labels_classes > 0, \
+                f"there must be a positive number of classes, not {labels_classes}"
+            self.labels_classes = [labels_classes for _ in self.labels]
+        print(self.labels_classes)
+        exit()
         assert isinstance(users_embeddings, bool)
         self.users_embeddings: bool = users_embeddings
 
@@ -173,83 +187,55 @@ class FouriEEGTransformer(pl.LightningModule):
                                               mels=self.mels,
                                               window_size=self.mel_window_size,
                                               window_stride=self.mel_window_stride)
-        # self.merge_mels = nn.Sequential(
-        #     Rearrange("b s c m -> b c s m"),
-        #     nn.Conv2d(in_channels=self.in_channels, out_channels=128,
-        #               kernel_size=7, stride=2, padding=3),
-        #     nn.SELU(),
-        #
-        #     nn.Conv2d(in_channels=128, out_channels=256,
-        #               kernel_size=5, stride=2, padding=2),
-        #     nn.SELU(),
-        #
-        #     nn.Conv2d(in_channels=256, out_channels=self.window_embedding_dim,
-        #               kernel_size=3, stride=2, padding=1),
-        #     nn.SELU(),
-        #     Rearrange("b c s m -> b s c m"),
-        #     nn.AdaptiveAvgPool2d(output_size=(self.window_embedding_dim, 1)),
-        #     Rearrange("b s c m -> b s (c m)"),
-        # )
         self.merge_mels = nn.Sequential(
+            Rearrange("b s c m -> b s (c m)"),
             nn.Linear(self.in_channels * self.mels, self.hidden_size),
         )
 
-        self.encoder = LinearEncoder(hidden_size=self.hidden_size,
-                                     num_encoders=self.num_encoders,
-                                     dropout_p=self.dropout_p,
-                                     )
-        # self.encoder = nn.TransformerEncoder(
-        #     encoder_layer=nn.TransformerEncoderLayer(
-        #         batch_first=True,
-        #         d_model=self.hidden_size,
-        #         dim_feedforward=self.hidden_size * 4,
-        #         dropout=self.dropout_p,
-        #         activation=F.selu,
-        #         nhead=self.num_attention_heads,
-        #     ),
-        #     num_layers=num_encoders,
-        # )
-        # self.decoder = FouriDecoder(embeddings_dim=self.window_embedding_dim,
-        #                             num_decoders=self.num_decoders,
-        #                             dropout_p=self.dropout_p,
-        #                             )
-        if self.encoder_only is False:
-            self.decoder = LinearDecoder(
-                hidden_size=self.hidden_size,
-                num_decoders=self.num_encoders,
-                dropout_p=self.dropout_p,
-                num_attention_heads=self.num_attention_heads,
-            )
-            # self.decoder = nn.TransformerDecoder(
-            #     decoder_layer=nn.TransformerDecoderLayer(
-            #         batch_first=True,
-            #         d_model=self.hidden_size,
-            #         dim_feedforward=self.hidden_size * 4,
-            #         dropout=self.dropout_p,
-            #         activation=F.selu,
-            #         nhead=self.num_attention_heads,
-            #     ),
-            #     num_layers=num_decoders,
-            # )
-            # # replaces dropouts with alpha-dropout in the decoder
-            # for _, module in self.decoder.layers.named_children():
-            #     for attr_str in dir(module):
-            #         target_attr = getattr(module, attr_str)
-            #         if type(target_attr) == nn.Dropout:
-            #             setattr(module, attr_str,
-            #                     nn.AlphaDropout(self.dropout_p))
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer=nn.TransformerEncoderLayer(
+                batch_first=True,
+                d_model=self.hidden_size,
+                dim_feedforward=self.hidden_size * 4,
+                dropout=self.dropout_p,
+                activation=F.selu,
+                nhead=self.num_attention_heads,
+            ),
+            num_layers=num_encoders,
+        )
 
-        self.classification = nn.ModuleList([
-            nn.Sequential(OrderedDict([
-                ("linear1", nn.Linear(in_features=self.hidden_size,
-                                      out_features=self.hidden_size * 4)),
-                ("activation1", nn.SELU()),
-                ("dropout", nn.AlphaDropout(p=self.dropout_p)),
-                ("linear2", nn.Linear(in_features=self.hidden_size * 4,
-                                      out_features=2)),
-            ]))
-            for _ in range(len(self.labels))
-        ])
+        if self.encoder_only is False:
+            self.decoder = nn.TransformerDecoder(
+                decoder_layer=nn.TransformerDecoderLayer(
+                    batch_first=True,
+                    d_model=self.hidden_size,
+                    dim_feedforward=self.hidden_size * 4,
+                    dropout=self.dropout_p,
+                    activation=F.selu,
+                    nhead=self.num_attention_heads,
+                ),
+                num_layers=num_decoders,
+            )
+            # replaces dropouts with alpha-dropout in the decoder
+            for _, module in self.decoder.layers.named_children():
+                for attr_str in dir(module):
+                    target_attr = getattr(module, attr_str)
+                    if type(target_attr) == nn.Dropout:
+                        setattr(module, attr_str,
+                                nn.AlphaDropout(self.dropout_p))
+
+        self.classification = nn.ModuleList()
+        for i_label, label in enumerate(self.labels):
+            self.classification.add_module(
+                label,
+                nn.Sequential(OrderedDict([
+                    ("linear1", nn.Linear(in_features=self.hidden_size,
+                                          out_features=self.hidden_size * 4)),
+                    ("activation", nn.SELU()),
+                    ("dropout", nn.AlphaDropout(p=self.dropout_p)),
+                    ("linear2", nn.Linear(in_features=self.hidden_size * 4,
+                                          out_features=self.labels_classes[i_label])),
+                ])))
 
         self.float()
         self.to(device)
@@ -260,7 +246,7 @@ class FouriEEGTransformer(pl.LightningModule):
             input_eegs: torch.Tensor,
             ids: Optional[Union[int, str, List[Union[int, str]]]] = None
     ):
-        # ensures that the inputs are well defined
+        # ensures that the inputs are well-defined
         assert input_eegs.shape[-1] == self.in_channels
         assert len(input_eegs.shape) in {2, 3}
         if ids is not None:
@@ -285,7 +271,6 @@ class FouriEEGTransformer(pl.LightningModule):
 
         # initializes variables and structures
         outputs: Dict[str, torch.Tensor] = {}
-        batch_size: int = eegs.shape[0]
 
         # eventually adds data augmentation
         if self.training is True and self.data_augmentation is True:
@@ -313,9 +298,6 @@ class FouriEEGTransformer(pl.LightningModule):
 
         # prepares the spectrogram for the encoder
         with profiler.record_function("preparation"):
-            spectrogram = einops.rearrange(spectrogram, "b s c m -> b s (c m)")
-            # spectrogram = spectrogram \
-            #               + self.position_embedder_spectrogram(spectrogram)
             x = self.merge_mels(spectrogram)  # (b s c)
             assert len(x.shape) == 3, f"invalid number of dimensions ({x.shape} must be long 3)"
             assert x.shape[-1] == self.hidden_size, \
@@ -379,32 +361,6 @@ class FouriEEGTransformer(pl.LightningModule):
                 labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
             outputs["labels_pred"] = labels_pred
         return outputs
-
-    # def add_start_end_tokens(self, x: torch.Tensor):
-    #     # generates start and end tokens
-    #     start_token, end_token = self.tokens_embedder(torch.as_tensor([
-    #         self.special_tokens_vocab["start"],
-    #         self.special_tokens_vocab["end"],
-    #     ], device=x.device))
-    #     # adds start and end token
-    #     x = torch.cat([start_token.repeat(x.shape[0], 1, 1),
-    #                    x,
-    #                    end_token.repeat(x.shape[0], 1, 1)], dim=1)  # (b s d)
-    #     del start_token, end_token
-    #     return x
-
-    # def apply_random_mask(self, x: torch.Tensor):
-    #     # generates mask token
-    #     mask_token = self.tokens_embedder(torch.as_tensor([
-    #         self.special_tokens_vocab["mask"],
-    #     ], device=self.device))[0]
-    #     # applies the mask
-    #     mask_rand = torch.rand(*x.shape[:2],
-    #                            dtype=torch.float, device=self.device)
-    #     mask = (mask_rand >= self.mask_perc_min) * (mask_rand <= self.mask_perc_max)
-    #     x[mask] = mask_token
-    #     del mask_token, mask_rand, mask
-    #     return x
 
     def training_step(self, batch, batch_idx):
         return self.step(batch)

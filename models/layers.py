@@ -1,284 +1,296 @@
 import math
 import warnings
-from collections import OrderedDict
 from typing import Union, List, Dict
 
 import functorch
 import torch
-from einops.layers.torch import Rearrange
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import nn
-import torch.nn.functional as F
 import einops
 from torch._C._autograd import ProfilerActivity
 from torch.autograd import profiler
 from torch.profiler import profile
 from torchaudio import transforms
-
-
-class LinearEncoder(nn.Module):
-    def __init__(
-            self,
-            hidden_size: int,
-            num_encoders: int = 4,
-            num_attention_heads: int = 8,
-            dropout_p: float = 0.2,
-    ):
-        super().__init__()
-
-        # model architecture
-        assert isinstance(num_encoders, int) and num_encoders >= 1, \
-            f"there must be at least one encoder, not {num_encoders}"
-        self.num_encoders = num_encoders
-        assert isinstance(hidden_size, int) and hidden_size >= 1, \
-            f"embeddings must be greater than 0, not {hidden_size}"
-        self.hidden_size = hidden_size
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
-        self.num_attention_heads = num_attention_heads
-        assert 0 <= dropout_p < 1, \
-            f"dropout must be in [0, 1], not {dropout_p}"
-        self.dropout_p = dropout_p
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
-        self.num_attention_heads: int = num_attention_heads
-
-        # architecture
-        self.encoder_blocks = nn.ModuleList([
-            LinearEncoderBlock(
-                in_features=self.hidden_size,
-                out_features=self.hidden_size,
-                dropout_p=self.dropout_p,
-                num_attention_heads=self.num_attention_heads,
-            )
-            for _ in range(self.num_encoders)
-        ])
-
-    def forward(self, x: torch.Tensor):
-        # prepares the input
-        assert x.shape[-1] == self.hidden_size
-        input_shape = x.shape
-
-        # encoders pass
-        for encoder_block in self.encoder_blocks:
-            x = encoder_block(x)
-
-        assert x.shape == input_shape, \
-            f"output shape {x.shape} is different from input shape {input_shape}"
-        return x
-
-
-class LinearEncoderBlock(nn.Module):
-
-    def __init__(
-            self,
-            in_features: int,
-            out_features: int,
-            num_attention_heads: int = 4,
-            dropout_p: Union[int, float] = 0.2,
-    ):
-        super().__init__()
-        assert isinstance(in_features, int) and in_features >= 1
-        assert isinstance(out_features, int) and out_features >= 1
-        self.in_features: int = in_features
-        self.out_features: int = out_features
-        assert 0 <= dropout_p < 1
-        self.dropout_p: float = dropout_p
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
-        self.num_attention_heads: int = num_attention_heads
-
-        # section 1
-        self.attention_fn_1 = LinearMultiheadAttention(
-            hidden_size=self.in_features,
-            num_attention_heads=self.num_attention_heads,
-            dropout_p=self.dropout_p
-        )
-        self.layer_norm_1 = nn.LayerNorm([in_features, ])
-
-        # section 2
-        self.feed_forward_layer = FeedForward(
-            in_features=self.in_features,
-            out_features=self.out_features,
-            dropout_p=self.dropout_p
-        )
-        if self.in_features != self.out_features:
-            self.up_projection = nn.Sequential(
-                nn.Linear(in_features=self.in_features, out_features=self.in_features * 4),
-                nn.SELU(),
-                nn.Linear(in_features=self.in_features * 4, out_features=self.out_features)
-            )
-        self.layer_norm_2 = nn.LayerNorm([out_features, ])
-
-    def forward(self, x):
-        # section 1
-        x = self.layer_norm_1(x + self.attention_fn_1(x, x, x))
-
-        # section 2
-        x = self.layer_norm_2((x if self.in_features == self.out_features else self.up_projection(x)) +
-                              self.feed_forward_layer(x))
-        return x
-
-
-class LinearDecoder(nn.Module):
-    def __init__(
-            self,
-            hidden_size: int,
-            num_decoders: int = 6,
-            dropout_p: float = 0.1,
-
-            num_attention_heads: int = 4,
-    ):
-        super().__init__()
-
-        # model architecture
-        assert isinstance(num_decoders, int) and num_decoders >= 1, \
-            f"there must be at least one decoder, not {num_decoders}"
-        self.num_decoders: int = num_decoders
-        assert isinstance(hidden_size, int) and hidden_size >= 1, \
-            f"embeddings must be greater than 0, not {hidden_size}"
-        self.hidden_size = hidden_size
-        assert 0 <= dropout_p < 1, \
-            f"dropout must be in [0, 1], not {dropout_p}"
-        self.dropout_p = dropout_p
-
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
-        self.num_attention_heads: int = num_attention_heads
-
-        self.decoder_blocks = nn.ModuleList([
-            LinearDecoderBlock(
-                in_features=self.hidden_size,
-                out_features=self.hidden_size,
-                dropout_p=self.dropout_p,
-                num_attention_heads=self.num_attention_heads,
-            )
-            for _ in range(self.num_decoders)
-        ])
-        self.postprocessing = nn.Sequential(OrderedDict([
-            ("pool", nn.Linear(in_features=self.hidden_size,
-                               out_features=self.hidden_size)),
-            ("act", nn.SELU()),
-        ]))
-
-    def forward(self, tgt: torch.Tensor, src: torch.Tensor):
-        # prepares the input
-        assert tgt.shape[-1] == src.shape[-1] == self.hidden_size
-        assert len(src.shape) == len(tgt.shape)
-
-        input_shape = tgt.shape
-
-        # decoders pass
-        for decoder_block in self.decoder_blocks:
-            tgt = decoder_block(tgt=tgt, src=src)
-        tgt = self.postprocessing(tgt)
-
-        assert tgt.shape == input_shape, \
-            f"output shape {tgt.shape} is different from input shape {input_shape}"
-        return tgt
-
-
-class LinearDecoderBlock(nn.Module):
-
-    def __init__(
-            self,
-            in_features: int,
-            out_features: int,
-            num_attention_heads: int = 4,
-            dropout_p: Union[int, float] = 0.2,
-    ):
-        super().__init__()
-        assert isinstance(in_features, int) and in_features >= 1
-        assert isinstance(out_features, int) and out_features >= 1
-        self.in_features: int = in_features
-        self.out_features: int = out_features
-        assert 0 <= dropout_p < 1
-        self.dropout_p: float = dropout_p
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
-        self.num_attention_heads: int = num_attention_heads
-
-        # section 1
-        self.attention_fn_1: LinearMultiheadAttention = LinearMultiheadAttention(
-            hidden_size=self.in_features,
-            num_attention_heads=self.num_attention_heads,
-            dropout_p=self.dropout_p,
-        )
-        self.layer_norm_1 = nn.LayerNorm([in_features, ])
-
-        # section 2
-        self.attention_fn_2: LinearMultiheadAttention = LinearMultiheadAttention(
-            hidden_size=self.in_features,
-            num_attention_heads=self.num_attention_heads,
-            dropout_p=self.dropout_p,
-        )
-        self.layer_norm_2 = nn.LayerNorm([in_features, ])
-
-        # section 3
-        self.feed_forward_layer = FeedForward(
-            in_features=self.in_features,
-            out_features=self.out_features,
-            dropout_p=self.dropout_p
-        )
-        if self.in_features != self.out_features:
-            self.up_projection = nn.Sequential(
-                nn.Linear(in_features=self.in_features, out_features=self.in_features * 4),
-                nn.SELU(),
-                nn.Linear(in_features=self.in_features * 4, out_features=self.out_features)
-            )
-        self.layer_norm_3 = nn.LayerNorm([out_features, ])
-
-    def forward(
-            self,
-            tgt: torch.Tensor,
-            src: torch.Tensor,
-    ):
-        # section 1
-        tgt = self.layer_norm_1(tgt + self.attention_fn_1(tgt, tgt, tgt))
-
-        # section 2
-        tgt = self.layer_norm_2(tgt + self.attention_fn_2(tgt, src, src))
-
-        # section 3
-        tgt_fwd = self.feed_forward_layer(tgt)
-        if self.in_features != self.out_features:
-            tgt = self.up_projection(tgt)
-        tgt = self.layer_norm_3(tgt + tgt_fwd)
-        return tgt
-
-
-class LinearMultiheadAttention(nn.Module):
-    def __init__(
-            self,
-            hidden_size: int,
-            num_attention_heads: int,
-            dropout_p: float = 0.0,
-    ):
-        super().__init__()
-        assert isinstance(hidden_size, int) and hidden_size >= 1
-        self.hidden_size: int = hidden_size
-        assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
-        self.num_attention_heads: int = num_attention_heads
-        assert 0 <= dropout_p < 1
-        self.dropout_p: float = float(dropout_p)
-
-        self.q_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
-        self.k_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
-        self.v_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
-
-        self.out_reshaper = nn.Sequential(
-            Rearrange("b h s d -> b s d h"),
-            nn.AdaptiveMaxPool2d(output_size=(self.hidden_size, 1)),
-            Rearrange("b s d h -> b s (d h)"),
-            # Rearrange("b h s d -> b s (h d)"),
-        )
-
-    def forward(self, q, k, v):
-        qs = F.softmax(torch.einsum("bsd,hio->bhsd", q, self.q_weights), dim=-2)  # (b h s d)
-        ks = F.softmax(torch.einsum("bsd,hio->bhsd", k, self.k_weights), dim=-2)  # (b h s d)
-        vs = torch.einsum("bsd,hio->bhsd", v, self.v_weights)  # (b h s d)
-        # gets global contexts
-        global_contexts = torch.einsum("bhnk,bhmv->bhkv", [ks, vs])  # (b h d d)
-        # gets the output
-        out = torch.einsum("bhkv,bhsq->bhsv", global_contexts, qs)  # (b h s d)
-        # reshapes the output
-        out = self.out_reshaper(out)
-        return out
+#
+#
+# class LinearEncoder(nn.Module):
+#     def __init__(
+#             self,
+#             hidden_size: int,
+#             num_encoders: int = 4,
+#             num_attention_heads: int = 8,
+#             dropout_p: float = 0.2,
+#     ):
+#         super().__init__()
+#
+#         # model architecture
+#         assert isinstance(num_encoders, int) and num_encoders >= 1, \
+#             f"there must be at least one encoder, not {num_encoders}"
+#         self.num_encoders = num_encoders
+#         assert isinstance(hidden_size, int) and hidden_size >= 1, \
+#             f"embeddings must be greater than 0, not {hidden_size}"
+#         self.hidden_size = hidden_size
+#         assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+#         self.num_attention_heads = num_attention_heads
+#         assert 0 <= dropout_p < 1, \
+#             f"dropout must be in [0, 1], not {dropout_p}"
+#         self.dropout_p = dropout_p
+#         assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+#         self.num_attention_heads: int = num_attention_heads
+#
+#         # architecture
+#         self.encoder_blocks = nn.ModuleList([
+#             LinearEncoderBlock(
+#                 in_features=self.hidden_size,
+#                 out_features=self.hidden_size,
+#                 dropout_p=self.dropout_p,
+#                 num_attention_heads=self.num_attention_heads,
+#             )
+#             for _ in range(self.num_encoders)
+#         ])
+#
+#     def forward(self, x: torch.Tensor):
+#         # prepares the input
+#         assert x.shape[-1] == self.hidden_size
+#         input_shape = x.shape
+#
+#         # encoders pass
+#         for encoder_block in self.encoder_blocks:
+#             x = encoder_block(x)
+#
+#         assert x.shape == input_shape, \
+#             f"output shape {x.shape} is different from input shape {input_shape}"
+#         return x
+#
+#
+# class LinearEncoderBlock(nn.Module):
+#
+#     def __init__(
+#             self,
+#             in_features: int,
+#             out_features: int,
+#             num_attention_heads: int = 4,
+#             dropout_p: Union[int, float] = 0.2,
+#     ):
+#         super().__init__()
+#         assert isinstance(in_features, int) and in_features >= 1
+#         assert isinstance(out_features, int) and out_features >= 1
+#         self.in_features: int = in_features
+#         self.out_features: int = out_features
+#         assert 0 <= dropout_p < 1
+#         self.dropout_p: float = dropout_p
+#         assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+#         self.num_attention_heads: int = num_attention_heads
+#
+#         # section 1
+#         self.attention_fn_1 = LinearMultiheadAttention(
+#             hidden_size=self.in_features,
+#             num_attention_heads=self.num_attention_heads,
+#             dropout_p=self.dropout_p
+#         )
+#         self.layer_norm_1 = nn.LayerNorm([in_features, ])
+#
+#         # section 2
+#         self.feed_forward_layer = FeedForward(
+#             in_features=self.in_features,
+#             out_features=self.out_features,
+#             dropout_p=self.dropout_p
+#         )
+#         if self.in_features != self.out_features:
+#             self.up_projection = nn.Sequential(
+#                 nn.Linear(in_features=self.in_features, out_features=self.in_features * 4),
+#                 nn.SELU(),
+#                 nn.Linear(in_features=self.in_features * 4, out_features=self.out_features)
+#             )
+#         self.layer_norm_2 = nn.LayerNorm([out_features, ])
+#
+#     def forward(self, x):
+#         # section 1
+#         x = self.layer_norm_1(x + self.attention_fn_1(x, x, x))
+#
+#         # section 2
+#         x = self.layer_norm_2((x if self.in_features == self.out_features else self.up_projection(x)) +
+#                               self.feed_forward_layer(x))
+#         return x
+#
+#
+# class LinearDecoder(nn.Module):
+#     def __init__(
+#             self,
+#             hidden_size: int,
+#             num_decoders: int = 6,
+#             dropout_p: float = 0.1,
+#
+#             num_attention_heads: int = 4,
+#     ):
+#         super().__init__()
+#
+#         # model architecture
+#         assert isinstance(num_decoders, int) and num_decoders >= 1, \
+#             f"there must be at least one decoder, not {num_decoders}"
+#         self.num_decoders: int = num_decoders
+#         assert isinstance(hidden_size, int) and hidden_size >= 1, \
+#             f"embeddings must be greater than 0, not {hidden_size}"
+#         self.hidden_size = hidden_size
+#         assert 0 <= dropout_p < 1, \
+#             f"dropout must be in [0, 1], not {dropout_p}"
+#         self.dropout_p = dropout_p
+#
+#         assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+#         self.num_attention_heads: int = num_attention_heads
+#
+#         self.decoder_blocks = nn.ModuleList([
+#             LinearDecoderBlock(
+#                 in_features=self.hidden_size,
+#                 out_features=self.hidden_size,
+#                 dropout_p=self.dropout_p,
+#                 num_attention_heads=self.num_attention_heads,
+#             )
+#             for _ in range(self.num_decoders)
+#         ])
+#         self.postprocessing = nn.Sequential(OrderedDict([
+#             ("pool", nn.Linear(in_features=self.hidden_size,
+#                                out_features=self.hidden_size)),
+#             ("act", nn.SELU()),
+#         ]))
+#
+#     def forward(self, tgt: torch.Tensor, src: torch.Tensor):
+#         # prepares the input
+#         assert tgt.shape[-1] == src.shape[-1] == self.hidden_size
+#         assert len(src.shape) == len(tgt.shape)
+#
+#         input_shape = tgt.shape
+#
+#         # decoders pass
+#         for decoder_block in self.decoder_blocks:
+#             tgt = decoder_block(tgt=tgt, src=src)
+#         tgt = self.postprocessing(tgt)
+#
+#         assert tgt.shape == input_shape, \
+#             f"output shape {tgt.shape} is different from input shape {input_shape}"
+#         return tgt
+#
+#
+# class LinearDecoderBlock(nn.Module):
+#
+#     def __init__(
+#             self,
+#             in_features: int,
+#             out_features: int,
+#             num_attention_heads: int = 4,
+#             dropout_p: Union[int, float] = 0.2,
+#     ):
+#         super().__init__()
+#         assert isinstance(in_features, int) and in_features >= 1
+#         assert isinstance(out_features, int) and out_features >= 1
+#         self.in_features: int = in_features
+#         self.out_features: int = out_features
+#         assert 0 <= dropout_p < 1
+#         self.dropout_p: float = dropout_p
+#         assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+#         self.num_attention_heads: int = num_attention_heads
+#
+#         # section 1
+#         self.attention_fn_1: LinearMultiheadAttention = LinearMultiheadAttention(
+#             hidden_size=self.in_features,
+#             num_attention_heads=self.num_attention_heads,
+#             dropout_p=self.dropout_p,
+#         )
+#         self.layer_norm_1 = nn.LayerNorm([in_features, ])
+#
+#         # section 2
+#         self.attention_fn_2: LinearMultiheadAttention = LinearMultiheadAttention(
+#             hidden_size=self.in_features,
+#             num_attention_heads=self.num_attention_heads,
+#             dropout_p=self.dropout_p,
+#         )
+#         self.layer_norm_2 = nn.LayerNorm([in_features, ])
+#
+#         # section 3
+#         self.feed_forward_layer = FeedForward(
+#             in_features=self.in_features,
+#             out_features=self.out_features,
+#             dropout_p=self.dropout_p
+#         )
+#         if self.in_features != self.out_features:
+#             self.up_projection = nn.Sequential(
+#                 nn.Linear(in_features=self.in_features, out_features=self.in_features * 4),
+#                 nn.SELU(),
+#                 nn.Linear(in_features=self.in_features * 4, out_features=self.out_features)
+#             )
+#         self.layer_norm_3 = nn.LayerNorm([out_features, ])
+#
+#     def forward(
+#             self,
+#             tgt: torch.Tensor,
+#             src: torch.Tensor,
+#     ):
+#         # section 1
+#         tgt = self.layer_norm_1(tgt + self.attention_fn_1(tgt, tgt, tgt))
+#
+#         # section 2
+#         tgt = self.layer_norm_2(tgt + self.attention_fn_2(tgt, src, src))
+#
+#         # section 3
+#         tgt_fwd = self.feed_forward_layer(tgt)
+#         if self.in_features != self.out_features:
+#             tgt = self.up_projection(tgt)
+#         tgt = self.layer_norm_3(tgt + tgt_fwd)
+#         return tgt
+#
+#
+# class LinearMultiheadAttention(nn.Module):
+#     def __init__(
+#             self,
+#             hidden_size: int,
+#             num_attention_heads: int,
+#             dropout_p: float = 0.2,
+#     ):
+#         super().__init__()
+#         assert isinstance(hidden_size, int) and hidden_size >= 1
+#         self.hidden_size: int = hidden_size
+#         assert isinstance(num_attention_heads, int) and num_attention_heads >= 1
+#         self.num_attention_heads: int = num_attention_heads
+#         assert 0 <= dropout_p < 1
+#         self.dropout_p: float = float(dropout_p)
+#
+#         self.q_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
+#         self.k_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
+#         self.v_weights = nn.Parameter(torch.randn(self.num_attention_heads, self.hidden_size, self.hidden_size))
+#
+#         self.out_reshaper = nn.Sequential(
+#             Rearrange("b h s d -> b s d h"),
+#             nn.AdaptiveMaxPool2d(output_size=(self.hidden_size, 1)),
+#             Rearrange("b s d h -> b s (d h)"),
+#             # Rearrange("b h s d -> b s (h d)"),
+#         )
+#
+#     def forward(self, q, k, v):
+#         st = time.time()
+#         for i_head in range(self.num_attention_heads):
+#             print(k.shape, self.k_weights.shape)
+#             ks = torch.matmul(k, self.k_weights[i_head])
+#         print("matmul", time.time() - st, "seconds")
+#
+#         st = time.time()
+#         ks = F.softmax(torch.einsum("bsd,hio->bhsd", k, self.k_weights), dim=-2)  # (b h s d)
+#         print("einsum", time.time() - st, "seconds")
+#         # ks = F.softmax(torch.einsum("bsd,hio->bhsd", k, self.k_weights), dim=-2)  # (b h s d)
+#         # vs = torch.einsum("bsd,hio->bhsd", v, self.v_weights)  # (b h s d)
+#         # gets global contexts
+#         # global_contexts = torch.einsum("bhnk,bhmv->bhkv", [ks, vs])  # (b h d d)
+#         # print(ks.shape, vs.shape, global_contexts.shape)
+#         print(ks.shape)
+#
+#         exit()
+#         del ks, vs
+#         # gets the output
+#         qs = F.softmax(torch.einsum("bsd,hio->bhsd", q, self.q_weights), dim=-2)  # (b h s d)
+#         out = torch.einsum("bhkv,bhsq->bhsv", global_contexts, qs)  # (b h s d)
+#         del qs
+#         # reshapes the output
+#         out = self.out_reshaper(out)
+#         return out
 
 
 class FastFourierTransform(nn.Module):
@@ -575,7 +587,7 @@ class MelSpectrogram(nn.Module):
 
 
 if __name__ == "__main__":
-    embeddings_dim, batch_size, sampling_rate, seconds = 512, 32, 128, 1
+    embeddings_dim, batch_size, sampling_rate, seconds = 512, 1024, 128, 10
     batch = {
         "eegs": torch.randn(batch_size, seconds * sampling_rate, embeddings_dim, dtype=torch.float32),
         "labels": torch.ones(batch_size, 6, dtype=torch.long),
@@ -587,7 +599,7 @@ if __name__ == "__main__":
 
     with profile(activities=[ProfilerActivity.CPU], record_shapes=True, profile_memory=True) as prof:
         with profiler.record_function("full attention"):
-            _ = LinearDecoder(embeddings_dim, 8, attention_type="quadratic")(batch_target["eegs"], batch["eegs"])
+            _ = LinearDecoder(embeddings_dim, 4, num_attention_heads=8)(batch_target["eegs"], batch["eegs"])
 
         # with profiler.record_function("linear attention"):
         #     _ = FouriDecoder(embeddings_dim, 8, attention_type="linear")(batch_target["eegs"], batch["eegs"])
