@@ -113,9 +113,11 @@ class EEGClassificationDataset(Dataset, ABC):
         window = self.windows[i]
         eegs = self.eegs_data[window["experiment"]][window["start"]:window["end"]].astype(np.float32)
         # eventually pad the eegs
-        if eegs.shape[0] != self.sampling_rate:
+        if eegs.shape[0] != self.samples_per_window:
             eegs = np.concatenate([eegs,
-                                   np.zeros([self.sampling_rate - eegs.shape[0], eegs.shape[1]])])
+                                   np.zeros([self.samples_per_window - eegs.shape[0], eegs.shape[1]])],
+                                  axis=0)
+        assert eegs.shape[0] == self.samples_per_window
         return {
             "sampling_rates": self.sampling_rate,
             "subject_id": window["subject_id"],
