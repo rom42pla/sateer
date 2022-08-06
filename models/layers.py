@@ -581,8 +581,8 @@ class MelSpectrogram(nn.Module):
                 hop_length=window_stride,
                 pad=window_stride // 2,
             ).to(eegs.device)
-            eegs = einops.rearrange(eegs, "b s c -> b c s")
-            spectrogram = mel_fn(eegs)  # (b c m s)
+            eegs = einops.rearrange(eegs, "b s c -> b c s").double()
+            spectrogram = mel_fn(eegs).float()  # (b c m s)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
 

@@ -111,7 +111,7 @@ class EEGClassificationDataset(Dataset, ABC):
 
     def __getitem__(self, i: int) -> Dict[str, Union[int, str, np.ndarray]]:
         window = self.windows[i]
-        eegs = self.eegs_data[window["experiment"]][window["start"]:window["end"]].astype(np.float32)
+        eegs = self.eegs_data[window["experiment"]][window["start"]:window["end"]]
         # eventually pad the eegs
         if eegs.shape[0] != self.samples_per_window:
             eegs = np.concatenate([eegs,
@@ -121,8 +121,8 @@ class EEGClassificationDataset(Dataset, ABC):
         return {
             "sampling_rates": self.sampling_rate,
             "subject_id": window["subject_id"],
-            "eegs": eegs,
-            "labels": window["labels"],
+            "eegs": eegs.astype(np.float32),
+            "labels": window["labels"]
         }
 
     def prepare_data(self) -> None:
