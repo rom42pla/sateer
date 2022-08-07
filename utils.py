@@ -20,8 +20,10 @@ from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
 from torch.utils.data import Dataset, DataLoader, Subset
 import pytorch_lightning as pl
 
+from datasets.amigos import AMIGOSDataset
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
+from datasets.seed_sync import SEEDDataset
 from loggers.logger import FouriEEGTransformerLogger
 from models.feegt import FouriEEGTransformer
 
@@ -31,6 +33,10 @@ def parse_dataset_class(name: str):
         dataset_class = DEAPDataset
     elif name == "dreamer":
         dataset_class = DREAMERDataset
+    elif name == "amigos":
+        dataset_class = AMIGOSDataset
+    elif name == "seed":
+        dataset_class = SEEDDataset
     else:
         raise NotImplementedError(f"unknown dataset {name}")
     return dataset_class
