@@ -28,6 +28,7 @@ from torchaudio import transforms
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
 from datasets.eeg_emrec import EEGClassificationDataset
+from datasets.seed_sync import SEEDDataset
 from models.layers import AddGaussianNoise, MelSpectrogram, \
     GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings, GetUserEmbeddings
 
@@ -373,6 +374,7 @@ class FouriEEGTransformer(pl.LightningModule):
         labels: torch.Tensor = batch["labels"]
         starting_time = time.time()
         net_outputs = self(eegs, ids=batch["subject_id"])  # (b l d)
+        print(labels.shape, net_outputs["labels_pred"].shape)
         results = {
             "loss": sum(
                 [F.cross_entropy(net_outputs["labels_pred"][:, i_label, :], labels[:, i_label],
@@ -453,8 +455,8 @@ class FouriEEGTransformer(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    dataset: EEGClassificationDataset = DREAMERDataset(
-        path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "dreamer"),
+    dataset: EEGClassificationDataset = SEEDDataset(
+        path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "seed"),
         window_size=1,
         window_stride=1,
         drop_last=False,
@@ -466,6 +468,7 @@ if __name__ == "__main__":
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
+        labels_classes=dataset.labels_classes,
 
         users_embeddings=False,
 

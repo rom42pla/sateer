@@ -32,6 +32,7 @@ class SEEDDataset(EEGClassificationDatasetCached):
                                                       'P6', 'P8', 'PO7', 'PO5', 'PO3', 'POZ', 'PO4', 'PO6',
                                                       'PO8', 'CB1', 'O1', 'OZ', 'O2', 'CB2'],
                                           labels=["emotion"],
+                                          labels_classes=3,
                                           subject_ids=SEEDDataset.get_subject_ids_static(path=path),
                                           **kwargs)
 

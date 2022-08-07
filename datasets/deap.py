@@ -20,6 +20,7 @@ class DEAPDataset(EEGClassificationDataset):
                                                       "Fz", "F4", "F8", "FC6", "FC2", "Cz", "C4", "T8", "CP6",
                                                       "CP2", "P4", "P8", "PO4", "O2"],
                                           labels=["valence", "arousal", "dominance", "liking"],
+                                          labels_classes=2,
                                           subject_ids=DEAPDataset.get_subject_ids_static(path=path),
                                           **kwargs)
 

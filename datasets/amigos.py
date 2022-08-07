@@ -21,6 +21,7 @@ class AMIGOSDataset(EEGClassificationDataset):
                                             labels=["arousal", "valence", "dominance", "liking",
                                                     "familiarity", "neutral", "disgust", "happiness",
                                                     "surprise", "anger", "fear", "sadness"],
+                                            labels_classes=2,
                                             subject_ids=AMIGOSDataset.get_subject_ids_static(path=path),
                                             **kwargs)
 

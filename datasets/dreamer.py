@@ -15,6 +15,7 @@ class DREAMERDataset(EEGClassificationDataset):
                                              electrodes=['AF3', 'F7', 'F3', 'FC5', 'T7', 'P7', 'O1',
                                                          'O2', 'P8', 'T8', 'FC6', 'F4', 'F8', 'AF4'],
                                              labels=["valence", "arousal", "dominance"],
+                                             labels_classes=2,
                                              subject_ids=DREAMERDataset.get_subject_ids_static(path=path),
                                              **kwargs)
 

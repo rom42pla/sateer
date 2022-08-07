@@ -25,6 +25,7 @@ class EEGClassificationDataset(Dataset, ABC):
                  electrodes: Union[int, List[str]],
                  labels: List[str],
                  subject_ids: List[str],
+                 labels_classes: Union[int, List[int]] = 2,
 
                  window_size: Optional[Union[float, int]] = 1,
                  window_stride: Optional[Union[float, int]] = None,
@@ -58,6 +59,17 @@ class EEGClassificationDataset(Dataset, ABC):
         assert isinstance(labels, list)
         assert all((isinstance(x, str) for x in labels))
         self.labels: List[str] = labels
+        assert isinstance(labels_classes, int) or isinstance(labels_classes, list), \
+            f"the labels classes must be a list of integers or a positive integer, not {labels_classes}"
+        if isinstance(labels_classes, list):
+            assert all([isinstance(labels_class, int) for labels_class in labels_classes]), \
+                f"if the name of the labels are given ({labels_classes}), they must all be strings"
+            assert len(labels_classes) == len(labels)
+            self.labels_classes = labels_classes
+        else:
+            assert labels_classes > 0, \
+                f"there must be a positive number of classes, not {labels_classes}"
+            self.labels_classes = [labels_classes for _ in self.labels]
 
         assert isinstance(subject_ids, list)
         assert all((isinstance(x, str) for x in subject_ids))
