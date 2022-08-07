@@ -374,7 +374,6 @@ class FouriEEGTransformer(pl.LightningModule):
         labels: torch.Tensor = batch["labels"]
         starting_time = time.time()
         net_outputs = self(eegs, ids=batch["subject_id"])  # (b l d)
-        print(labels.shape, net_outputs["labels_pred"].shape)
         results = {
             "loss": sum(
                 [F.cross_entropy(net_outputs["labels_pred"][:, i_label, :], labels[:, i_label],
