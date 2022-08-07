@@ -53,6 +53,7 @@ model: FouriEEGTransformer = FouriEEGTransformer(
     in_channels=len(dataset.electrodes),
     sampling_rate=dataset.sampling_rate,
     labels=dataset.labels,
+    labels_classes=dataset.labels_classes,
 
     mels=args['mels'],
     mel_window_size=args['mel_window_size'],

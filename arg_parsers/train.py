@@ -11,7 +11,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     # dataset args
     parser.add_argument("dataset_type",
                         type=str,
-                        choices={"deap", "dreamer"},
+                        choices={"deap", "dreamer", "amigos", "seed"},
                         help="Type of dataset")
     parser.add_argument("dataset_path",
                         type=str,
