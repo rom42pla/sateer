@@ -153,14 +153,16 @@ class EEGClassificationDataset(Dataset, ABC):
         # loops through the experiments
         for i_experiment, experiment in enumerate(eegs):
             # scales the experiment to zero mean and unit variance
-            scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
-                                                              verbose=False, ch_types="eeg"),
-                                         scalings="mean")
-            scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
-            experiment_scaled = einops.rearrange(
-                scaler.transform(einops.rearrange(experiment,
-                                                  "s c -> () c s")),
-                "b c s -> s (b c)")
+            experiment_scaled = (experiment - experiment.mean(axis=0)) / experiment.std(axis=0)
+            experiment_scaled = np.nan_to_num(experiment_scaled)
+            # scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
+            #                                                   verbose=False, ch_types="eeg"),
+            #                              scalings="mean")
+            # scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
+            # experiment_scaled = einops.rearrange(
+            #     scaler.transform(einops.rearrange(experiment,
+            #                                       "s c -> () c s")),
+            #     "b c s -> s (b c)")
             # scales to microvolts
             experiment_scaled *= 1e-6
             eegs[i_experiment] = experiment_scaled

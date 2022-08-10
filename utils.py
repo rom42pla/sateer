@@ -15,6 +15,7 @@ import pandas as pd
 import torch
 from pytorch_lightning import Callback
 from pytorch_lightning.callbacks import EarlyStopping, RichProgressBar, StochasticWeightAveraging
+from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
 from torch.utils.data import Dataset, DataLoader, Subset
@@ -90,6 +91,7 @@ def init_callbacks(swa: bool = False) -> List[Callback]:
     callbacks: List[Callback] = [
         EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-3, patience=5,
                       verbose=False, check_on_train_epoch_end=False, strict=True),
+        TQDMProgressBar(refresh_rate=1),
     ]
     if swa:
         callbacks += [
