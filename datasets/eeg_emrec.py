@@ -129,10 +129,11 @@ class EEGClassificationDataset(Dataset, ABC):
             eegs = np.concatenate([eegs,
                                    np.zeros([self.samples_per_window - eegs.shape[0], eegs.shape[1]])],
                                   axis=0)
+        id = self.get_subject_ids_static(path=self.path).index(window["subject_id"])
         assert eegs.shape[0] == self.samples_per_window
         return {
             "sampling_rates": self.sampling_rate,
-            "subject_id": window["subject_id"],
+            "subject_id": id,
             "eegs": eegs.astype(np.float32),
             "labels": window["labels"]
         }
