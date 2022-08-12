@@ -183,8 +183,7 @@ def train_k_fold(
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=gpus,
-            num_nodes=2 if torch.cuda.is_available() else 1,
-            strategy=strategy,
+            # strategy=strategy,
             precision=precision,
             max_epochs=max_epochs,
             check_val_every_n_epoch=1,
