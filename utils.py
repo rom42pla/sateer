@@ -166,14 +166,26 @@ def train_k_fold(
                      f"|dataloader_train| = {len(dataloader_train)}, "
                      f"|dataloader_val| = {len(dataloader_val)}")
         # initializes the trainer
+        accelerator: str = "cpu"
+        gpus: int = 0
+        if torch.cuda.is_available():
+            if torch.cuda.device_count() == 1:
+                accelerator = "gpu"
+                gpus = 1
+            else:
+                accelerator = "ddp_spawn"
+                gpus = torch.cuda.device_count()
+                os.environ["PL_TORCH_DISTRIBUTED_BACKEND"] = "gloo"
         trainer = pl.Trainer(
-            accelerator="gpu" if torch.cuda.is_available() else "cpu",
+            accelerator=accelerator,
+            gpus=gpus,
             precision=precision,
             max_epochs=max_epochs,
             check_val_every_n_epoch=1,
             logger=FouriEEGTransformerLogger(path=join(experiment_path, f"fold_{i_fold}")),
             log_every_n_steps=1,
-            enable_progress_bar=progress_bar,
+            # enable_progress_bar=progress_bar,
+            enable_progress_bar=False,
             enable_model_summary=False,
             enable_checkpointing=False,
             gradient_clip_val=1 if gradient_clipping else 0,
@@ -233,7 +245,7 @@ def train(
 
     # initializes the trainer
     trainer = pl.Trainer(
-        accelerator="gpu" if torch.cuda.is_available() else "cpu",
+        gpus=-1,
         precision=precision,
         max_epochs=max_epochs,
         check_val_every_n_epoch=1,

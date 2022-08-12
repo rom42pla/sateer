@@ -237,7 +237,7 @@ class FouriEEGTransformer(pl.LightningModule):
                 ])))
 
         self.float()
-        self.to(device)
+        # self.to(device)
         self.save_hyperparameters()
 
     def forward(
@@ -258,7 +258,7 @@ class FouriEEGTransformer(pl.LightningModule):
                 raise TypeError(f"ids must be a string, an integer or a list of such, not {type(ids)}")
 
         # makes a fresh copy of the input to avoid errors
-        eegs = input_eegs.clone().to(self.device)  # (b s c) or (s c)
+        eegs = input_eegs.clone()  # (b s c) or (s c)
 
         # cast from microvolts to volts
         eegs *= 1e6
@@ -307,7 +307,7 @@ class FouriEEGTransformer(pl.LightningModule):
             # eventually adds positional embeddings and type embeddings
             if self.users_embeddings:
                 with profiler.record_function("user embeddings"):
-                    users_embeddings = self.users_embedder(ids).to(self.device)  # (b c)
+                    users_embeddings = self.users_embedder(ids).type_as(x)  # (b c)
                     x = torch.cat([
                         users_embeddings.unsqueeze(1),
                         self.special_tokens_embedder(
@@ -422,18 +422,18 @@ class FouriEEGTransformer(pl.LightningModule):
         phase: str = "train" if self.training is True else "val"
         # time
         self.log(f"time_{phase}", sum([e["time"] for e in outputs]) / len(outputs),
-                 prog_bar=False)
+                 prog_bar=False, sync_dist=True)
         # losses
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
-                 prog_bar=True if phase == "val" else False)
+                 prog_bar=True if phase == "val" else False, sync_dist=True)
         # classification metrics
         for metric in ["acc", "f1", "precision", "recall"]:
             metric_data = torch.stack([e[metric] for e in outputs])
             self.log(f"{metric}_mean_{phase}", metric_data.mean(),
-                     prog_bar=True if metric == "acc" else False)
+                     prog_bar=True if metric == "acc" else False, sync_dist=True)
             for i_label, label in enumerate(self.labels):
                 self.log(f"{metric}_{label}_{phase}", metric_data[:, i_label].mean(),
-                         prog_bar=False)
+                         prog_bar=False, sync_dist=True)
             del metric_data
         del outputs
 
