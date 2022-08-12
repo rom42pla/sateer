@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     # retrieves line arguments
     args: Dict[str, Union[bool, str, int, float]] = get_args()
-    logging.debug(f"line args:\n{pformat(args)}")
+    logging.info(f"line args:\n{pformat(args)}")
 
     # sets the random seed
     set_global_seed(seed=args['seed'])
