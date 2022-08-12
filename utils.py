@@ -179,7 +179,7 @@ def train_k_fold(
             accelerator = "gpu"
             gpus = torch.cuda.device_count()
             if torch.cuda.device_count() >= 2:
-                strategy = "ddp"
+                strategy = "horovod"
             # else:
             #     gpus = torch.cuda.device_count()
             #     os.environ["PL_TORCH_DISTRIBUTED_BACKEND"] = "gloo"
