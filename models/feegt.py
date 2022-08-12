@@ -308,11 +308,13 @@ class FouriEEGTransformer(pl.LightningModule):
             if self.users_embeddings:
                 with profiler.record_function("user embeddings"):
                     users_embeddings = self.users_embedder(ids).type_as(x)  # (b c)
+                    print(users_embeddings.shape)
                     print(users_embeddings.unsqueeze(1).shape)
                     print(self.special_tokens_embedder(
                             torch.as_tensor([self.special_tokens_vocab["ues"]],
                                             device=self.device)).repeat(x.shape[0], 1, 1).shape)
                     print(x.shape)
+                    exit()
                     x = torch.cat([
                         users_embeddings.unsqueeze(1),
                         self.special_tokens_embedder(
@@ -377,8 +379,9 @@ class FouriEEGTransformer(pl.LightningModule):
         phase: str = "train" if self.training is True else "val"
         eegs: torch.Tensor = batch["eegs"]
         labels: torch.Tensor = batch["labels"]
+        ids = batch["subject_id"]
         starting_time = time.time()
-        net_outputs = self(eegs, ids=batch["subject_id"])  # (b l d)
+        net_outputs = self(eegs, ids=ids)  # (b l d)
         results = {
             "loss": sum(
                 [F.cross_entropy(net_outputs["labels_pred"][:, i_label, :], labels[:, i_label],
