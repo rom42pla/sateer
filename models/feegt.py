@@ -314,7 +314,6 @@ class FouriEEGTransformer(pl.LightningModule):
                             torch.as_tensor([self.special_tokens_vocab["ues"]],
                                             device=self.device)).repeat(x.shape[0], 1, 1).shape)
                     print(x.shape)
-                    exit()
                     x = torch.cat([
                         users_embeddings.unsqueeze(1),
                         self.special_tokens_embedder(
