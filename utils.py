@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 import torch
+import pytorch_lightning as pl
 from pytorch_lightning import Callback
 from pytorch_lightning.callbacks import EarlyStopping, RichProgressBar, StochasticWeightAveraging
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
@@ -47,6 +48,7 @@ def set_global_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    pl.seed_everything(seed)
 
 
 def init_logger() -> None:
