@@ -177,7 +177,7 @@ def train_k_fold(
                 gpus = torch.cuda.device_count()
                 os.environ["PL_TORCH_DISTRIBUTED_BACKEND"] = "gloo"
         trainer = pl.Trainer(
-            accelerator=accelerator,
+            # accelerator=accelerator,
             gpus=gpus,
             precision=precision,
             max_epochs=max_epochs,
@@ -244,8 +244,18 @@ def train(
     gc.collect()
 
     # initializes the trainer
+    accelerator: str = "cpu"
+    gpus: int = 0
+    if torch.cuda.is_available():
+        if torch.cuda.device_count() == 1:
+            accelerator = "gpu"
+            gpus = 1
+        else:
+            accelerator = "ddp_spawn"
+            gpus = torch.cuda.device_count()
+            os.environ["PL_TORCH_DISTRIBUTED_BACKEND"] = "gloo"
     trainer = pl.Trainer(
-        gpus=-1,
+        gpus=gpus,
         precision=precision,
         max_epochs=max_epochs,
         check_val_every_n_epoch=1,
