@@ -161,13 +161,16 @@ def train_k_fold(
                                                               for f in folds_indices
                                                               for i in f}
         # builds the dataloaders
+        num_workers: int = os.cpu_count() - 1
+        if torch.cuda.is_available():
+            num_workers: int = (os.cpu_count() // torch.cuda.device_count()) - 1
         dataloader_train: DataLoader = DataLoader(Subset(dataset, train_indices),
                                                   batch_size=batch_size, shuffle=True,
-                                                  num_workers=os.cpu_count() - 1,
+                                                  num_workers=num_workers//2,
                                                   pin_memory=True if torch.cuda.is_available() else False)
         dataloader_val: DataLoader = DataLoader(Subset(dataset, val_indices),
                                                 batch_size=batch_size, shuffle=False,
-                                                num_workers=os.cpu_count() - 1,
+                                                num_workers=num_workers//2,
                                                 pin_memory=True if torch.cuda.is_available() else False)
         del train_indices, val_indices
         logging.info(f"fold {i_fold + 1} of {k_folds}, "
@@ -184,8 +187,8 @@ def train_k_fold(
                 strategy = "ddp"
         trainer = pl.Trainer(
             accelerator=accelerator,
-            devices=-1,
-            # strategy=strategy,
+            devices=gpus,
+            strategy=strategy,
             precision=precision,
             max_epochs=max_epochs,
             check_val_every_n_epoch=1,
