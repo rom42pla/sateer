@@ -1,5 +1,3 @@
-import torchaudio
-
 if __name__ == '__main__':
     import gc
     import logging
@@ -9,11 +7,9 @@ if __name__ == '__main__':
     from pprint import pformat
     from typing import Union, Dict
 
-    import pandas as pd
     import torch.cuda
 
     from torch.utils.data import Subset
-    import pytorch_lightning as pl
 
     from arg_parsers.train import get_args
     from plots import plot_metrics, plot_cross_subject
@@ -21,6 +17,7 @@ if __name__ == '__main__':
     from datasets.eeg_emrec import EEGClassificationDataset
     from models.feegt import FouriEEGTransformer
 
+    import torchaudio
     torchaudio.set_audio_backend("sox_io")
 
     # sets up the loggers

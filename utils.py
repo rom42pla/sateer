@@ -182,7 +182,7 @@ def train_k_fold(
                 strategy = "ddp"
         trainer = pl.Trainer(
             accelerator=accelerator,
-            devices=gpus,
+            devices=-1,
             # strategy=strategy,
             precision=precision,
             max_epochs=max_epochs,
