@@ -10,6 +10,7 @@ from pprint import pformat
 from typing import Union, List, Optional, Dict
 
 import functorch
+import numpy as np
 import torch
 import torchvision
 from einops.layers.torch import Rearrange
@@ -243,7 +244,7 @@ class FouriEEGTransformer(pl.LightningModule):
     def forward(
             self,
             input_eegs: torch.Tensor,
-            ids: Optional[Union[int, str, List[Union[int, str]]]] = None
+            ids: Optional[Union[int, str, List[Union[int, str]], np.ndarray]] = None
     ):
         # ensures that the inputs are well-defined
         assert input_eegs.shape[-1] == self.in_channels
@@ -254,8 +255,9 @@ class FouriEEGTransformer(pl.LightningModule):
             elif isinstance(ids, list):
                 assert all([isinstance(id, int) or isinstance(id, str)
                             for id in ids])
-            else:
-                raise TypeError(f"ids must be a string, an integer or a list of such, not {type(ids)}")
+            # if isinstance(ids, list):
+            # else:
+            #     raise TypeError(f"ids must be a string, an integer or a list of such, not {type(ids)}")
             assert len(input_eegs) == len(ids), f"length between eegs and ids mismatch: {len(input_eegs)} != {len(ids)}"
 
         # makes a fresh copy of the input to avoid errors
@@ -309,12 +311,12 @@ class FouriEEGTransformer(pl.LightningModule):
             if self.users_embeddings:
                 with profiler.record_function("user embeddings"):
                     users_embeddings = self.users_embedder(ids).type_as(x)  # (b c)
-                    print(users_embeddings.shape)
-                    print(users_embeddings.unsqueeze(1).shape)
-                    print(self.special_tokens_embedder(
-                            torch.as_tensor([self.special_tokens_vocab["ues"]],
-                                            device=self.device)).repeat(x.shape[0], 1, 1).shape)
-                    print(x.shape)
+                    # print(users_embeddings.shape)
+                    # print(users_embeddings.unsqueeze(1).shape)
+                    # print(self.special_tokens_embedder(
+                    #         torch.as_tensor([self.special_tokens_vocab["ues"]],
+                    #                         device=self.device)).repeat(x.shape[0], 1, 1).shape)
+                    # print(x.shape)
                     x = torch.cat([
                         users_embeddings.unsqueeze(1),
                         self.special_tokens_embedder(

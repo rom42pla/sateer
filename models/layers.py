@@ -483,7 +483,9 @@ class GetUserEmbeddings(nn.Module):
         self.hidden_size = hidden_size
         self.embeddings: Dict[str, torch.Tensor] = {}
 
-    def forward(self, ids: List[Union[int, str]]) -> torch.Tensor:
+    def forward(self, ids: Union[List[Union[int, str]], torch.Tensor]) -> torch.Tensor:
+        if isinstance(ids, torch.Tensor):
+            ids = ids.clone().detach().tolist()
         for id in ids:
             if id not in self.embeddings.keys():
                 self.add_id(id)
