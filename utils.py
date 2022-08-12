@@ -87,12 +87,18 @@ def merge_logs(experiment_path: str,
     return logs
 
 
-def init_callbacks(swa: bool = False) -> List[Callback]:
+def init_callbacks(
+        progress_bar: bool = True,
+        swa: bool = False
+) -> List[Callback]:
     callbacks: List[Callback] = [
         EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-3, patience=5,
                       verbose=False, check_on_train_epoch_end=False, strict=True),
-        TQDMProgressBar(refresh_rate=1),
     ]
+    if progress_bar:
+        callbacks += [
+            TQDMProgressBar(refresh_rate=10),
+        ]
     if swa:
         callbacks += [
             StochasticWeightAveraging(),
@@ -184,13 +190,12 @@ def train_k_fold(
             check_val_every_n_epoch=1,
             logger=FouriEEGTransformerLogger(path=join(experiment_path, f"fold_{i_fold}")),
             log_every_n_steps=1,
-            # enable_progress_bar=progress_bar,
-            enable_progress_bar=False,
+            enable_progress_bar=progress_bar,
             enable_model_summary=False,
             enable_checkpointing=False,
             gradient_clip_val=1 if gradient_clipping else 0,
             auto_lr_find=auto_lr_finder,
-            callbacks=init_callbacks(swa=stochastic_weight_average),
+            callbacks=init_callbacks(progress_bar=progress_bar, swa=stochastic_weight_average),
         )
         # eventually selects a starting learning rate
         if auto_lr_finder is True:
