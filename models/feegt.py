@@ -308,6 +308,11 @@ class FouriEEGTransformer(pl.LightningModule):
             if self.users_embeddings:
                 with profiler.record_function("user embeddings"):
                     users_embeddings = self.users_embedder(ids).type_as(x)  # (b c)
+                    print(users_embeddings.unsqueeze(1).shape)
+                    print(self.special_tokens_embedder(
+                            torch.as_tensor([self.special_tokens_vocab["ues"]],
+                                            device=self.device)).repeat(x.shape[0], 1, 1).shape)
+                    print(x.shape)
                     x = torch.cat([
                         users_embeddings.unsqueeze(1),
                         self.special_tokens_embedder(
