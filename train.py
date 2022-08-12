@@ -18,6 +18,7 @@ if __name__ == '__main__':
     from models.feegt import FouriEEGTransformer
 
     import torchaudio
+
     torchaudio.set_audio_backend("sox_io")
 
     # sets up the loggers
@@ -31,8 +32,8 @@ if __name__ == '__main__':
     set_global_seed(seed=args['seed'])
 
     # sets the logging folder
-    datetime_str: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_name: str = f"{datetime_str}_{args['setting']}_{args['validation']}_{args['dataset_type']}"
+    datetime_str: str = datetime.now().strftime("%Y%m%d_%H:%M")
+    experiment_name: str = f"{datetime_str}_{args['dataset_type']}_size={args['windows_size']}_stride={args['windows_stride']}"
     experiment_path: str = join(args['checkpoints_path'], experiment_name)
     makedirs(experiment_path)
 
