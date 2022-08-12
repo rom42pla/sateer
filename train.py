@@ -1,3 +1,5 @@
+import torchaudio
+
 if __name__ == '__main__':
     import gc
     import logging
@@ -18,6 +20,8 @@ if __name__ == '__main__':
     from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train_k_fold, merge_logs
     from datasets.eeg_emrec import EEGClassificationDataset
     from models.feegt import FouriEEGTransformer
+
+    torchaudio.set_audio_backend("sox_io")
 
     # sets up the loggers
     init_logger()
