@@ -97,7 +97,7 @@ def init_callbacks(
     ]
     if progress_bar:
         callbacks += [
-            TQDMProgressBar(refresh_rate=10),
+            TQDMProgressBar(refresh_rate=100),
         ]
     if swa:
         callbacks += [
