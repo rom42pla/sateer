@@ -256,6 +256,7 @@ class FouriEEGTransformer(pl.LightningModule):
                             for id in ids])
             else:
                 raise TypeError(f"ids must be a string, an integer or a list of such, not {type(ids)}")
+        assert len(input_eegs) == len(ids), f"length between eegs and ids mismatch: {len(input_eegs)} != {len(ids)}"
 
         # makes a fresh copy of the input to avoid errors
         eegs = input_eegs.clone()  # (b s c) or (s c)
