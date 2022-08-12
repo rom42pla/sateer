@@ -184,7 +184,7 @@ def train_k_fold(
             #     os.environ["PL_TORCH_DISTRIBUTED_BACKEND"] = "gloo"
         trainer = pl.Trainer(
             accelerator=accelerator,
-            gpus=gpus,
+            devices=gpus,
             precision=precision,
             max_epochs=max_epochs,
             check_val_every_n_epoch=1,
