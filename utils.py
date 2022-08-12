@@ -179,7 +179,7 @@ def train_k_fold(
             accelerator = "gpu"
             gpus = torch.cuda.device_count()
             if torch.cuda.device_count() >= 2:
-                strategy = "dp"
+                strategy = "ddp"
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=gpus,
