@@ -268,8 +268,8 @@ def train_k_fold(
             deepcopy(trainer).tune(model,
                                    train_dataloaders=deepcopy(dataloader_train),
                                    val_dataloaders=deepcopy(dataloader_val))
-            learning_rate = float(f'{model.learning_rate:+.1g}')
-            logging.info(f"optimal learning rate is {learning_rate}")
+            # learning_rate = float(f'{model.learning_rate:+.1g}')
+            logging.info(f"optimal learning rate is {model.learning_rate}")
 
         # trains the model
         trainer.fit(model,
