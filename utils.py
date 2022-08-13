@@ -195,24 +195,26 @@ def train_k_fold(
             enable_model_summary=False,
             enable_checkpointing=False,
             gradient_clip_val=1 if gradient_clipping else 0,
-            auto_lr_find=auto_lr_finder,
+            auto_lr_find=False if auto_lr_finder is False else "learning_rate",
             callbacks=init_callbacks(progress_bar=progress_bar, swa=stochastic_weight_average),
         )
         # eventually selects a starting learning rate
         if auto_lr_finder is True:
-            # trainer.tune(model,
-            #              train_dataloaders=dataloader_train,
-            #              val_dataloaders=dataloader_val)
-            lr_finder = trainer.tuner.lr_find(
-                model,
-                train_dataloaders=dataloader_train,
-                val_dataloaders=dataloader_val
-            )
-            fig = lr_finder.plot(suggest=True)
-            fig.show()
-            new_lr = lr_finder.suggestion()
-            model.hparams.learning_rate = new_lr
-            logging.info(f"learning rate has been set to {model.learning_rate}")
+            trainer.tune(model,
+                         train_dataloaders=dataloader_train,
+                         val_dataloaders=dataloader_val)
+            # lr_finder = trainer.tuner.lr_find(
+            #     model,
+            #     train_dataloaders=dataloader_train,
+            #     val_dataloaders=dataloader_val
+            # )
+            # fig = lr_finder.plot(suggest=True)
+            # fig.show()
+            # new_lr = lr_finder.suggestion()
+            # model.hparams.learning_rate = new_lr
+            model.configure_optimizers()
+            logging.info(f"learning rate has been set to {model.hparams.learning_rate}")
+
         # trains the model
         trainer.fit(model,
                     train_dataloaders=dataloader_train,
