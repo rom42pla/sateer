@@ -1,3 +1,4 @@
+import random
 from multiprocessing import Pool
 from os.path import isdir, join
 from typing import Dict, List, Any, Tuple
@@ -10,14 +11,17 @@ from datasets.eeg_emrec import EEGClassificationDataset
 
 class DREAMERDataset(EEGClassificationDataset):
     def __init__(self, path: str, **kwargs):
-        super(DREAMERDataset, self).__init__(path=path,
-                                             sampling_rate=128,
-                                             electrodes=['AF3', 'F7', 'F3', 'FC5', 'T7', 'P7', 'O1',
-                                                         'O2', 'P8', 'T8', 'FC6', 'F4', 'F8', 'AF4'],
-                                             labels=["valence", "arousal", "dominance"],
-                                             labels_classes=2,
-                                             subject_ids=DREAMERDataset.get_subject_ids_static(path=path),
-                                             **kwargs)
+        super(DREAMERDataset, self).__init__(
+            name="DREAMER",
+            path=path,
+            sampling_rate=128,
+            electrodes=['AF3', 'F7', 'F3', 'FC5', 'T7', 'P7', 'O1',
+                        'O2', 'P8', 'T8', 'FC6', 'F4', 'F8', 'AF4'],
+            labels=["valence", "arousal", "dominance"],
+            labels_classes=2,
+            subject_ids=DREAMERDataset.get_subject_ids_static(path=path),
+            **kwargs
+        )
 
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray], List[str]]:
         # loads DREAMER.mat
@@ -70,6 +74,6 @@ class DREAMERDataset(EEGClassificationDataset):
 
 if __name__ == "__main__":
     dataset = DREAMERDataset(path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "dreamer"),
-                             discretize_labels=True, normalize_eegs=True, split_in_windows=True)
-    dataset.plot_labels_distribution()
+                             discretize_labels=True, normalize_eegs=True, window_size=1, window_stride=1)
+    # dataset.plot_sample(i=random.randint(0, len(dataset)))
     dataset.plot_amplitudes_distribution()

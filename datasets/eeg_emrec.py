@@ -20,24 +20,29 @@ from tqdm import tqdm
 
 class EEGClassificationDataset(Dataset, ABC):
 
-    def __init__(self, path: str,
-                 sampling_rate: int,
-                 electrodes: Union[int, List[str]],
-                 labels: List[str],
-                 subject_ids: List[str],
-                 labels_classes: Union[int, List[int]] = 2,
+    def __init__(
+            self,
+            path: str,
+            sampling_rate: int,
+            electrodes: Union[int, List[str]],
+            labels: List[str],
+            subject_ids: List[str],
+            labels_classes: Union[int, List[int]] = 2,
 
-                 window_size: Optional[Union[float, int]] = 1,
-                 window_stride: Optional[Union[float, int]] = None,
-                 drop_last: Optional[bool] = False,
+            window_size: Optional[Union[float, int]] = 1,
+            window_stride: Optional[Union[float, int]] = None,
+            drop_last: Optional[bool] = False,
 
-                 discretize_labels: bool = False,
-                 normalize_eegs: bool = True,
-                 ):
+            discretize_labels: bool = False,
+            normalize_eegs: bool = True,
+            name: Optional[str] = None,
+    ):
         super().__init__()
 
         assert isdir(path)
         self.path: str = path
+        assert name is None or isinstance(name, str)
+        self.name = name
 
         assert isinstance(sampling_rate, int)
         self.sampling_rate: int = sampling_rate
@@ -86,6 +91,12 @@ class EEGClassificationDataset(Dataset, ABC):
         self.normalize_eegs: bool = normalize_eegs
 
         self.eegs_data, self.labels_data, self.subject_ids_data = self.load_data()
+        # discard corrupted and null experiments
+        non_null_indices = {i for i, eegs in enumerate(self.eegs_data)
+                            if np.count_nonzero(np.isnan(eegs)) <= eegs.size * 0.9}
+        self.eegs_data = [v for i, v in enumerate(self.eegs_data) if i in non_null_indices]
+        self.labels_data = [v for i, v in enumerate(self.labels_data) if i in non_null_indices]
+        self.subject_ids_data = [v for i, v in enumerate(self.subject_ids_data) if i in non_null_indices]
         if self.normalize_eegs:
             self.eegs_data = self.normalize(self.eegs_data)
         self.windows = self.get_windows()
@@ -124,22 +135,25 @@ class EEGClassificationDataset(Dataset, ABC):
         pass
 
     def normalize(self, eegs: List[np.ndarray]):
-        # loops through the experiments
+        # scales to zero mean and unit variance
         for i_experiment, experiment in enumerate(eegs):
-            # scales the experiment to zero mean and unit variance
-            experiment_scaled = (experiment - experiment.mean(axis=0)) / experiment.std(axis=0)
+            # experiment_scaled = (experiment - experiment.mean(axis=0)) / experiment.std(axis=0)
+            scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
+                                                              verbose=False, ch_types="eeg"),
+                                         scalings="median")
+            scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
+            experiment_scaled = einops.rearrange(
+                scaler.transform(einops.rearrange(experiment,
+                                                  "s c -> () c s")),
+                "b c s -> s (b c)")
             experiment_scaled = np.nan_to_num(experiment_scaled)
-            # scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
-            #                                                   verbose=False, ch_types="eeg"),
-            #                              scalings="median")
-            # scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
-            # experiment_scaled = einops.rearrange(
-            #     scaler.transform(einops.rearrange(experiment,
-            #                                       "s c -> () c s")),
-            #     "b c s -> s (b c)")
-            # scales to microvolts
-            experiment_scaled *= 1e-6
             eegs[i_experiment] = experiment_scaled
+        # scales between -1 and 1
+        min_values = np.stack([experiment.min(axis=0) for experiment in eegs]).min(axis=0)
+        max_values = np.stack([experiment.max(axis=0) for experiment in eegs]).max(axis=0)
+        eegs = [2 * ((e - min_values) / (max_values - min_values)) - 1 for e in eegs]
+        # scales to microvolts
+        eegs = [e * 40e-6 for e in eegs]
         return eegs
 
     def get_windows(self) -> List[Dict[str, Union[int, str]]]:
@@ -160,8 +174,9 @@ class EEGClassificationDataset(Dataset, ABC):
                 windows += [window]
         return windows
 
-    def plot_samples(self) -> None:
-        raw_mne_array = mne.io.RawArray(einops.rearrange(self[0][0], "s c -> c s"),
+    def plot_sample(self, i: int) -> None:
+        assert isinstance(i, int) and (i >= 0)
+        raw_mne_array = mne.io.RawArray(einops.rearrange(self[i]["eegs"], "s c -> c s"),
                                         info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
                                                              verbose=False, ch_types="eeg"), verbose=False)
         raw_mne_array.plot()
@@ -245,6 +260,8 @@ class EEGClassificationDataset(Dataset, ABC):
         fig, axs = plt.subplots(nrows=rows, ncols=cols,
                                 figsize=(scale * cols, scale * rows),
                                 tight_layout=True)
+        if self.name is not None:
+            title = f"{title} - {self.name} dataset"
         fig.suptitle(title)
         for i_electrode, ax in enumerate(axs.flat):
             if i_electrode >= len(self.electrodes):
@@ -258,6 +275,7 @@ class EEGClassificationDataset(Dataset, ABC):
             ax.set_xlabel("mV")
             ax.set_ylabel("count")
             ax.set_yscale("log")
+            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
         # adjusts the ylim
         max_ylim = max([ax.get_ylim()[-1] for ax in axs.flat])
         for ax in axs.flat:

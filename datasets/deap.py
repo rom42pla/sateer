@@ -1,3 +1,4 @@
+import random
 from multiprocessing import Pool
 from os.path import isdir, join, splitext, basename
 from typing import Dict, List, Tuple
@@ -13,16 +14,19 @@ from datasets.eeg_emrec import EEGClassificationDataset
 
 class DEAPDataset(EEGClassificationDataset):
     def __init__(self, path: str, **kwargs):
-        super(DEAPDataset, self).__init__(path=path,
-                                          sampling_rate=128,
-                                          electrodes=["Fp1", "AF3", "F3", "F7", "FC5", "FC1", "C3", "T7", "CP5",
-                                                      "CP1", "P3", "P7", "PO3", "O1", "Oz", "Pz", "Fp2", "AF4",
-                                                      "Fz", "F4", "F8", "FC6", "FC2", "Cz", "C4", "T8", "CP6",
-                                                      "CP2", "P4", "P8", "PO4", "O2"],
-                                          labels=["valence", "arousal", "dominance", "liking"],
-                                          labels_classes=2,
-                                          subject_ids=DEAPDataset.get_subject_ids_static(path=path),
-                                          **kwargs)
+        super(DEAPDataset, self).__init__(
+            name="DEAP",
+            path=path,
+            sampling_rate=128,
+            electrodes=["Fp1", "AF3", "F3", "F7", "FC5", "FC1", "C3", "T7", "CP5",
+                        "CP1", "P3", "P7", "PO3", "O1", "Oz", "Pz", "Fp2", "AF4",
+                        "Fz", "F4", "F8", "FC6", "FC2", "Cz", "C4", "T8", "CP6",
+                        "CP2", "P4", "P8", "PO4", "O2"],
+            labels=["valence", "arousal", "dominance", "liking"],
+            labels_classes=2,
+            subject_ids=DEAPDataset.get_subject_ids_static(path=path),
+            **kwargs
+        )
 
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray], List[str]]:
         global parse_eegs
@@ -70,6 +74,6 @@ class DEAPDataset(EEGClassificationDataset):
 
 if __name__ == "__main__":
     dataset = DEAPDataset(path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "deap"),
-                          discretize_labels=True, normalize_eegs=True, split_in_windows=True)
-    dataset.plot_labels_distribution()
+                          discretize_labels=True, normalize_eegs=True, window_size=1, window_stride=1)
+    # dataset.plot_sample(i=random.randint(0, len(dataset)))
     dataset.plot_amplitudes_distribution()
