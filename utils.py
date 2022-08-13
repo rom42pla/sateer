@@ -208,10 +208,6 @@ def train_k_fold(
                 train_dataloaders=dataloader_train,
                 val_dataloaders=dataloader_val
             )
-            # Results can be found in
-            print(lr_finder.results)
-
-            # Plot with
             fig = lr_finder.plot(suggest=True)
             fig.show()
             new_lr = lr_finder.suggestion()
