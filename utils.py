@@ -200,9 +200,22 @@ def train_k_fold(
         )
         # eventually selects a starting learning rate
         if auto_lr_finder is True:
-            trainer.tune(model,
-                         train_dataloaders=dataloader_train,
-                         val_dataloaders=dataloader_val)
+            # trainer.tune(model,
+            #              train_dataloaders=dataloader_train,
+            #              val_dataloaders=dataloader_val)
+            lr_finder = trainer.tuner.lr_find(
+                model,
+                train_dataloaders=dataloader_train,
+                val_dataloaders=dataloader_val
+            )
+            # Results can be found in
+            print(lr_finder.results)
+
+            # Plot with
+            fig = lr_finder.plot(suggest=True)
+            fig.show()
+            new_lr = lr_finder.suggestion()
+            model.hparams.learning_rate = new_lr
             logging.info(f"learning rate has been set to {model.learning_rate}")
         # trains the model
         trainer.fit(model,
