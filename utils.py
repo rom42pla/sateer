@@ -88,7 +88,8 @@ def merge_logs(experiment_path: str,
 
 def init_callbacks(
         progress_bar: bool = True,
-        swa: bool = False
+        swa: bool = False,
+        learning_rate: float = 1e-4,
 ) -> List[Callback]:
     callbacks: List[Callback] = [
         EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-3, patience=5,
@@ -100,7 +101,7 @@ def init_callbacks(
         ]
     if swa:
         callbacks += [
-            StochasticWeightAveraging(),
+            StochasticWeightAveraging(swa_lrs=learning_rate),
         ]
     return callbacks
 
@@ -125,8 +126,8 @@ def train_k_fold(
         max_epochs: int = 1000,
         precision: int = 32,
         auto_lr_finder: bool = False,
-        gradient_clipping: bool = True,
-        stochastic_weight_average: bool = False,
+        disable_gradient_clipping: bool = False,
+        disable_swa: bool = True,
         progress_bar: bool = True,
         **kwargs,
 ) -> pd.DataFrame:
@@ -194,9 +195,13 @@ def train_k_fold(
             enable_progress_bar=progress_bar,
             enable_model_summary=False,
             enable_checkpointing=False,
-            gradient_clip_val=1 if gradient_clipping else 0,
+            gradient_clip_val=1 if disable_gradient_clipping is False else 0,
             auto_lr_find=False if auto_lr_finder is False else "learning_rate",
-            callbacks=init_callbacks(progress_bar=progress_bar, swa=stochastic_weight_average),
+            callbacks=init_callbacks(
+                progress_bar=progress_bar,
+                swa=not disable_swa,
+                learning_rate=model.learning_rate,
+            ),
         )
         # eventually selects a starting learning rate
         if auto_lr_finder is True:
@@ -242,8 +247,8 @@ def train(
         max_epochs: int = 1000,
         precision: int = 32,
         auto_lr_finder: bool = False,
-        gradient_clipping: bool = True,
-        stochastic_weight_average: bool = False,
+        disable_gradient_clipping: bool = False,
+        disable_swa: bool = True,
         limit_train_batches: float = 1.0,
         **kwargs,
 ) -> pd.DataFrame:
@@ -282,10 +287,11 @@ def train(
         enable_progress_bar=True,
         enable_model_summary=False,
         enable_checkpointing=False,
-        gradient_clip_val=1 if gradient_clipping else 0,
+        gradient_clip_val=1 if disable_gradient_clipping is False else 0,
         auto_lr_find=auto_lr_finder,
         limit_train_batches=limit_train_batches,
-        callbacks=init_callbacks(swa=stochastic_weight_average)
+        callbacks=init_callbacks(swa=not disable_swa,
+                                 learning_rate=model.learning_rate)
     )
     # eventually selects a starting learning rate
     if auto_lr_finder is True:

@@ -138,14 +138,14 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=float,
                         help="The amount of gaussian noise to add to the EEGs during data augmentation")
     parser.add_argument("--learning_rate",
-                        default=2e-4,
+                        default=1e-4,
                         type=float,
                         help="Learning rate of the model")
-    parser.add_argument("--gradient_clipping",
-                        default=True,
+    parser.add_argument("--disable_gradient_clipping",
+                        default=False,
                         action="store_true",
                         help="Whether to clip the gradients to 1")
-    parser.add_argument("--stochastic_weight_average",
+    parser.add_argument("--disable_swa",
                         default=False,
                         action="store_true",
                         help="Whether to use the SWA algorithm")
