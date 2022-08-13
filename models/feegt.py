@@ -451,8 +451,23 @@ class FouriEEGTransformer(pl.LightningModule):
         optimizer.zero_grad(set_to_none=True)
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(),
-                                 lr=self.hparams.learning_rate)
+        optimizer = torch.optim.AdamW(self.parameters(),
+                                      lr=self.hparams.learning_rate)
+        scheduler = {
+            "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                factor=0.5,
+                mode="min",
+                patience=3,
+                verbose=True,
+            ),
+            "monitor": "loss_val",
+            "frequency": 1,
+        }
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": scheduler,
+        }
 
     def on_fit_end(self) -> None:
         if self.logger is not None:
