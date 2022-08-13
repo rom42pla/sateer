@@ -478,7 +478,7 @@ class FouriEEGTransformer(pl.LightningModule):
             "monitor": "loss_val",
             "frequency": 1,
         }
-        return optimizers, scheduler
+        return [optimizers], [scheduler]
 
     def on_fit_end(self) -> None:
         if self.logger is not None:
