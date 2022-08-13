@@ -263,8 +263,8 @@ class FouriEEGTransformer(pl.LightningModule):
         # makes a fresh copy of the input to avoid errors
         eegs = input_eegs.clone()  # (b s c) or (s c)
 
-        # cast from microvolts to decivolts
-        eegs *= 1e5
+        # # cast from microvolts to volts
+        # eegs *= 1e6
 
         # eventually adds a batch dimension
         is_batched = True if len(eegs.shape) == 3 else False
