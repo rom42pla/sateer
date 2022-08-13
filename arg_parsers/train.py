@@ -66,6 +66,11 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=str,
                         choices={"cross_subject", "within_subject"},
                         help="The setting of the experiment, whether cross- or within-subject")
+    parser.add_argument("--precision",
+                        default=16,
+                        choices={16, 32},
+                        type=int,
+                        help="Number of bits per float")
 
     # architecture
     parser.add_argument("--encoder_only",

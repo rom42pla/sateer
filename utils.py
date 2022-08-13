@@ -123,7 +123,7 @@ def train_k_fold(
         k_folds: int = 10,
         batch_size: int = 64,
         max_epochs: int = 1000,
-        precision: int = 16 if torch.cuda.is_available() else 32,
+        precision: int = 32,
         auto_lr_finder: bool = False,
         gradient_clipping: bool = True,
         stochastic_weight_average: bool = False,
