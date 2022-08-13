@@ -203,45 +203,6 @@ def train_k_fold(
                 learning_rate=learning_rate,
             ),
         )
-        # eventually selects a starting learning rate
-        if auto_lr_finder is True:
-            tuning_model: FouriEEGTransformer = FouriEEGTransformer(
-                in_channels=len(dataset.electrodes),
-                sampling_rate=dataset.sampling_rate,
-                labels=dataset.labels,
-                labels_classes=dataset.labels_classes,
-
-                mels=kwargs['mels'],
-                mel_window_size=kwargs['mel_window_size'],
-                mel_window_stride=kwargs['mel_window_stride'],
-
-                users_embeddings=not kwargs['disable_users_embeddings'],
-
-                encoder_only=kwargs['encoder_only'],
-                mixing_sublayer_type=kwargs['mixing_sublayer_type'],
-                hidden_size=kwargs['hidden_size'],
-                num_encoders=kwargs['num_encoders'],
-                num_decoders=kwargs['num_decoders'],
-                num_attention_heads=kwargs['num_attention_heads'],
-                positional_embedding_type=kwargs['positional_embedding_type'],
-                max_position_embeddings=kwargs['max_position_embeddings'],
-                dropout_p=kwargs['dropout_p'],
-
-                data_augmentation=not kwargs['disable_data_augmentation'],
-                cropping=not kwargs['disable_cropping'],
-                flipping=not kwargs['disable_flipping'],
-                noise_strength=kwargs['noise_strength'],
-
-                learning_rate=learning_rate,
-                device="cuda" if torch.cuda.is_available() else "cpu",
-            )
-            deepcopy(trainer).tune(tuning_model,
-                                   train_dataloaders=deepcopy(dataloader_train),
-                                   val_dataloaders=deepcopy(dataloader_val))
-            learning_rate = float(f'{tuning_model.learning_rate:+.1g}')
-            del tuning_model
-            logging.info(f"optimal learning rate is {learning_rate}")
-
         model: FouriEEGTransformer = FouriEEGTransformer(
             in_channels=len(dataset.electrodes),
             sampling_rate=dataset.sampling_rate,
@@ -269,9 +230,47 @@ def train_k_fold(
             flipping=not kwargs['disable_flipping'],
             noise_strength=kwargs['noise_strength'],
 
-            learning_rate=learning_rate,
+            learning_rate=kwargs['learning_rate'],
             device="cuda" if torch.cuda.is_available() else "cpu",
         )
+        # eventually selects a starting learning rate
+        if auto_lr_finder is True:
+            # tuning_model: FouriEEGTransformer = FouriEEGTransformer(
+            #     in_channels=len(dataset.electrodes),
+            #     sampling_rate=dataset.sampling_rate,
+            #     labels=dataset.labels,
+            #     labels_classes=dataset.labels_classes,
+            #
+            #     mels=kwargs['mels'],
+            #     mel_window_size=kwargs['mel_window_size'],
+            #     mel_window_stride=kwargs['mel_window_stride'],
+            #
+            #     users_embeddings=not kwargs['disable_users_embeddings'],
+            #
+            #     encoder_only=kwargs['encoder_only'],
+            #     mixing_sublayer_type=kwargs['mixing_sublayer_type'],
+            #     hidden_size=kwargs['hidden_size'],
+            #     num_encoders=kwargs['num_encoders'],
+            #     num_decoders=kwargs['num_decoders'],
+            #     num_attention_heads=kwargs['num_attention_heads'],
+            #     positional_embedding_type=kwargs['positional_embedding_type'],
+            #     max_position_embeddings=kwargs['max_position_embeddings'],
+            #     dropout_p=kwargs['dropout_p'],
+            #
+            #     data_augmentation=not kwargs['disable_data_augmentation'],
+            #     cropping=not kwargs['disable_cropping'],
+            #     flipping=not kwargs['disable_flipping'],
+            #     noise_strength=kwargs['noise_strength'],
+            #
+            #     learning_rate=learning_rate,
+            #     device="cuda" if torch.cuda.is_available() else "cpu",
+            # )
+            deepcopy(trainer).tune(model,
+                                   train_dataloaders=deepcopy(dataloader_train),
+                                   val_dataloaders=deepcopy(dataloader_val))
+            learning_rate = float(f'{model.learning_rate:+.1g}')
+            logging.info(f"optimal learning rate is {learning_rate}")
+
         # trains the model
         trainer.fit(model,
                     train_dataloaders=dataloader_train,
