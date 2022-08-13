@@ -51,44 +51,12 @@ if __name__ == '__main__':
         normalize_eegs=not args['dont_normalize_eegs'],
     )
 
-    # sets up the model
-    model: FouriEEGTransformer = FouriEEGTransformer(
-        in_channels=len(dataset.electrodes),
-        sampling_rate=dataset.sampling_rate,
-        labels=dataset.labels,
-        labels_classes=dataset.labels_classes,
-
-        mels=args['mels'],
-        mel_window_size=args['mel_window_size'],
-        mel_window_stride=args['mel_window_stride'],
-
-        users_embeddings=not args['disable_users_embeddings'],
-
-        encoder_only=args['encoder_only'],
-        mixing_sublayer_type=args['mixing_sublayer_type'],
-        hidden_size=args['hidden_size'],
-        num_encoders=args['num_encoders'],
-        num_decoders=args['num_decoders'],
-        num_attention_heads=args['num_attention_heads'],
-        positional_embedding_type=args['positional_embedding_type'],
-        max_position_embeddings=args['max_position_embeddings'],
-        dropout_p=args['dropout_p'],
-
-        data_augmentation=not args['disable_data_augmentation'],
-        cropping=not args['disable_cropping'],
-        flipping=not args['disable_flipping'],
-        noise_strength=args['noise_strength'],
-
-        learning_rate=args['learning_rate'],
-        device="cuda" if torch.cuda.is_available() else "cpu",
-    )
-
     if args['setting'] == "cross_subject":
         if args['validation'] == "k_fold":
             # starts the kfold training
             logging.info(f"training on {args['dataset_type']} dataset "
                          f"({len(dataset)} samples)")
-            train_k_fold(dataset=dataset, base_model=model,
+            train_k_fold(dataset=dataset,
                          experiment_path=experiment_path,
                          **args)
             plot_cross_subject(path=experiment_path)

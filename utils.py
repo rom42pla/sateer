@@ -23,8 +23,10 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from datasets.amigos import AMIGOSDataset
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
+from datasets.eeg_emrec import EEGClassificationDataset
 from datasets.seed import SEEDDataset
 from loggers.logger import FouriEEGTransformerLogger
+from models.feegt import FouriEEGTransformer
 
 
 def parse_dataset_class(name: str):
@@ -118,14 +120,14 @@ def read_json(path: str) -> Dict:
 
 
 def train_k_fold(
-        dataset: Dataset,
-        base_model: pl.LightningModule,
+        dataset: EEGClassificationDataset,
         experiment_path: str,
         k_folds: int = 10,
         batch_size: int = 64,
         max_epochs: int = 1000,
         precision: int = 32,
         auto_lr_finder: bool = False,
+        learning_rate: float = 5e-5,
         disable_gradient_clipping: bool = False,
         disable_swa: bool = True,
         progress_bar: bool = True,
@@ -143,8 +145,6 @@ def train_k_fold(
            and {i for f in folds_indices for i in f} == set(range(len(dataset)))
     # loops over folds
     for i_fold in range(k_folds):
-        # makes a fresh copy of the base model
-        model = deepcopy(base_model)
         # retrieves training and validation sets
         train_indices: List[int] = [i
                                     for fold_no, fold in enumerate(folds_indices)
@@ -200,33 +200,83 @@ def train_k_fold(
             callbacks=init_callbacks(
                 progress_bar=progress_bar,
                 swa=not disable_swa,
-                learning_rate=model.learning_rate,
+                learning_rate=learning_rate,
             ),
         )
         # eventually selects a starting learning rate
         if auto_lr_finder is True:
-            trainer.tune(model,
+            tuning_model: FouriEEGTransformer = FouriEEGTransformer(
+                in_channels=len(dataset.electrodes),
+                sampling_rate=dataset.sampling_rate,
+                labels=dataset.labels,
+                labels_classes=dataset.labels_classes,
+
+                mels=kwargs['mels'],
+                mel_window_size=kwargs['mel_window_size'],
+                mel_window_stride=kwargs['mel_window_stride'],
+
+                users_embeddings=not kwargs['disable_users_embeddings'],
+
+                encoder_only=kwargs['encoder_only'],
+                mixing_sublayer_type=kwargs['mixing_sublayer_type'],
+                hidden_size=kwargs['hidden_size'],
+                num_encoders=kwargs['num_encoders'],
+                num_decoders=kwargs['num_decoders'],
+                num_attention_heads=kwargs['num_attention_heads'],
+                positional_embedding_type=kwargs['positional_embedding_type'],
+                max_position_embeddings=kwargs['max_position_embeddings'],
+                dropout_p=kwargs['dropout_p'],
+
+                data_augmentation=not kwargs['disable_data_augmentation'],
+                cropping=not kwargs['disable_cropping'],
+                flipping=not kwargs['disable_flipping'],
+                noise_strength=kwargs['noise_strength'],
+
+                learning_rate=learning_rate,
+                device="cuda" if torch.cuda.is_available() else "cpu",
+            )
+            trainer.tune(tuning_model,
                          train_dataloaders=dataloader_train,
                          val_dataloaders=dataloader_val)
-            # lr_finder = trainer.tuner.lr_find(
-            #     model,
-            #     train_dataloaders=dataloader_train,
-            #     val_dataloaders=dataloader_val
-            # )
-            # fig = lr_finder.plot(suggest=True)
-            # fig.show()
-            # new_lr = lr_finder.suggestion()
-            # model.hparams.learning_rate = new_lr
-            model.configure_optimizers()
-            logging.info(f"learning rate has been set to {model.hparams.learning_rate}")
+            learning_rate = tuning_model.learning_rate
+            del tuning_model
+            logging.info(f"optimal learning rate is {learning_rate}")
 
+        model: FouriEEGTransformer = FouriEEGTransformer(
+            in_channels=len(dataset.electrodes),
+            sampling_rate=dataset.sampling_rate,
+            labels=dataset.labels,
+            labels_classes=dataset.labels_classes,
+
+            mels=kwargs['mels'],
+            mel_window_size=kwargs['mel_window_size'],
+            mel_window_stride=kwargs['mel_window_stride'],
+
+            users_embeddings=not kwargs['disable_users_embeddings'],
+
+            encoder_only=kwargs['encoder_only'],
+            mixing_sublayer_type=kwargs['mixing_sublayer_type'],
+            hidden_size=kwargs['hidden_size'],
+            num_encoders=kwargs['num_encoders'],
+            num_decoders=kwargs['num_decoders'],
+            num_attention_heads=kwargs['num_attention_heads'],
+            positional_embedding_type=kwargs['positional_embedding_type'],
+            max_position_embeddings=kwargs['max_position_embeddings'],
+            dropout_p=kwargs['dropout_p'],
+
+            data_augmentation=not kwargs['disable_data_augmentation'],
+            cropping=not kwargs['disable_cropping'],
+            flipping=not kwargs['disable_flipping'],
+            noise_strength=kwargs['noise_strength'],
+
+            learning_rate=learning_rate,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
         # trains the model
         trainer.fit(model,
                     train_dataloaders=dataloader_train,
                     val_dataloaders=dataloader_val)
         assert not trainer.logger.logs.empty
-        assert base_model.state_dict().__str__() != model.state_dict().__str__(), \
-            f"model not updating"
         fold_logs = deepcopy(trainer.logger.logs)
         fold_logs["fold"] = i_fold
         logs = pd.concat([logs, fold_logs], ignore_index=True)
@@ -303,6 +353,7 @@ def train(
         model.hparams.learning_rate = model.hparams.lr = tuning_model.learning_rate
         model.optimizers().optimizer.param_groups[0]["lr"] = tuning_model.learning_rate
         logging.info(f"learning rate has been set to {tuning_model.learning_rate}")
+
     # trains the model
     trainer.fit(model,
                 train_dataloaders=dataloader_train,
