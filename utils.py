@@ -238,7 +238,7 @@ def train_k_fold(
             trainer.tune(tuning_model,
                          train_dataloaders=dataloader_train,
                          val_dataloaders=dataloader_val)
-            learning_rate = tuning_model.learning_rate
+            learning_rate = float(f'{tuning_model.learning_rate:+.1g}')
             del tuning_model
             logging.info(f"optimal learning rate is {learning_rate}")
 
