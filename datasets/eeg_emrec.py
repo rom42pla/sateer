@@ -176,12 +176,32 @@ class EEGClassificationDataset(Dataset, ABC):
                 windows += [window]
         return windows
 
-    def plot_sample(self, i: int) -> None:
-        assert isinstance(i, int) and (i >= 0)
-        raw_mne_array = mne.io.RawArray(einops.rearrange(self[i]["eegs"], "s c -> c s"),
-                                        info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
-                                                             verbose=False, ch_types="eeg"), verbose=False)
-        raw_mne_array.plot()
+    def plot_sample(
+            self,
+            i: int,
+            title: str = f"sample",
+            scale: Union[int, float] = 5,
+    ) -> None:
+        assert isinstance(i, int) and i >= 0
+        cols = 4
+        rows = len(self.electrodes) // cols
+        fig, axs = plt.subplots(nrows=rows, ncols=cols,
+                                figsize=(scale * cols//2, scale * rows//4),
+                                tight_layout=True)
+        # fig.suptitle(title)
+        for i_ax, ax in enumerate(axs.flat):
+            if i_ax >= len(self.electrodes):
+                ax.set_visible(False)
+                continue
+            axs.flat[i_ax].plot(self[i]["eegs"][:, i_ax])
+            axs.flat[i_ax].set_title(self.electrodes[i_ax])
+            axs.flat[i_ax].set_ylim(self[i]["eegs"].min(), self[i]["eegs"].max())
+        plt.show()
+        fig.clf()
+        # raw_mne_array = mne.io.RawArray(einops.rearrange(self[i]["eegs"], "s c -> c s"),
+        #                                 info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
+        #                                                      verbose=False, ch_types="eeg"), verbose=False)
+        # raw_mne_array.plot()
 
     def plot_subjects_distribution(self) -> None:
         subject_indices_samples = sorted([s["subject_id"]

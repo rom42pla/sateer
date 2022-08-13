@@ -75,5 +75,6 @@ class DEAPDataset(EEGClassificationDataset):
 if __name__ == "__main__":
     dataset = DEAPDataset(path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "deap"),
                           discretize_labels=True, normalize_eegs=True, window_size=1, window_stride=1)
-    # dataset.plot_sample(i=random.randint(0, len(dataset)))
+    dataset.plot_sample(i=random.randint(0, len(dataset)))
     dataset.plot_amplitudes_distribution()
+    dataset.plot_labels_distribution()
