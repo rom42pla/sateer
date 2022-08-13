@@ -92,7 +92,7 @@ def init_callbacks(
         learning_rate: float = 1e-4,
 ) -> List[Callback]:
     callbacks: List[Callback] = [
-        EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-3, patience=5,
+        EarlyStopping(monitor="loss_val", mode="min", min_delta=1e-3, patience=10,
                       verbose=False, check_on_train_epoch_end=False, strict=True),
     ]
     if progress_bar:
