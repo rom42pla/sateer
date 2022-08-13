@@ -469,7 +469,7 @@ class FouriEEGTransformer(pl.LightningModule):
         optimizers = [optimizer_merge_mels, optimizer_transformer]
         scheduler = {
             "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer,
+                optimizer_transformer,
                 factor=0.1,
                 mode="min",
                 patience=3,
