@@ -230,7 +230,7 @@ def train_k_fold(
             flipping=not kwargs['disable_flipping'],
             noise_strength=kwargs['noise_strength'],
 
-            learning_rate=kwargs['learning_rate'],
+            learning_rate=learning_rate,
             device="cuda" if torch.cuda.is_available() else "cpu",
         )
         # eventually selects a starting learning rate

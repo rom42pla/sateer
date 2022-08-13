@@ -138,7 +138,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=float,
                         help="The amount of gaussian noise to add to the EEGs during data augmentation")
     parser.add_argument("--learning_rate",
-                        default=1e-4,
+                        default=5e-5,
                         type=float,
                         help="Learning rate of the model")
     parser.add_argument("--disable_gradient_clipping",
