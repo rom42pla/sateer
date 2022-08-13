@@ -239,11 +239,13 @@ class FouriEEGTransformer(pl.LightningModule):
                 label,
                 nn.Sequential(OrderedDict([
                     ("linear1", nn.Linear(in_features=self.hidden_size,
-                                          out_features=self.hidden_size * 4)),
-                    ("activation", nn.SELU()),
-                    ("dropout", nn.AlphaDropout(p=self.dropout_p)),
-                    ("linear2", nn.Linear(in_features=self.hidden_size * 4,
                                           out_features=self.labels_classes[i_label])),
+                    # ("linear1", nn.Linear(in_features=self.hidden_size,
+                    #                       out_features=self.hidden_size * 4)),
+                    # ("activation", nn.SELU()),
+                    # ("dropout", nn.AlphaDropout(p=self.dropout_p)),
+                    # ("linear2", nn.Linear(in_features=self.hidden_size * 4,
+                    #                       out_features=self.labels_classes[i_label])),
                 ])))
 
         self.float()
@@ -460,8 +462,11 @@ class FouriEEGTransformer(pl.LightningModule):
         optimizer.zero_grad(set_to_none=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(),
-                                      lr=self.learning_rate)
+        optimizer_merge_mels = torch.optim.AdamW(self.merge_mels.parameters(),
+                                                 lr=self.learning_rate)
+        optimizer_transformer = torch.optim.AdamW(self.parameters(),
+                                                  lr=self.learning_rate)
+        optimizers = [optimizer_merge_mels, optimizer_transformer]
         scheduler = {
             "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer,
@@ -473,10 +478,7 @@ class FouriEEGTransformer(pl.LightningModule):
             "monitor": "loss_val",
             "frequency": 1,
         }
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-        }
+        return optimizers, scheduler
 
     def on_fit_end(self) -> None:
         if self.logger is not None:

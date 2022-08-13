@@ -21,6 +21,7 @@ request_disk = 100G
 +MountHomes=FALSE
 queue 1" > run.sub
 
+cat run.sub
 condor_submit run.sub
 rm run.sub
 condor_q
