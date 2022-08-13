@@ -34,7 +34,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         help="Whether not to normalize the EEGs with zero mean and unit variance")
     parser.add_argument("--checkpoints_path",
                         type=str,
-                        help="Path to where to save the checkpoints")
+                        help="Path to where to save the saved")
     parser.add_argument("--seed",
                         type=int,
                         help="The seed for reproducibility")

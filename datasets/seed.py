@@ -1,25 +1,17 @@
-import gc
-import json
-import re
-import uuid
-from multiprocessing import Pool
-from os.path import isdir, join, splitext, basename, exists
-from pprint import pprint
-from typing import Dict, List, Tuple, Any, Union
-
 import os
+import re
+from os.path import isdir, join, basename, splitext
+from typing import List, Tuple
 
-import numpy as np
-import scipy.io as sio
-import pickle
 import einops
-from torch.utils.data import DataLoader
+import scipy.io as sio
+import numpy as np
 from tqdm import tqdm
 
-from datasets.eeg_emrec_cached import EEGClassificationDatasetCached
+from datasets.eeg_emrec import EEGClassificationDataset
 
 
-class SEEDDataset(EEGClassificationDatasetCached):
+class SEEDDataset(EEGClassificationDataset):
     def __init__(self, path: str, **kwargs):
         super(SEEDDataset, self).__init__(path=path,
                                           sampling_rate=200,
@@ -37,63 +29,25 @@ class SEEDDataset(EEGClassificationDatasetCached):
                                           **kwargs)
 
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray], List[str]]:
-        pass
-
-    def preprocess_files(self) -> List[Dict[str, Union[bool, int, str, List[Union[int, float]]]]]:
-        lookup: List[Dict[str, Union[bool, int, str, List[Union[int, float]]]]] = []
         labels_common: np.ndarray = sio.loadmat(join(self.path, "Preprocessed_EEG", "label.mat"),
                                                 simplify_cells=True)["label"]
+        eegs: List[np.ndarray] = []
+        labels: List[np.ndarray] = []
+        subject_ids: List[str] = []
         # loops through subjects
         for subject_id in tqdm(self.subject_ids, desc=f"preprocessing SEED dataset files"):
-            # eventually creates the directory
-            if not isdir(join(self.path, "_cached_files", subject_id)):
-                os.makedirs(join(self.path, "_cached_files", subject_id))
             subject_files = {s
                              for s in os.listdir(join(self.path, "Preprocessed_EEG"))
                              if re.fullmatch(f"{subject_id}_.*", s)}
             for subject_file in subject_files:
-                # checks if the lookup json exists and it's valide
-                if exists(join(self.path, "_cached_files", subject_id, "lookup.json")):
-                    # reads the lookup
-                    with open(join(self.path, "_cached_files", subject_id, "lookup.json"), "r") as fp:
-                        lookup_subject = json.load(fp)
-                    # checks that all files exists
-                    if all([exists(join(self.path, "_cached_files", subject_id, record["filename"]))
-                            for record in lookup_subject]):
-                        lookup += lookup_subject
-                        continue
-                    # removes the previous, corrupted directory
-                    os.removedirs(join(self.path, "_cached_files", subject_id))
-                    os.makedirs(join(self.path, "_cached_files", subject_id))
-                lookup_subject: List[Dict[str, str]] = []
                 subject_data = sio.loadmat(join(self.path, "Preprocessed_EEG", subject_file),
                                            simplify_cells=True)
                 for key in {k for k in subject_data.keys() if re.fullmatch(r".+_eeg[0-9]+", k)}:
                     trial_number = int(re.search(r"[0-9]+", key.split("_")[-1])[0])
-                    filename = f"{uuid.uuid4().hex[:16]}.npy"
-                    eegs = einops.rearrange(subject_data[key], "c s -> s c")
-                    label = labels_common[trial_number - 1] + 1
-                    # if self.discretize_labels \
-                    # else ((labels_common[trial_number - 1] + 1) / 2)
-                    np.save(join(self.path, "_cached_files", subject_id, filename), eegs)
-                    lookup_subject += [{
-                        "filename": filename,
-                        "labels": [int(label)],
-                        # "discretized_labels": self.discretize_labels,
-                        "subject_id": subject_id,
-                        "duration": len(eegs)
-                    }]
-                with open(join(self.path, "_cached_files", subject_id, "lookup.json"), "w") as fp:
-                    json.dump(lookup_subject, fp, indent=4)
-                lookup += lookup_subject
-        return lookup
-
-    def get_processed_labels(self, labels: List[int]) -> List[int]:
-        if self.discretize_labels:
-            labels = [l + 1 for l in labels]
-        else:
-            labels = [(l + 1) / 2 for l in labels]
-        return labels
+                    eegs += [einops.rearrange(subject_data[key], "c s -> s c")]
+                    labels += [np.asarray([labels_common[trial_number - 1] + 1])]
+                    subject_ids += [subject_id]
+        return eegs, labels, subject_ids
 
     @staticmethod
     def get_subject_ids_static(path: str) -> List[str]:
@@ -106,13 +60,5 @@ class SEEDDataset(EEGClassificationDatasetCached):
 
 
 if __name__ == "__main__":
-    dataset_path = join("..", "..", "..", "datasets", "eeg_emotion_recognition", "seed")
-    dataset = SEEDDataset(path=dataset_path,
-                          discretize_labels=True, normalize_eegs=True, split_in_windows=True,
-                          window_size=10, window_stride=0.5)
-    print("loaded", len(dataset))
-    dl = DataLoader(dataset, batch_size=1024, num_workers=2)
-    for b in tqdm(dl, total=len(dl)):
-        pass
-    # dataset.plot_labels_distribution()
-    # dataset.plot_amplitudes_distribution()
+    dataset = SEEDDataset(path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "seed"),
+                          discretize_labels=True, normalize_eegs=True)

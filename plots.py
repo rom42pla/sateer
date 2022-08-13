@@ -208,7 +208,7 @@ def plot_ablation(
 
 
 if __name__ == "__main__":
-    # plot_ablation(path=join("checkpoints", "ablation_saved", "dreamer_data_augmentation"))
+    # plot_ablation(path=join("saved", "ablation_saved", "dreamer_data_augmentation"))
     for filename in listdir(join("checkpoints", "cross_saved")):
         print(join("checkpoints", "cross_saved", filename))
         plot_cross_subject(path=join("checkpoints", "cross_saved", filename))

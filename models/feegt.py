@@ -29,7 +29,7 @@ from torchaudio import transforms
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
 from datasets.eeg_emrec import EEGClassificationDataset
-from datasets.seed_sync import SEEDDataset
+from datasets.seed import SEEDDataset
 from models.layers import AddGaussianNoise, MelSpectrogram, \
     GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings, GetUserEmbeddings
 

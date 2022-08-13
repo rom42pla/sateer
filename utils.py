@@ -7,7 +7,7 @@ import re
 import warnings
 from copy import deepcopy
 from os.path import join, isdir, exists
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -15,19 +15,16 @@ import pandas as pd
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning import Callback
-from pytorch_lightning.callbacks import EarlyStopping, RichProgressBar, StochasticWeightAveraging
+from pytorch_lightning.callbacks import EarlyStopping, StochasticWeightAveraging
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
-from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
 from torch.utils.data import Dataset, DataLoader, Subset
-import pytorch_lightning as pl
 
 from datasets.amigos import AMIGOSDataset
 from datasets.deap import DEAPDataset
 from datasets.dreamer import DREAMERDataset
-from datasets.seed_sync import SEEDDataset
+from datasets.seed import SEEDDataset
 from loggers.logger import FouriEEGTransformerLogger
-from models.feegt import FouriEEGTransformer
 
 
 def parse_dataset_class(name: str):
@@ -166,11 +163,11 @@ def train_k_fold(
             num_workers: int = (os.cpu_count() // torch.cuda.device_count()) - 1
         dataloader_train: DataLoader = DataLoader(Subset(dataset, train_indices),
                                                   batch_size=batch_size, shuffle=True,
-                                                  num_workers=num_workers//2,
+                                                  num_workers=num_workers // 2,
                                                   pin_memory=True if torch.cuda.is_available() else False)
         dataloader_val: DataLoader = DataLoader(Subset(dataset, val_indices),
                                                 batch_size=batch_size, shuffle=False,
-                                                num_workers=num_workers//2,
+                                                num_workers=num_workers // 2,
                                                 pin_memory=True if torch.cuda.is_available() else False)
         del train_indices, val_indices
         logging.info(f"fold {i_fold + 1} of {k_folds}, "
@@ -178,16 +175,16 @@ def train_k_fold(
                      f"|dataloader_val| = {len(dataloader_val)}")
         # initializes the trainer
         accelerator: str = "cpu"
-        gpus: int = 0
+        devices: int = 1
         strategy: Optional[str] = None
         if torch.cuda.is_available():
             accelerator = "gpu"
-            gpus = torch.cuda.device_count()
+            devices = torch.cuda.device_count()
             if torch.cuda.device_count() >= 2:
                 strategy = "ddp"
         trainer = pl.Trainer(
             accelerator=accelerator,
-            devices=gpus,
+            devices=devices,
             strategy=strategy,
             precision=precision,
             max_epochs=max_epochs,
