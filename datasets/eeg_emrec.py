@@ -31,15 +31,8 @@ class EEGClassificationDataset(Dataset, ABC):
                  window_stride: Optional[Union[float, int]] = None,
                  drop_last: Optional[bool] = False,
 
-                 # labels_to_use: Optional[Union[str, List[str]]] = None,
-                 # subject_ids_to_use: Optional[Union[str, List[str]]] = None,
-
                  discretize_labels: bool = False,
                  normalize_eegs: bool = True,
-
-                 # validation: Optional[str] = None,
-                 # k_folds: Optional[int] = 10,
-                 # batch_size: int = 32
                  ):
         super().__init__()
 
@@ -87,25 +80,6 @@ class EEGClassificationDataset(Dataset, ABC):
         assert isinstance(drop_last, bool)
         self.drop_last: bool = drop_last
 
-        # assert labels_to_use is None or isinstance(labels_to_use, str) or isinstance(labels_to_use, list)
-        # if labels_to_use is None:
-        #     labels_to_use = list(self.labels.keys())
-        # elif isinstance(labels_to_use, str):
-        #     labels_to_use = [labels_to_use]
-        # assert set(labels_to_use).issubset(set(self.labels.keys())), \
-        #     f"one or more labels are not allowed"
-        # self.labels_to_use: List[str] = labels_to_use
-
-        # assert subject_ids_to_use is None or isinstance(subject_ids_to_use, str) or isinstance(subject_ids_to_use, list)
-        # if subject_ids_to_use is None:
-        #     subject_ids_to_use = deepcopy(self.subject_ids)
-        # elif isinstance(subject_ids_to_use, str):
-        #     subject_ids_to_use = [subject_ids_to_use]
-        # assert set(subject_ids_to_use).issubset(set(self.subject_ids)), \
-        #     f"one or more subject ids are not in dataset"
-        # self.subject_ids_to_use: List[str] = subject_ids_to_use
-        # self.subject_ids_to_use.sort()
-
         assert isinstance(discretize_labels, bool)
         self.discretize_labels: bool = discretize_labels
         assert isinstance(normalize_eegs, bool)
@@ -129,7 +103,6 @@ class EEGClassificationDataset(Dataset, ABC):
             eegs = np.concatenate([eegs,
                                    np.zeros([self.samples_per_window - eegs.shape[0], eegs.shape[1]])],
                                   axis=0)
-        # id = self.get_subject_ids_static(path=self.path).index(window["subject_id"])
         assert eegs.shape[0] == self.samples_per_window
         return {
             "sampling_rates": self.sampling_rate,
@@ -154,16 +127,16 @@ class EEGClassificationDataset(Dataset, ABC):
         # loops through the experiments
         for i_experiment, experiment in enumerate(eegs):
             # scales the experiment to zero mean and unit variance
-            # experiment_scaled = (experiment - experiment.mean(axis=0)) / experiment.std(axis=0)
-            experiment = np.nan_to_num(experiment)
-            scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
-                                                              verbose=False, ch_types="eeg"),
-                                         scalings="median")
-            scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
-            experiment_scaled = einops.rearrange(
-                scaler.transform(einops.rearrange(experiment,
-                                                  "s c -> () c s")),
-                "b c s -> s (b c)")
+            experiment_scaled = (experiment - experiment.mean(axis=0)) / experiment.std(axis=0)
+            experiment_scaled = np.nan_to_num(experiment_scaled)
+            # scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
+            #                                                   verbose=False, ch_types="eeg"),
+            #                              scalings="median")
+            # scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
+            # experiment_scaled = einops.rearrange(
+            #     scaler.transform(einops.rearrange(experiment,
+            #                                       "s c -> () c s")),
+            #     "b c s -> s (b c)")
             # scales to microvolts
             experiment_scaled *= 1e-6
             eegs[i_experiment] = experiment_scaled
