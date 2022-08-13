@@ -268,7 +268,6 @@ class FouriEEGTransformer(pl.LightningModule):
         self.float()
         # self.to(device)
         self.save_hyperparameters()
-        # self.automatic_optimization = False
 
     def forward(
             self,

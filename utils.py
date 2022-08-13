@@ -135,6 +135,37 @@ def train_k_fold(
 ) -> pd.DataFrame:
     # initialize the logs
     logs: pd.DataFrame = pd.DataFrame()
+    # initializes the model
+    base_model: FouriEEGTransformer = FouriEEGTransformer(
+        in_channels=len(dataset.electrodes),
+        sampling_rate=dataset.sampling_rate,
+        labels=dataset.labels,
+        labels_classes=dataset.labels_classes,
+
+        mels=kwargs['mels'],
+        mel_window_size=kwargs['mel_window_size'],
+        mel_window_stride=kwargs['mel_window_stride'],
+
+        users_embeddings=not kwargs['disable_users_embeddings'],
+
+        encoder_only=kwargs['encoder_only'],
+        mixing_sublayer_type=kwargs['mixing_sublayer_type'],
+        hidden_size=kwargs['hidden_size'],
+        num_encoders=kwargs['num_encoders'],
+        num_decoders=kwargs['num_decoders'],
+        num_attention_heads=kwargs['num_attention_heads'],
+        positional_embedding_type=kwargs['positional_embedding_type'],
+        max_position_embeddings=kwargs['max_position_embeddings'],
+        dropout_p=kwargs['dropout_p'],
+
+        data_augmentation=not kwargs['disable_data_augmentation'],
+        cropping=not kwargs['disable_cropping'],
+        flipping=not kwargs['disable_flipping'],
+        noise_strength=kwargs['noise_strength'],
+
+        learning_rate=learning_rate,
+        device="cuda" if torch.cuda.is_available() else "cpu",
+    )
     # sets up the k_fold
     shuffled_indices = torch.randperm(len(dataset)).tolist()
     fold_starting_indices = torch.linspace(start=0, end=len(dataset),
@@ -145,6 +176,8 @@ def train_k_fold(
            and {i for f in folds_indices for i in f} == set(range(len(dataset)))
     # loops over folds
     for i_fold in range(k_folds):
+        # makes a fresh copy of the model
+        model = deepcopy(base_model)
         # retrieves training and validation sets
         train_indices: List[int] = [i
                                     for fold_no, fold in enumerate(folds_indices)
@@ -203,36 +236,7 @@ def train_k_fold(
                 learning_rate=learning_rate,
             ),
         )
-        model: FouriEEGTransformer = FouriEEGTransformer(
-            in_channels=len(dataset.electrodes),
-            sampling_rate=dataset.sampling_rate,
-            labels=dataset.labels,
-            labels_classes=dataset.labels_classes,
 
-            mels=kwargs['mels'],
-            mel_window_size=kwargs['mel_window_size'],
-            mel_window_stride=kwargs['mel_window_stride'],
-
-            users_embeddings=not kwargs['disable_users_embeddings'],
-
-            encoder_only=kwargs['encoder_only'],
-            mixing_sublayer_type=kwargs['mixing_sublayer_type'],
-            hidden_size=kwargs['hidden_size'],
-            num_encoders=kwargs['num_encoders'],
-            num_decoders=kwargs['num_decoders'],
-            num_attention_heads=kwargs['num_attention_heads'],
-            positional_embedding_type=kwargs['positional_embedding_type'],
-            max_position_embeddings=kwargs['max_position_embeddings'],
-            dropout_p=kwargs['dropout_p'],
-
-            data_augmentation=not kwargs['disable_data_augmentation'],
-            cropping=not kwargs['disable_cropping'],
-            flipping=not kwargs['disable_flipping'],
-            noise_strength=kwargs['noise_strength'],
-
-            learning_rate=learning_rate,
-            device="cuda" if torch.cuda.is_available() else "cpu",
-        )
         # eventually selects a starting learning rate
         if auto_lr_finder is True:
             # tuning_model: FouriEEGTransformer = FouriEEGTransformer(
@@ -276,6 +280,8 @@ def train_k_fold(
                     train_dataloaders=dataloader_train,
                     val_dataloaders=dataloader_val)
         assert not trainer.logger.logs.empty
+        assert base_model.state_dict().__str__() != model.state_dict().__str__(), \
+            f"model not updating"
         fold_logs = deepcopy(trainer.logger.logs)
         fold_logs["fold"] = i_fold
         logs = pd.concat([logs, fold_logs], ignore_index=True)
