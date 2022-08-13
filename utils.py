@@ -235,9 +235,9 @@ def train_k_fold(
                 learning_rate=learning_rate,
                 device="cuda" if torch.cuda.is_available() else "cpu",
             )
-            trainer.tune(tuning_model,
-                         train_dataloaders=deepcopy(dataloader_train),
-                         val_dataloaders=deepcopy(dataloader_val))
+            deepcopy(trainer).tune(tuning_model,
+                                   train_dataloaders=deepcopy(dataloader_train),
+                                   val_dataloaders=deepcopy(dataloader_val))
             learning_rate = float(f'{tuning_model.learning_rate:+.1g}')
             del tuning_model
             logging.info(f"optimal learning rate is {learning_rate}")
