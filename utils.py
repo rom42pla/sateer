@@ -295,10 +295,14 @@ def train(
     )
     # eventually selects a starting learning rate
     if auto_lr_finder is True:
-        trainer.tune(model,
+        tuning_model = deepcopy(model)
+        trainer.tune(tuning_model,
                      train_dataloaders=dataloader_train,
                      val_dataloaders=dataloader_val)
-        logging.info(f"learning rate has been set to {model.learning_rate}")
+        model.learning_rate = model.lr = tuning_model.learning_rate
+        model.hparams.learning_rate = model.hparams.lr = tuning_model.learning_rate
+        model.optimizers().optimizer.param_groups[0]["lr"] = tuning_model.learning_rate
+        logging.info(f"learning rate has been set to {tuning_model.learning_rate}")
     # trains the model
     trainer.fit(model,
                 train_dataloaders=dataloader_train,

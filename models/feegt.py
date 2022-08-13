@@ -142,7 +142,7 @@ class FouriEEGTransformer(pl.LightningModule):
 
         # optimization
         assert isinstance(learning_rate, float) and learning_rate > 0
-        self.learning_rate = learning_rate
+        self.learning_rate = self.lr = learning_rate
         assert device is None or device in {"cuda", "cpu"}
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -268,12 +268,15 @@ class FouriEEGTransformer(pl.LightningModule):
         self.float()
         # self.to(device)
         self.save_hyperparameters()
+        # self.automatic_optimization = False
 
     def forward(
             self,
             input_eegs: torch.Tensor,
             ids: Optional[Union[int, str, List[Union[int, str]], np.ndarray]] = None
     ):
+        # optimizer = self.optimizers()
+        # optimizer.optimizer.param_groups[0]["lr"] = 0.9
         # ensures that the inputs are well-defined
         assert input_eegs.shape[-1] == self.in_channels
         assert len(input_eegs.shape) in {2, 3}
@@ -479,24 +482,9 @@ class FouriEEGTransformer(pl.LightningModule):
         optimizer.zero_grad(set_to_none=True)
 
     def configure_optimizers(self):
-        # optimizer_merge_mels = torch.optim.AdamW(self.merge_mels.parameters(),
-        #                                          lr=self.learning_rate)
-        optimizer_transformer = torch.optim.AdamW(self.parameters(),
-                                                  lr=self.learning_rate)
-        optimizers = optimizer_transformer
-        scheduler = {
-            "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer_transformer,
-                factor=0.1,
-                mode="min",
-                patience=3,
-                threshold=1e-3,
-                verbose=True,
-            ),
-            "monitor": "loss_val",
-            "frequency": 1,
-        }
-        return [optimizers], [scheduler]
+        optimizer = torch.optim.AdamW(self.parameters(),
+                                      lr=self.learning_rate)
+        return optimizer
 
     def on_fit_end(self) -> None:
         if self.logger is not None:
@@ -551,7 +539,7 @@ if __name__ == "__main__":
             enable_progress_bar=True,
             enable_model_summary=False,
             enable_checkpointing=False,
-            gradient_clip_val=1,
+            gradient_clip_val=0,
             limit_train_batches=1,
         )
         trainer.fit(model,
