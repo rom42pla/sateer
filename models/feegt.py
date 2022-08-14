@@ -205,8 +205,8 @@ class FouriEEGTransformer(pl.LightningModule):
             nn.Conv2d(
                 in_channels=self.in_channels,
                 out_channels=self.hidden_size,
-                kernel_size=(self.mels, 1),
-                stride=1,
+                kernel_size=(self.mels, 5),
+                stride=3,
                 padding=0,
             ),
             Rearrange("b c m s -> b s (c m)"),
