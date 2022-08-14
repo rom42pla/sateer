@@ -137,25 +137,16 @@ class EEGClassificationDataset(Dataset, ABC):
     def normalize(self, eegs: List[np.ndarray]):
         # scales to zero mean and unit variance
         for i_experiment, experiment in enumerate(eegs):
-            experiment_scaled = (experiment - experiment.mean(axis=0)) / experiment.std(axis=0)
-            # scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
-            #                                                   verbose=False, ch_types="eeg"),
-            #                              scalings="mean")
-            # scaler.fit(einops.rearrange(experiment, "s c -> () c s"))
-            # experiment_scaled = einops.rearrange(
-            #     scaler.transform(einops.rearrange(experiment,
-            #                                       "s c -> () c s")),
-            #     "b c s -> s (b c)")
-            # experiment_scaled = np.nan_to_num(experiment_scaled)
-            # # scales the data
-            # experiment_scaled *= 1e-6
+            # experiment_scaled = (experiment - experiment.mean(axis=0)) / experiment.std(axis=0)
+            scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
+                                                              verbose=False, ch_types="eeg"),
+                                         scalings="mean")
+            experiment_scaled = einops.rearrange(
+                scaler.fit_transform(einops.rearrange(experiment, "s c -> () c s")),
+                "b c s -> s (b c)"
+            )
+            experiment_scaled = np.nan_to_num(experiment_scaled)
             eegs[i_experiment] = experiment_scaled
-        # # scales between -1 and 1
-        # min_values = np.stack([experiment.min(axis=0) for experiment in eegs]).min(axis=0)
-        # max_values = np.stack([experiment.max(axis=0) for experiment in eegs]).max(axis=0)
-        # eegs = [2 * ((e - min_values) / (max_values - min_values)) - 1 for e in eegs]
-        # # scales to microvolts
-        # eegs = [e * 40e-6 for e in eegs]
         return eegs
 
     def get_windows(self) -> List[Dict[str, Union[int, str]]]:
