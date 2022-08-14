@@ -76,7 +76,7 @@ if __name__ == '__main__':
                 # starts the kfold training
                 logging.info(f"training on {args['dataset_type']}, subject {subject_id} "
                              f"({i_subject + 1}/{len(dataset.subject_ids)}, {len(dataset_single_subject)} samples)")
-                train_k_fold(dataset=dataset_single_subject, base_model=model,
+                train_k_fold(dataset=dataset_single_subject,
                              experiment_path=join(experiment_path, subject_id),
                              progress_bar=False,
                              **args)

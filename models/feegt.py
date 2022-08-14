@@ -488,8 +488,12 @@ class FouriEEGTransformer(pl.LightningModule):
         optimizer.zero_grad(set_to_none=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(),
-                                      lr=self.learning_rate)
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=self.learning_rate,
+            weight_decay=0.1,
+            amsgrad=True
+        )
         return optimizer
 
     def on_fit_end(self) -> None:
