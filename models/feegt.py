@@ -360,8 +360,6 @@ class FouriEEGTransformer(pl.LightningModule):
         # prepares the spectrogram for the encoder
         with profiler.record_function("preparation"):
             x = self.merge_mels(spectrogram)  # (b s c)
-            print(x.shape)
-            exit()
             assert len(x.shape) == 3, f"invalid number of dimensions ({x.shape} must be long 3)"
             assert x.shape[-1] == self.hidden_size, \
                 f"invalid hidden size after merging ({x.shape[-1]} != {self.hidden_size})"
