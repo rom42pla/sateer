@@ -88,6 +88,8 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         "cropping",
         "flipping",
         "noise_strength",
+        "spectrogram_time_masking_perc",
+        "spectrogram_frequency_masking_perc",
     ]:
         parser.add_argument(f"--test_{parameter}",
                             default=False,

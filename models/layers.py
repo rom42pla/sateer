@@ -565,9 +565,10 @@ class MelSpectrogram(nn.Module):
         return spectrogram
 
     @staticmethod
-    def plot_mel_spectrogram(spectrogram: torch.Tensor, scale: int = 2):
-        assert len(spectrogram.shape) == 3  # s c m
+    def plot_mel_spectrogram(input_spectrogram: torch.Tensor, scale: int = 2):
+        assert len(input_spectrogram.shape) == 3  # s c m
         import matplotlib.pyplot as plt
+        spectrogram = input_spectrogram.clone().detach().cpu()
         lines = int(math.ceil(math.sqrt(spectrogram.shape[1])))
         fig, axs = plt.subplots(nrows=lines, ncols=lines, figsize=(lines * scale * 1.5, lines * scale),
                                 tight_layout=True)

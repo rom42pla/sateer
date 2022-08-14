@@ -164,6 +164,8 @@ def train_k_fold(
         cropping=not kwargs['disable_cropping'],
         flipping=not kwargs['disable_flipping'],
         noise_strength=kwargs['noise_strength'],
+        spectrogram_time_masking_perc=kwargs['spectrogram_time_masking_perc'],
+        spectrogram_frequency_masking_perc=kwargs['spectrogram_frequency_masking_perc'],
 
         learning_rate=learning_rate,
         device="cuda" if torch.cuda.is_available() else "cpu",

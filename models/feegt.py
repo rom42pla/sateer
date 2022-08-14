@@ -65,6 +65,8 @@ class FouriEEGTransformer(pl.LightningModule):
             cropping: bool = True,
             flipping: bool = False,
             noise_strength: Union[int, float] = 0.01,
+            spectrogram_time_masking_perc: Union[int, float] = 0.1,
+            spectrogram_frequency_masking_perc: Union[int, float] = 0.1,
 
             learning_rate: float = 2e-4,
             device: Optional[str] = None,
@@ -147,6 +149,10 @@ class FouriEEGTransformer(pl.LightningModule):
             self.flipping = flipping
             assert noise_strength >= 0
             self.noise_strength = noise_strength
+            assert 0 <= spectrogram_time_masking_perc < 1
+            self.spectrogram_time_masking_perc = spectrogram_time_masking_perc
+            assert 0 <= spectrogram_frequency_masking_perc < 1
+            self.spectrogram_frequency_masking_perc = spectrogram_frequency_masking_perc
 
         # optimization
         assert isinstance(learning_rate, float) and learning_rate > 0
@@ -297,7 +303,7 @@ class FouriEEGTransformer(pl.LightningModule):
 
         # eventually adds data augmentation
         if self.training is True and self.data_augmentation is True:
-            with profiler.record_function("data augmentation"):
+            with profiler.record_function("data augmentation (eeg)"):
                 if self.shifting is True:
                     for i_batch in range(eegs.shape[0]):
                         shift_direction = "left" if torch.rand(1, device=eegs.device) <= 0.5 else "right"
@@ -329,6 +335,30 @@ class FouriEEGTransformer(pl.LightningModule):
         # converts the eegs to a spectrogram
         with profiler.record_function("spectrogram"):
             spectrogram = self.get_spectrogram(eegs)  # (b s c m)
+            if self.training is True and self.data_augmentation is True:
+                # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
+                with profiler.record_function("data augmentation (eeg)"):
+                    if self.spectrogram_time_masking_perc > 0:
+                        for i_batch in range(len(spectrogram)):
+                            mask_amount = int(random.random() * \
+                                              self.spectrogram_time_masking_perc * \
+                                              spectrogram.shape[1])
+                            if mask_amount > 0:
+                                masked_indices = torch.randperm(spectrogram.shape[1], device=spectrogram.device)[
+                                                 :mask_amount]
+                                spectrogram[i_batch, masked_indices] = 0
+                    if self.spectrogram_frequency_masking_perc > 0:
+                        for i_batch in range(len(spectrogram)):
+                            mask_amount = int(random.random() * \
+                                              self.spectrogram_frequency_masking_perc * \
+                                              spectrogram.shape[-1])
+                            if mask_amount > 0:
+                                masked_indices = torch.randperm(spectrogram.shape[-1], device=spectrogram.device)[
+                                                 :mask_amount]
+                                spectrogram[i_batch, :, :, masked_indices] = 0
+                                MelSpectrogram.plot_mel_spectrogram(spectrogram[i_batch])
+                    print(spectrogram.shape)
+                exit()
 
         # prepares the spectrogram for the encoder
         with profiler.record_function("preparation"):
@@ -518,8 +548,8 @@ if __name__ == "__main__":
         discretize_labels=True,
         normalize_eegs=True,
     )
-    dataloader_train = DataLoader(dataset, batch_size=8, num_workers=os.cpu_count() - 2, shuffle=False)
-    dataloader_val = DataLoader(dataset, batch_size=8, num_workers=os.cpu_count() - 2, shuffle=True)
+    dataloader_train = DataLoader(dataset, batch_size=32, num_workers=os.cpu_count() - 2, shuffle=False)
+    dataloader_val = DataLoader(dataset, batch_size=32, num_workers=os.cpu_count() - 2, shuffle=True)
     model = FouriEEGTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
@@ -529,7 +559,7 @@ if __name__ == "__main__":
         users_embeddings=True,
         num_users=len(dataset.subject_ids),
 
-        mels=8,
+        mels=16,
         mel_window_size=1,
         mel_window_stride=0.05,
 

@@ -84,7 +84,9 @@ for parameter, default, search_space in [
     ("dreamer_data_augmentation", True, [True, False]),
     ("flipping", False, [True, False]),
     ("cropping", True, [True, False]),
-    ("noise_strength", 0.01, [0, 0.01, 0.05]),
+    ("noise_strength", 0.01, [0, 0.001, 0.01]),
+    ("spectrogram_time_masking_perc", 0, [0, 0.1, 0.2]),
+    ("spectrogram_frequency_masking_perc", 0, [0, 0.1, 0.2]),
 ]:
     defaults[parameter] = {
         "search_space": search_space,
@@ -122,7 +124,7 @@ def objective(trial: Trial):
             trial_args[parameter] = defaults[parameter]["default"]
     logging.info(f"started trial {trial.number} with parameters:\n{pformat(trial_args)}")
 
-    model: pl.LightningModule = FouriEEGTransformer(
+    model: FouriEEGTransformer = FouriEEGTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
