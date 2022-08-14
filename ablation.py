@@ -67,23 +67,26 @@ dataset_val = Subset(dataset, shuffled_indices[int(len(dataset) * args['train_se
 
 defaults = {}
 for parameter, default, search_space in [
-    ("users_embeddings", False, [True, False]),
-
     ("mels", 16, [8, 16, 32, 48, 64]),
     ("mel_window_size", 1, [0.1, 0.2, 0.5, 1]),
     ("mel_window_stride", 0.05, [0.05, 0.1, 0.25, 0.5]),
+
+    ("users_embeddings", False, [True, False]),
 
     ("encoder_only", False, [True, False]),
     ("hidden_size", 512, [256, 512, 768]),
     ("num_layers", 4, [2, 4, 6, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.3]),
-    ("shifting", False, [True, False]),
-    ("flipping", False, [True, False]),
+
+    ("shifting", True, [True, False]),
     ("cropping", True, [True, False]),
+    ("flipping", False, [True, False]),
     ("noise_strength", 0.01, [0, 0.001, 0.01]),
     ("spectrogram_time_masking_perc", 0, [0, 0.1, 0.2]),
     ("spectrogram_frequency_masking_perc", 0, [0, 0.1, 0.2]),
+
+    ("learning_rate", 1e-4, [1e-3, 5e-4, 1e-4, 5e-5, 1e-5])
 ]:
     defaults[parameter] = {
         "search_space": search_space,
