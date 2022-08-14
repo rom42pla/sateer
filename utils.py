@@ -160,6 +160,7 @@ def train_k_fold(
         dropout_p=kwargs['dropout_p'],
 
         data_augmentation=not kwargs['disable_data_augmentation'],
+        shifting=not kwargs['disable_shifting'],
         cropping=not kwargs['disable_cropping'],
         flipping=not kwargs['disable_flipping'],
         noise_strength=kwargs['noise_strength'],

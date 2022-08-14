@@ -125,6 +125,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=False,
                         action="store_true",
                         help="Whether to disable EEGs' data augmentation")
+    parser.add_argument("--disable_shifting",
+                        default=False,
+                        action="store_true",
+                        help="Whether to disable EEGs' random shifting during data augmentation")
     parser.add_argument("--disable_cropping",
                         default=False,
                         action="store_true",

@@ -2,6 +2,7 @@ import gc
 import logging
 import math
 import os
+import random
 import time
 import warnings
 from collections import OrderedDict
@@ -60,6 +61,7 @@ class FouriEEGTransformer(pl.LightningModule):
             dropout_p: Union[int, float] = 0.2,
 
             data_augmentation: bool = True,
+            shifting: bool = True,
             cropping: bool = True,
             flipping: bool = False,
             noise_strength: Union[int, float] = 0.01,
@@ -137,6 +139,8 @@ class FouriEEGTransformer(pl.LightningModule):
         assert isinstance(data_augmentation, bool)
         self.data_augmentation = data_augmentation
         if self.data_augmentation is True:
+            assert isinstance(shifting, bool)
+            self.shifting = shifting
             assert isinstance(cropping, bool)
             self.cropping = cropping
             assert isinstance(flipping, bool)
@@ -194,26 +198,10 @@ class FouriEEGTransformer(pl.LightningModule):
             Rearrange("b s c m -> b c m s"),
             nn.Conv2d(
                 in_channels=self.in_channels,
-                out_channels=self.hidden_size // 4,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-            ),
-            nn.SELU(),
-            nn.Conv2d(
-                in_channels=self.hidden_size // 4,
-                out_channels=self.hidden_size // 2,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-            ),
-            nn.SELU(),
-            nn.Conv2d(
-                in_channels=self.hidden_size // 2,
                 out_channels=self.hidden_size,
-                kernel_size=3,
-                stride=2,
-                padding=1,
+                kernel_size=7,
+                stride=4,
+                padding=3,
             ),
             Rearrange("b c m s -> b s c m"),
             nn.AdaptiveMaxPool2d(output_size=(self.hidden_size, 1)),
@@ -310,16 +298,27 @@ class FouriEEGTransformer(pl.LightningModule):
         # eventually adds data augmentation
         if self.training is True and self.data_augmentation is True:
             with profiler.record_function("data augmentation"):
+                if self.shifting is True:
+                    for i_batch in range(eegs.shape[0]):
+                        shift_direction = "left" if torch.rand(1, device=eegs.device) <= 0.5 else "right"
+                        shift_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
+                        assert shift_amount < eegs.shape[1]
+                        if shift_amount > 0:
+                            if shift_direction == "left":
+                                eegs[i_batch] = torch.roll(eegs[i_batch], shifts=shift_amount, dims=0)
+                                eegs[i_batch, :shift_amount] = 0
+                            else:
+                                eegs[i_batch] = torch.roll(eegs[i_batch], shifts=-shift_amount, dims=0)
+                                eegs[i_batch, -shift_amount:] = 0
                 if self.cropping is True:
-                    crop_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
-                    assert crop_amount < eegs.shape[1]
-                    if crop_amount > 0:
-                        # from left
-                        if torch.rand(1, device=eegs.device) <= 0.5:
-                            eegs = eegs[:, crop_amount:]
-                        # from right
-                        else:
-                            eegs = eegs[:, :-crop_amount]
+                    for i_batch in range(eegs.shape[0]):
+                        crop_amount = int(eegs.shape[1] - torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
+                        crop_start = int(
+                            torch.rand(1, device=eegs.device) * (eegs.shape[1] - crop_amount))
+                        assert crop_start + crop_amount < eegs.shape[1]
+                        if crop_amount > 0:
+                            eegs[i_batch, :crop_amount] = eegs[i_batch, crop_start:crop_start + crop_amount].clone()
+                    eegs = eegs[:, :crop_amount]
                 if self.flipping is True:
                     for i_batch, batch in enumerate(eegs):
                         if torch.rand(1, device=eegs.device) <= 0.25:
@@ -505,6 +504,12 @@ class FouriEEGTransformer(pl.LightningModule):
 
 
 if __name__ == "__main__":
+    # sets the seed
+    seed = 42
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    pl.seed_everything(seed)
     dataset: EEGClassificationDataset = DREAMERDataset(
         path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "dreamer"),
         window_size=1,
@@ -513,8 +518,8 @@ if __name__ == "__main__":
         discretize_labels=True,
         normalize_eegs=True,
     )
-    dataloader_train = DataLoader(dataset, batch_size=64, num_workers=os.cpu_count() - 2, shuffle=False)
-    dataloader_val = DataLoader(dataset, batch_size=64, num_workers=os.cpu_count() - 2, shuffle=True)
+    dataloader_train = DataLoader(dataset, batch_size=8, num_workers=os.cpu_count() - 2, shuffle=False)
+    dataloader_val = DataLoader(dataset, batch_size=8, num_workers=os.cpu_count() - 2, shuffle=True)
     model = FouriEEGTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
