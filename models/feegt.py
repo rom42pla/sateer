@@ -356,9 +356,6 @@ class FouriEEGTransformer(pl.LightningModule):
                                 masked_indices = torch.randperm(spectrogram.shape[-1], device=spectrogram.device)[
                                                  :mask_amount]
                                 spectrogram[i_batch, :, :, masked_indices] = 0
-                                MelSpectrogram.plot_mel_spectrogram(spectrogram[i_batch])
-                    print(spectrogram.shape)
-                exit()
 
         # prepares the spectrogram for the encoder
         with profiler.record_function("preparation"):
