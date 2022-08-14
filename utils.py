@@ -274,11 +274,11 @@ def train(
         experiment_path: str,
         batch_size: int = 64,
         max_epochs: int = 1000,
-        precision: int = 32,
+        precision: int = 16,
         auto_lr_finder: bool = False,
         disable_gradient_clipping: bool = False,
         disable_swa: bool = True,
-        progress_bar: bool = False,
+        progress_bar: bool = True,
         learning_rate: float = 1e-4,
         **kwargs,
 ) -> pd.DataFrame:
