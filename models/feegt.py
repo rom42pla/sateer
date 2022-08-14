@@ -311,12 +311,12 @@ class FouriEEGTransformer(pl.LightningModule):
                                 eegs[i_batch] = torch.roll(eegs[i_batch], shifts=-shift_amount, dims=0)
                                 eegs[i_batch, -shift_amount:] = 0
                 if self.cropping is True:
-                    for i_batch in range(eegs.shape[0]):
-                        crop_amount = int(eegs.shape[1] - torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
-                        crop_start = int(
-                            torch.rand(1, device=eegs.device) * (eegs.shape[1] - crop_amount))
-                        assert crop_start + crop_amount < eegs.shape[1]
-                        if crop_amount > 0:
+                    crop_amount = int(eegs.shape[1] - torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
+                    if crop_amount > 0:
+                        for i_batch in range(eegs.shape[0]):
+                            crop_start = int(
+                                torch.rand(1, device=eegs.device) * (eegs.shape[1] - crop_amount))
+                            assert crop_start + crop_amount < eegs.shape[1]
                             eegs[i_batch, :crop_amount] = eegs[i_batch, crop_start:crop_start + crop_amount].clone()
                     eegs = eegs[:, :crop_amount]
                 if self.flipping is True:
