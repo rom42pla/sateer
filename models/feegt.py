@@ -205,13 +205,13 @@ class FouriEEGTransformer(pl.LightningModule):
             nn.Conv2d(
                 in_channels=self.in_channels,
                 out_channels=self.hidden_size,
-                kernel_size=7,
-                stride=4,
-                padding=3,
+                kernel_size=(self.mels, 1),
+                stride=1,
+                padding=0,
             ),
-            Rearrange("b c m s -> b s c m"),
-            nn.AdaptiveMaxPool2d(output_size=(self.hidden_size, 1)),
-            Rearrange("b s c m -> b s (c m)"),
+            Rearrange("b c m s -> b s (c m)"),
+            # nn.AdaptiveMaxPool2d(output_size=(self.hidden_size, 1)),
+            # Rearrange("b s c m -> b s (c m)"),
             # nn.Linear(self.in_channels * self.mels, self.hidden_size),
         )
 
@@ -360,6 +360,8 @@ class FouriEEGTransformer(pl.LightningModule):
         # prepares the spectrogram for the encoder
         with profiler.record_function("preparation"):
             x = self.merge_mels(spectrogram)  # (b s c)
+            print(x.shape)
+            exit()
             assert len(x.shape) == 3, f"invalid number of dimensions ({x.shape} must be long 3)"
             assert x.shape[-1] == self.hidden_size, \
                 f"invalid hidden size after merging ({x.shape[-1]} != {self.hidden_size})"
