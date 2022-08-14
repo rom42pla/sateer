@@ -51,7 +51,6 @@ class FouriEEGTransformer(pl.LightningModule):
             num_users: Optional[int] = None,
 
             encoder_only: bool = False,
-            mixing_sublayer_type: str = "attention",
             hidden_size: int = 512,
             num_encoders: int = 4,
             num_decoders: int = 4,
@@ -115,8 +114,6 @@ class FouriEEGTransformer(pl.LightningModule):
         assert mel_window_stride > 0
         self.mel_window_size = mel_window_size
         self.mel_window_stride = mel_window_stride
-        assert isinstance(mixing_sublayer_type, str)
-        self.mixing_sublayer_type = mixing_sublayer_type
 
         # model architecture
         assert isinstance(encoder_only, bool)
@@ -560,7 +557,6 @@ if __name__ == "__main__":
         mel_window_size=1,
         mel_window_stride=0.05,
 
-        mixing_sublayer_type="attention",
         hidden_size=512,
         num_encoders=4,
         num_decoders=4,

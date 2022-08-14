@@ -55,7 +55,6 @@ save_to_json(tested_parameters, path=join(experiment_path, "tested_args.json"))
 dataset_class = parse_dataset_class(name=args["dataset_type"])
 dataset: EEGClassificationDataset = dataset_class(
     path=args['dataset_path'],
-    split_in_windows=True,
     window_size=args['windows_size'],
     window_stride=args['windows_stride'],
     drop_last=True,
@@ -72,16 +71,14 @@ for parameter, default, search_space in [
 
     ("mels", 16, [8, 16, 32, 48, 64]),
     ("mel_window_size", 1, [0.1, 0.2, 0.5, 1]),
-    ("mel_window_stride", 0.1, [0.05, 0.1, 0.25, 0.5]),
-
-    ("mixing_sublayer_type", "attention", ["fourier", "identity", "attention"]),
+    ("mel_window_stride", 0.05, [0.05, 0.1, 0.25, 0.5]),
 
     ("encoder_only", False, [True, False]),
     ("hidden_size", 512, [256, 512, 768]),
     ("num_layers", 4, [2, 4, 6, 8]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.3]),
-    ("dreamer_data_augmentation", True, [True, False]),
+    ("shifting", False, [True, False]),
     ("flipping", False, [True, False]),
     ("cropping", True, [True, False]),
     ("noise_strength", 0.01, [0, 0.001, 0.01]),
@@ -129,8 +126,9 @@ def objective(trial: Trial):
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
         learning_rate=args['learning_rate'],
+        num_users=len(dataset.subject_ids),
 
-        num_attention_heads=4,
+        num_attention_heads=8,
         num_encoders=trial_args["num_layers"],
         num_decoders=trial_args["num_layers"],
         **trial_args
@@ -140,7 +138,6 @@ def objective(trial: Trial):
         dataset_val=dataset_val,
         model=model,
         experiment_path=join(experiment_path, f"trial_{trial.number}"),
-        precision=32,
         **args
     )
     for k, v in trial_args.items():

@@ -12,16 +12,18 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     # dataset args
     parser.add_argument("--dataset_type",
                         type=str,
-                        choices={"deap", "dreamer"},
+                        choices={"deap", "dreamer", "amigos", "seed"},
                         help="Type of dataset")
     parser.add_argument("--dataset_path",
                         type=str,
                         help="Path to dataset's directory")
     parser.add_argument("--windows_size",
                         type=float,
+                        default=1,
                         help="Duration of the windows in seconds")
     parser.add_argument("--windows_stride",
                         type=float,
+                        default=1,
                         help="Duration of stride of the windows in seconds")
     parser.add_argument("--dont_discretize_labels",
                         default=False,
