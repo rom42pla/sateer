@@ -47,6 +47,7 @@ class FouriEEGTransformer(pl.LightningModule):
             mel_window_stride: Union[int, float] = 0.05,
 
             users_embeddings: bool = False,
+            num_users: Optional[int] = None,
 
             encoder_only: bool = False,
             mixing_sublayer_type: str = "attention",
@@ -98,6 +99,9 @@ class FouriEEGTransformer(pl.LightningModule):
             self.labels_classes = [labels_classes for _ in self.labels]
         assert isinstance(users_embeddings, bool)
         self.users_embeddings: bool = users_embeddings
+        if self.users_embeddings:
+            self.num_users: int = num_users
+            self.users_dict: Dict[str, int] = {}
 
         # preprocessing
         assert isinstance(mels, int) and mels >= 1, \
@@ -159,7 +163,9 @@ class FouriEEGTransformer(pl.LightningModule):
         if len(self.special_tokens_vocab) > 0:
             self.special_tokens_embedder = nn.Embedding(len(self.special_tokens_vocab), self.hidden_size)
         if self.users_embeddings:
-            self.users_embedder = GetUserEmbeddings(hidden_size=self.hidden_size)
+            # self.users_embedder = GetUserEmbeddings(hidden_size=self.hidden_size)
+            self.users_embedder = nn.Embedding(self.num_users, self.hidden_size)
+            self.token_type_embedder = nn.Embedding(3, self.hidden_size)
         if self.positional_embedding_type == "sinusoidal":
             self.position_embedder_spectrogram = GetSinusoidalPositionalEmbeddings(
                 max_position_embeddings=self.max_position_embeddings,
@@ -176,9 +182,6 @@ class FouriEEGTransformer(pl.LightningModule):
                 max_position_embeddings=self.max_position_embeddings,
                 hidden_size=self.hidden_size
             )
-        self.token_type_embedder = GetTokenTypeEmbeddings(
-            hidden_size=self.hidden_size,
-        )
         if self.encoder_only is False:
             self.labels_embedder = nn.Embedding(len(self.labels), self.hidden_size)
 
@@ -340,20 +343,24 @@ class FouriEEGTransformer(pl.LightningModule):
             # eventually adds positional embeddings and type embeddings
             if self.users_embeddings:
                 with profiler.record_function("user embeddings"):
-                    users_embeddings = self.users_embedder(ids).type_as(x)  # (b c)
-                    # print(users_embeddings.shape)
-                    # print(users_embeddings.unsqueeze(1).shape)
-                    # print(self.special_tokens_embedder(
-                    #         torch.as_tensor([self.special_tokens_vocab["ues"]],
-                    #                         device=self.device)).repeat(x.shape[0], 1, 1).shape)
-                    # print(x.shape)
+                    # eventually adds a new user to the dict
+                    for user_id in ids:
+                        if user_id not in self.users_dict:
+                            self.users_dict[user_id] = len(self.users_dict)
+                    # generates an embedding for each users
+                    users_embeddings = self.users_embedder(
+                        torch.as_tensor([self.users_dict[user_id] for user_id in ids],
+                                        device=self.device))  # (b c)
+                    # concatenates the embeddings to the eeg
                     x = torch.cat([
                         users_embeddings.unsqueeze(1),
                         self.special_tokens_embedder(
                             torch.as_tensor([self.special_tokens_vocab["ues"]],
                                             device=self.device)).repeat(x.shape[0], 1, 1),
                         x], dim=1)
-                    x = x + self.token_type_embedder(x, special_tokens_indices=[1])
+                    x = x + self.token_type_embedder(
+                        torch.as_tensor([0, 1, *[2 for _ in range(x.shape[1] - 2)]],
+                                        device=self.device)).repeat(x.shape[0], 1, 1)
             # adds the positional embeddings
             x = x + \
                 self.position_embedder(x)
@@ -502,14 +509,16 @@ if __name__ == "__main__":
         discretize_labels=True,
         normalize_eegs=True,
     )
-    dataloader = DataLoader(dataset, batch_size=64, num_workers=os.cpu_count() - 2, shuffle=True)
+    dataloader_train = DataLoader(dataset, batch_size=64, num_workers=os.cpu_count() - 2, shuffle=False)
+    dataloader_val = DataLoader(dataset, batch_size=64, num_workers=os.cpu_count() - 2, shuffle=True)
     model = FouriEEGTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
         labels_classes=dataset.labels_classes,
 
-        users_embeddings=False,
+        users_embeddings=True,
+        num_users=len(dataset.subject_ids),
 
         mels=8,
         mel_window_size=1,
@@ -540,8 +549,10 @@ if __name__ == "__main__":
             enable_checkpointing=False,
             gradient_clip_val=0,
             limit_train_batches=1,
+            limit_val_batches=1,
         )
         trainer.fit(model,
-                    train_dataloaders=dataloader)
+                    train_dataloaders=dataloader_train,
+                    val_dataloaders=dataloader_val)
     print(prof.key_averages(group_by_input_shape=False).table(sort_by="cpu_time", row_limit=8))
     # print(torchvision.models.resnet18())

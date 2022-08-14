@@ -147,6 +147,7 @@ def train_k_fold(
         mel_window_stride=kwargs['mel_window_stride'],
 
         users_embeddings=not kwargs['disable_users_embeddings'],
+        num_users=len(dataset.subject_ids),
 
         encoder_only=kwargs['encoder_only'],
         mixing_sublayer_type=kwargs['mixing_sublayer_type'],
