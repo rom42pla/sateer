@@ -139,9 +139,11 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         help="Whether to disable EEGs' flipping during data augmentation")
     parser.add_argument("--spectrogram_time_masking_perc",
                         default=0,
+                        type=float,
                         help="Amount of time masking in the spectrogram")
     parser.add_argument("--spectrogram_frequency_masking_perc",
                         default=0,
+                        type=float,
                         help="Amount of frequency masking in the spectrogram")
     parser.add_argument("--noise_strength",
                         default=0.01,
