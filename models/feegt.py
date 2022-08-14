@@ -67,7 +67,7 @@ class FouriEEGTransformer(pl.LightningModule):
             spectrogram_time_masking_perc: Union[int, float] = 0.1,
             spectrogram_frequency_masking_perc: Union[int, float] = 0.1,
 
-            learning_rate: float = 2e-4,
+            learning_rate: float = 1e-4,
             device: Optional[str] = None,
             **kwargs
     ):

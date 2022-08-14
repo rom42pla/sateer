@@ -128,7 +128,6 @@ def objective(trial: Trial):
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
-        learning_rate=args['learning_rate'],
         num_users=len(dataset.subject_ids),
 
         num_attention_heads=8,
