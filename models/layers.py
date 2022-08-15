@@ -556,14 +556,14 @@ class MelSpectrogram(nn.Module):
             # n_fft=192,
             n_fft=max(128, window_size),
             normalized=True,
-            power=2,
+            power=1,
             win_length=window_size,
             hop_length=window_stride,
-            pad=0,
+            pad=window_stride//2,
         ).to(eegs.device).float()
         eegs = einops.rearrange(eegs, "b s c -> b c s")
         spectrogram = mel_fn(eegs)  # (b c m s)
-        spectrogram = transforms.AmplitudeToDB(stype="power")(spectrogram)
+        # spectrogram = transforms.AmplitudeToDB(stype="power")(spectrogram)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
 
