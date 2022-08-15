@@ -332,7 +332,7 @@ class FouriEEGTransformer(pl.LightningModule):
         # converts the eegs to a spectrogram
         with profiler.record_function("spectrogram"):
             spectrogram = self.get_spectrogram(eegs)  # (b s c m)
-            MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
+            # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
             if self.training is True and self.data_augmentation is True:
                 # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
                 with profiler.record_function("data augmentation (eeg)"):
