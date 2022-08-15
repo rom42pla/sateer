@@ -137,6 +137,7 @@ class EEGClassificationDataset(Dataset, ABC):
     def normalize(self, eegs: List[np.ndarray]):
         # scales to zero mean and unit variance
         for i_experiment, experiment in enumerate(eegs):
+            # scales to zero mean and unit variance
             # experiment_scaled = (experiment - experiment.mean(axis=0)) / experiment.std(axis=0)
             scaler = mne.decoding.Scaler(info=mne.create_info(ch_names=self.electrodes, sfreq=self.sampling_rate,
                                                               verbose=False, ch_types="eeg"),
@@ -146,6 +147,9 @@ class EEGClassificationDataset(Dataset, ABC):
                 "b c s -> s (b c)"
             )
             experiment_scaled = np.nan_to_num(experiment_scaled)
+            # normalizes between -1 and 1
+            experiment_scaled = 2 * ((experiment_scaled - experiment_scaled.min(axis=0)) /
+                                     (experiment_scaled.max(axis=0) - experiment_scaled.min(axis=0))) - 1
             eegs[i_experiment] = experiment_scaled
         return eegs
 
@@ -177,7 +181,7 @@ class EEGClassificationDataset(Dataset, ABC):
         cols = 4
         rows = len(self.electrodes) // cols
         fig, axs = plt.subplots(nrows=rows, ncols=cols,
-                                figsize=(scale * cols//2, scale * rows//4),
+                                figsize=(scale * cols // 2, scale * rows // 4),
                                 tight_layout=True)
         # fig.suptitle(title)
         for i_ax, ax in enumerate(axs.flat):
