@@ -83,8 +83,8 @@ for parameter, default, search_space in [
     ("cropping", True, [True, False]),
     ("flipping", False, [True, False]),
     ("noise_strength", 0.01, [0, 0.001, 0.01]),
-    ("spectrogram_time_masking_perc", 0, [0, 0.1, 0.2]),
-    ("spectrogram_frequency_masking_perc", 0, [0, 0.1, 0.2]),
+    ("spectrogram_time_masking_perc", 0, [0, 0.05, 0.1, 0.15, 0.2]),
+    ("spectrogram_frequency_masking_perc", 0, [0, 0.05, 0.1, 0.15, 0.2]),
 
     ("learning_rate", 1e-4, [1e-3, 5e-4, 1e-4, 5e-5, 1e-5])
 ]:
