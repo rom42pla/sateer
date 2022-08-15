@@ -11,6 +11,8 @@ from torch._C._autograd import ProfilerActivity
 from torch.autograd import profiler
 from torch.profiler import profile
 from torchaudio import transforms
+
+
 #
 #
 # class LinearEncoder(nn.Module):
@@ -543,24 +545,25 @@ class MelSpectrogram(nn.Module):
         assert len(eegs.shape) == 3
         window_size = min(self.window_size, eegs.shape[1])
         window_stride = min(self.window_stride, window_size // 2)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            mel_fn = transforms.MelSpectrogram(
-                sample_rate=self.sampling_rate,
-                f_min=self.min_freq,
-                f_max=self.max_freq,
-                n_mels=self.mels,
-                center=True,
-                # n_fft=192,
-                n_fft=max(128, window_size),
-                normalized=True,
-                power=1,
-                win_length=window_size,
-                hop_length=window_stride,
-                pad=window_stride // 2,
-            ).to(eegs.device).float()
-            eegs = einops.rearrange(eegs, "b s c -> b c s")
-            spectrogram = mel_fn(eegs)  # (b c m s)
+        # with warnings.catch_warnings():
+        #     warnings.simplefilter("ignore")
+        mel_fn = transforms.MelSpectrogram(
+            sample_rate=self.sampling_rate,
+            f_min=self.min_freq,
+            f_max=self.max_freq,
+            n_mels=self.mels,
+            center=True,
+            # n_fft=192,
+            n_fft=max(128, window_size),
+            normalized=True,
+            power=2,
+            win_length=window_size,
+            hop_length=window_stride,
+            pad=0,
+        ).to(eegs.device).float()
+        eegs = einops.rearrange(eegs, "b s c -> b c s")
+        spectrogram = mel_fn(eegs)  # (b c m s)
+        spectrogram = transforms.AmplitudeToDB(stype="power")(spectrogram)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         return spectrogram
 

@@ -202,8 +202,8 @@ class FouriEEGTransformer(pl.LightningModule):
             nn.Conv2d(
                 in_channels=self.in_channels,
                 out_channels=self.hidden_size,
-                kernel_size=(self.mels, 5),
-                stride=3,
+                kernel_size=(self.mels, 1),
+                stride=0,
                 padding=0,
             ),
             Rearrange("b c m s -> b s (c m)"),
@@ -332,6 +332,7 @@ class FouriEEGTransformer(pl.LightningModule):
         # converts the eegs to a spectrogram
         with profiler.record_function("spectrogram"):
             spectrogram = self.get_spectrogram(eegs)  # (b s c m)
+            MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
             if self.training is True and self.data_augmentation is True:
                 # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
                 with profiler.record_function("data augmentation (eeg)"):
@@ -534,8 +535,8 @@ if __name__ == "__main__":
     np.random.seed(seed)
     torch.manual_seed(seed)
     pl.seed_everything(seed)
-    dataset: EEGClassificationDataset = DREAMERDataset(
-        path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "dreamer"),
+    dataset: EEGClassificationDataset = DEAPDataset(
+        path=join("..", "..", "..", "datasets", "eeg_emotion_recognition", "deap"),
         window_size=1,
         window_stride=1,
         drop_last=False,
@@ -553,7 +554,7 @@ if __name__ == "__main__":
         users_embeddings=True,
         num_users=len(dataset.subject_ids),
 
-        mels=16,
+        mels=32,
         mel_window_size=1,
         mel_window_stride=0.05,
 
