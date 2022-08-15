@@ -75,7 +75,7 @@ for parameter, default, search_space in [
 
     ("encoder_only", False, [True, False]),
     ("hidden_size", 512, [256, 512, 768]),
-    ("num_layers", 4, [2, 4, 6, 8]),
+    ("num_layers", 4, [2, 4, 6]),
     ("positional_embedding_type", "sinusoidal", ["sinusoidal", "learned"]),
     ("dropout_p", 0.2, [0, 0.1, 0.2, 0.3]),
 
