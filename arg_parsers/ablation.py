@@ -79,7 +79,6 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
         "users_embeddings",
 
         "encoder_only",
-        "mixing_sublayer_type",
         "hidden_size",
         "num_layers",
         "positional_embedding_type",
