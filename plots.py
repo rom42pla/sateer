@@ -1,14 +1,24 @@
+import math
 import warnings
 
+import einops
 import numpy as np
 import pandas as pd
+import torch
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+from datasets.amigos import AMIGOSDataset
+from datasets.deap import DEAPDataset
+from datasets.dreamer import DREAMERDataset
+from datasets.eeg_emrec import EEGClassificationDataset
+from models.layers import MelSpectrogram
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_colwidth', 16)
 import json
 import re
 from os import listdir, makedirs
-from os.path import join, exists, isdir
+from os.path import join, exists, isdir, dirname
 from typing import Union, Dict, Any, Optional, List
 
 import json
@@ -17,6 +27,86 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
 from utils import read_json
+
+
+def plot_eegs(
+        eegs: Union[np.ndarray, torch.Tensor],
+        scale: Union[int, float] = 5,
+        save_path: Optional[str] = None,
+):
+    assert len(eegs.shape) == 2
+    assert scale > 0
+    fig, axs = plt.subplots(nrows=min(eegs.shape[-1], 8), ncols=1,
+                            figsize=(scale, scale * 2),
+                            tight_layout=True)
+    ylim = [eegs.min(), eegs.max()]
+    for i_ax, ax in enumerate(axs.flat):
+        ax.plot(np.arange(eegs.shape[0]) / dataset.sampling_rate, eegs[:, i_ax])
+        ax.set_ylim(ylim)
+        ax.set_ylabel("amplitude")
+        ax.set_title(f"electrode {dataset.electrodes[i_ax]}")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("time")
+    if save_path is not None:
+        if not isdir(dirname(save_path)):
+            makedirs(dirname(save_path))
+        plt.savefig(save_path)
+    plt.show()
+
+def plot_spectrogram(
+        spectrogram: Union[np.ndarray, torch.Tensor],
+        scale: Union[int, float] = 5,
+        save_path: Optional[str] = None,
+):
+    assert len(spectrogram.shape) == 3
+    assert scale > 0
+    fig, axs = plt.subplots(nrows=min(spectrogram.shape[1], 8), ncols=1,
+                            figsize=(scale, scale * 2),
+                            tight_layout=True)
+    ylim = [spectrogram.min(), spectrogram.max()]
+    for i_ax, ax in enumerate(axs.flat):
+        im = ax.imshow(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
+                       vmin=ylim[0], vmax=ylim[1], aspect="auto", cmap=plt.get_cmap("hot"))
+        # colorbar
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cbar = fig.colorbar(im, cax=cax, orientation="vertical")
+        cbar.ax.get_yaxis().labelpad = 15
+        cbar.ax.set_ylabel("amplitude", rotation=270)
+        # axis
+        ax.set_title(f"electrode {dataset.electrodes[i_ax]}")
+        ax.set_ylabel("mels")
+        ax.invert_yaxis()
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("time")
+    if save_path is not None:
+        if not isdir(dirname(save_path)):
+            makedirs(dirname(save_path))
+        plt.savefig(save_path)
+    plt.show()
+
+def plot_paper_images(
+        dataset: EEGClassificationDataset,
+        save_path: Optional[str] = None,
+):
+    if save_path is not None:
+        if not isdir(save_path):
+            makedirs(save_path)
+    # eegs
+    sample_eegs = dataset[0]["eegs"]
+    plot_eegs(eegs=sample_eegs, save_path=join(save_path, "eeg.svg"))
+    # spectrogram
+    spectrogram = MelSpectrogram(
+        sampling_rate=dataset.sampling_rate,
+        min_freq=0,
+        max_freq=50,
+        mels=32,
+        window_size=1,
+        window_stride=0.05,
+    )(sample_eegs)
+    plot_spectrogram(spectrogram=spectrogram, save_path=join(save_path, "spectrogram.svg"))
 
 
 def plot_cross_subject(
@@ -208,8 +298,17 @@ def plot_ablation(
 
 
 if __name__ == "__main__":
+    dataset: EEGClassificationDataset = AMIGOSDataset(
+        path=join("..", "..", "datasets", "eeg_emotion_recognition", "amigos"),
+        window_size=2,
+        window_stride=2,
+        drop_last=True,
+        discretize_labels=True,
+        normalize_eegs=True,
+    )
+    plot_paper_images(dataset=dataset, save_path=join("imgs", "paper"))
     # plot_ablation(path=join("saved", "ablation_saved", "dreamer_data_augmentation"))
-    for filename in listdir(join("checkpoints", "ablation")):
-        # print(join("checkpoints", "cross_saved", filename))
-        # plot_cross_subject(path=join("checkpoints", "cross_saved", filename))
-        plot_ablation(path=join("checkpoints", "ablation", filename))
+    # for filename in listdir(join("checkpoints", "ablation")):
+    #     # print(join("checkpoints", "cross_saved", filename))
+    #     # plot_cross_subject(path=join("checkpoints", "cross_saved", filename))
+    #     plot_ablation(path=join("checkpoints", "ablation", filename))

@@ -287,9 +287,6 @@ class FouriEEGTransformer(pl.LightningModule):
         # makes a fresh copy of the input to avoid errors
         eegs = input_eegs.clone()  # (b s c) or (s c)
 
-        # # cast from microvolts to volts
-        # eegs *= 1e6
-
         # eventually adds a batch dimension
         is_batched = True if len(eegs.shape) == 3 else False
         if not is_batched:
@@ -300,7 +297,7 @@ class FouriEEGTransformer(pl.LightningModule):
 
         # eventually adds data augmentation
         if self.training is True and self.data_augmentation is True:
-            with profiler.record_function("data augmentation (eeg)"):
+            with profiler.record_function("data augmentation (eegs)"):
                 if self.shifting is True:
                     for i_batch in range(eegs.shape[0]):
                         shift_direction = "left" if torch.rand(1, device=eegs.device) <= 0.5 else "right"
@@ -335,7 +332,7 @@ class FouriEEGTransformer(pl.LightningModule):
             # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
             if self.training is True and self.data_augmentation is True:
                 # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
-                with profiler.record_function("data augmentation (eeg)"):
+                with profiler.record_function("data augmentation (spectrogram)"):
                     if self.spectrogram_time_masking_perc > 0:
                         for i_batch in range(len(spectrogram)):
                             mask_amount = int(random.random() * \

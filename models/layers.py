@@ -3,6 +3,7 @@ import warnings
 from typing import Union, List, Dict
 
 import functorch
+import numpy as np
 import torch
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import nn
@@ -542,7 +543,13 @@ class MelSpectrogram(nn.Module):
             self,
             eegs: torch.Tensor,
     ):
-        assert len(eegs.shape) == 3
+        assert len(eegs.shape) in {2, 3}
+        is_batched = True if len(eegs.shape) == 3 else False
+        if not is_batched:
+            eegs = einops.rearrange(eegs, "s c -> () s c")
+        is_numpy = True if isinstance(eegs, np.ndarray) else False
+        if is_numpy:
+            eegs = torch.from_numpy(eegs)
         window_size = min(self.window_size, eegs.shape[1])
         window_stride = min(self.window_stride, window_size // 2)
         # with warnings.catch_warnings():
@@ -565,6 +572,10 @@ class MelSpectrogram(nn.Module):
         spectrogram = mel_fn(eegs)  # (b c m s)
         # spectrogram = transforms.AmplitudeToDB(stype="power")(spectrogram)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
+        if not is_batched:
+            spectrogram = einops.rearrange(spectrogram, "b s c m -> (b s) c m")
+        if is_numpy:
+            spectrogram = spectrogram.numpy()
         return spectrogram
 
     @staticmethod
