@@ -1,4 +1,5 @@
-command="bash cluster_ablation.sh --dataset_type=deap --dataset_path=data/deap --grid_search --checkpoints_path=./checkpoints --batch_size=768 --windows_size=2 --windows_stride=2"
+dataset="amigos"
+command="bash cluster_ablation.sh --dataset_type=$dataset --dataset_path=data/$dataset --grid_search --checkpoints_path=./checkpoints --batch_size=768 --windows_size=2 --windows_stride=2"
 
 $command --study_name=mels --test_mels
 $command --study_name=mel_window --test_mel_window_size --test_mel_window_stride

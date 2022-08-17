@@ -77,11 +77,6 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         default=False,
                         action="store_true",
                         help="Whether not to discard the decoder")
-    parser.add_argument("--mixing_sublayer_type",
-                        default="attention",
-                        choices={"attention", "fourier", "identity", "linear"},
-                        type=str,
-                        help="Dimension of the internal embeddings")
     parser.add_argument("--num_encoders",
                         default=4,
                         type=int,
@@ -138,11 +133,11 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         action="store_true",
                         help="Whether to disable EEGs' flipping during data augmentation")
     parser.add_argument("--spectrogram_time_masking_perc",
-                        default=0,
+                        default=0.05,
                         type=float,
                         help="Amount of time masking in the spectrogram")
     parser.add_argument("--spectrogram_frequency_masking_perc",
-                        default=0,
+                        default=0.05,
                         type=float,
                         help="Amount of frequency masking in the spectrogram")
     parser.add_argument("--noise_strength",
@@ -150,7 +145,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=float,
                         help="The amount of gaussian noise to add to the EEGs during data augmentation")
     parser.add_argument("--learning_rate",
-                        default=5e-5,
+                        default=1e-4,
                         type=float,
                         help="Learning rate of the model")
     parser.add_argument("--disable_gradient_clipping",
@@ -167,11 +162,11 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=int,
                         help="Number of mel banks")
     parser.add_argument("--mel_window_size",
-                        default=1,
+                        default=0.2,
                         type=float,
                         help="Size of spectrogram's windows")
     parser.add_argument("--mel_window_stride",
-                        default=0.05,
+                        default=0.25,
                         type=float,
                         help="Size of spectrogram's windows stride")
 

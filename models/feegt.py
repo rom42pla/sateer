@@ -44,10 +44,10 @@ class EEGEmotionTransformer(pl.LightningModule):
             labels_classes: Union[int, List[int]] = 2,
 
             mels: int = 16,
-            mel_window_size: Union[int, float] = 1,
-            mel_window_stride: Union[int, float] = 0.05,
+            mel_window_size: Union[int, float] = 0.2,
+            mel_window_stride: Union[int, float] = 0.25,
 
-            users_embeddings: bool = False,
+            users_embeddings: bool = True,
             num_users: Optional[int] = None,
 
             encoder_only: bool = False,
@@ -62,10 +62,10 @@ class EEGEmotionTransformer(pl.LightningModule):
             data_augmentation: bool = True,
             shifting: bool = True,
             cropping: bool = True,
-            flipping: bool = False,
+            flipping: bool = True,
             noise_strength: Union[int, float] = 0.01,
-            spectrogram_time_masking_perc: Union[int, float] = 0.1,
-            spectrogram_frequency_masking_perc: Union[int, float] = 0.1,
+            spectrogram_time_masking_perc: Union[int, float] = 0.05,
+            spectrogram_frequency_masking_perc: Union[int, float] = 0.05,
 
             learning_rate: float = 1e-4,
             device: Optional[str] = None,
