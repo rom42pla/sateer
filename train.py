@@ -15,7 +15,7 @@ if __name__ == '__main__':
     from plots import plot_metrics, plot_cross_subject
     from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train_k_fold, merge_logs
     from datasets.eeg_emrec import EEGClassificationDataset
-    from models.feegt import FouriEEGTransformer
+    from models.feegt import EEGEmotionTransformer
 
     import torchaudio
 

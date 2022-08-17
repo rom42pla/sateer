@@ -54,6 +54,7 @@ def plot_eegs(
         plt.savefig(save_path)
     plt.show()
 
+
 def plot_spectrogram(
         spectrogram: Union[np.ndarray, torch.Tensor],
         scale: Union[int, float] = 5,
@@ -87,6 +88,52 @@ def plot_spectrogram(
         plt.savefig(save_path)
     plt.show()
 
+
+def plot_eeg_to_spectrogram(
+        eegs: Union[np.ndarray, torch.Tensor],
+        spectrogram: Union[np.ndarray, torch.Tensor],
+        scale: Union[int, float] = 5,
+        save_path: Optional[str] = None,
+):
+    assert len(eegs.shape) == 2
+    assert len(spectrogram.shape) == 3
+    assert eegs.shape[1] == spectrogram.shape[1]
+    assert scale > 0
+    nrows = eegs.shape[1]
+    fig, (axs_eegs, axs_spectrogram) = plt.subplots(nrows=nrows, ncols=nrows,
+                                                    figsize=(scale * nrows, scale * nrows),
+                                                    tight_layout=True)
+    ylim_eegs = [eegs.min(), eegs.max()]
+    ylim_spectrogram = [spectrogram.min(), spectrogram.max()]
+    # eegs
+    for i_ax, ax in enumerate(axs_eegs.flat):
+        ax.plot(np.arange(eegs.shape[0]) / dataset.sampling_rate, eegs[:, i_ax])
+        ax.set_ylim(ylim_eegs)
+        ax.set_ylabel("amplitude")
+        ax.set_title(f"electrode {dataset.electrodes[i_ax]} (EEG)")
+        ax.set_xlabel("time")
+    # spectrogram
+    for i_ax, ax in enumerate(axs_spectrogram.flat):
+        im = ax.imshow(einops.rearrange(spectrogram[:, i_ax, :], "s m -> m s"),
+                       vmin=ylim_spectrogram[0], vmax=ylim_spectrogram[1], aspect="auto", cmap=plt.get_cmap("hot"))
+        # colorbar
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cbar = fig.colorbar(im, cax=cax, orientation="vertical")
+        cbar.ax.get_yaxis().labelpad = 15
+        cbar.ax.set_ylabel("amplitude", rotation=270)
+        # axis
+        ax.set_title(f"electrode {dataset.electrodes[i_ax]} (Mel-spectrogram)")
+        ax.set_ylabel("mels")
+        ax.invert_yaxis()
+        ax.set_xlabel("time")
+    if save_path is not None:
+        if not isdir(dirname(save_path)):
+            makedirs(dirname(save_path))
+        plt.savefig(save_path)
+    plt.show()
+
+
 def plot_paper_images(
         dataset: EEGClassificationDataset,
         save_path: Optional[str] = None,
@@ -107,6 +154,9 @@ def plot_paper_images(
         window_stride=0.05,
     )(sample_eegs)
     plot_spectrogram(spectrogram=spectrogram, save_path=join(save_path, "spectrogram.svg"))
+    # eeg to spectrogram
+    plot_eeg_to_spectrogram(eegs=sample_eegs[:, :2], spectrogram=spectrogram[:, :2],
+                            save_path=join(save_path, "eeg_to_spectrogram.svg"))
 
 
 def plot_cross_subject(

@@ -570,7 +570,6 @@ class MelSpectrogram(nn.Module):
         ).to(eegs.device).float()
         eegs = einops.rearrange(eegs, "b s c -> b c s")
         spectrogram = mel_fn(eegs)  # (b c m s)
-        # spectrogram = transforms.AmplitudeToDB(stype="power")(spectrogram)
         spectrogram = einops.rearrange(spectrogram, "b c m s -> b s c m")
         if not is_batched:
             spectrogram = einops.rearrange(spectrogram, "b s c m -> (b s) c m")

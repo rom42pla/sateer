@@ -35,7 +35,7 @@ from models.layers import AddGaussianNoise, MelSpectrogram, \
     GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings, GetUserEmbeddings
 
 
-class FouriEEGTransformer(pl.LightningModule):
+class EEGEmotionTransformer(pl.LightningModule):
     def __init__(
             self,
             in_channels: int,
@@ -387,6 +387,8 @@ class FouriEEGTransformer(pl.LightningModule):
                 self.position_embedder(x)
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
+            if self.users_embeddings:
+                x_encoded = x_encoded[:, 2:]
             assert len(x_encoded.shape) == 3, f"invalid number of dimensions ({x_encoded.shape} must be long 3)"
             assert x_encoded.shape[-1] == self.hidden_size, \
                 f"invalid hidden size after encoder ({x_encoded.shape[-1]} != {self.hidden_size})"
@@ -542,7 +544,7 @@ if __name__ == "__main__":
     )
     dataloader_train = DataLoader(dataset, batch_size=32, num_workers=os.cpu_count() - 2, shuffle=False)
     dataloader_val = DataLoader(dataset, batch_size=32, num_workers=os.cpu_count() - 2, shuffle=True)
-    model = FouriEEGTransformer(
+    model = EEGEmotionTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,

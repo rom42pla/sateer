@@ -26,7 +26,7 @@ from datasets.dreamer import DREAMERDataset
 from datasets.eeg_emrec import EEGClassificationDataset
 from datasets.seed import SEEDDataset
 from loggers.logger import FouriEEGTransformerLogger
-from models.feegt import FouriEEGTransformer
+from models.feegt import EEGEmotionTransformer
 
 
 def parse_dataset_class(name: str):
@@ -136,7 +136,7 @@ def train_k_fold(
     # initialize the logs
     logs: pd.DataFrame = pd.DataFrame()
     # initializes the model
-    base_model: FouriEEGTransformer = FouriEEGTransformer(
+    base_model: EEGEmotionTransformer = EEGEmotionTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
