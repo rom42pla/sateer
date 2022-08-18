@@ -1,5 +1,5 @@
 script_starter="bash cluster_train.sh"
-shared_params="--checkpoints_path=./checkpoints"
+shared_params="--checkpoints_path=./checkpoints --seed=42"
 
 deap_command="$script_starter deap data/deap $shared_params"
 $deap_command --batch_size=1024 --windows_size=1 --windows_stride=1
