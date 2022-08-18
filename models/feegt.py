@@ -362,7 +362,7 @@ class EEGEmotionTransformer(pl.LightningModule):
         # pass the spectrogram through the encoder
         with profiler.record_function("encoder"):
             # eventually adds positional embeddings and type embeddings
-            if self.users_embeddings:
+            if self.users_embeddings and ids is not None:
                 with profiler.record_function("user embeddings"):
                     # eventually adds a new user to the dict
                     for user_id in ids:
@@ -387,7 +387,7 @@ class EEGEmotionTransformer(pl.LightningModule):
                 self.position_embedder(x)
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
-            if self.users_embeddings:
+            if self.users_embeddings and ids is not None:
                 x_encoded = x_encoded[:, 2:]
             assert len(x_encoded.shape) == 3, f"invalid number of dimensions ({x_encoded.shape} must be long 3)"
             assert x_encoded.shape[-1] == self.hidden_size, \
