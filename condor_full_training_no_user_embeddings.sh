@@ -1,5 +1,5 @@
 script_starter="bash cluster_train.sh"
-shared_params="--seed=42 --checkpoints_path=./checkpoints/training/with_user_embeddings"
+shared_params="--seed=42 --checkpoints_path=./checkpoints/training/without_user_embeddings --disable_users_embeddings"
 
 
 deap_command="$script_starter deap data/deap --spectrogram_time_masking_perc=0 --spectrogram_frequency_masking_perc=0 --disable_flipping $shared_params"
