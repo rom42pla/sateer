@@ -577,7 +577,7 @@ if __name__ == "__main__":
             logger=False,
             log_every_n_steps=1,
             enable_progress_bar=True,
-            enable_model_summary=False,
+            enable_model_summary=True,
             enable_checkpointing=False,
             gradient_clip_val=0,
             limit_train_batches=1,
