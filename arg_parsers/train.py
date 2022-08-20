@@ -162,7 +162,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=int,
                         help="Number of mel banks")
     parser.add_argument("--mel_window_size",
-                        default=0.2,
+                        default=0.5,
                         type=float,
                         help="Size of spectrogram's windows")
     parser.add_argument("--mel_window_stride",

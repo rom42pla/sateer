@@ -1,5 +1,6 @@
 import math
 import warnings
+from pprint import pprint
 
 import einops
 import numpy as np
@@ -347,16 +348,45 @@ def plot_ablation(
         plt.show()
 
 
+def get_best_parameters_combination(
+        checkpoints_path: str,
+        dataset_type: str
+):
+    assert exists(checkpoints_path)
+    logs = pd.DataFrame()
+    for ablation_folder in listdir(checkpoints_path):
+        line_args = read_json(path=join(checkpoints_path, ablation_folder, "line_args.json"))
+        if line_args['dataset_type'] == dataset_type:
+            for trial_folder in [f for f in listdir(join(checkpoints_path, ablation_folder)) if
+                                 re.fullmatch(r"trial_[0-9]+", f)]:
+                if not "logs.csv" in listdir(join(checkpoints_path, ablation_folder, trial_folder)):
+                    continue
+                trial_logs = pd.read_csv(join(checkpoints_path, ablation_folder, trial_folder, "logs.csv"),
+                                         index_col=False)
+                trial_logs = trial_logs.groupby("epoch").max().reset_index()
+                trial_logs["trial"] = int(trial_folder.split("_")[-1])
+                logs = pd.concat([logs, trial_logs], ignore_index=True)
+    logs = logs.sort_values(by=["acc_mean_val"], ascending=False).drop("Unnamed: 0", axis=1)
+    return logs.iloc[0].to_dict()
+
+
 if __name__ == "__main__":
-    dataset: EEGClassificationDataset = AMIGOSDataset(
-        path=join("..", "..", "datasets", "eeg_emotion_recognition", "amigos"),
-        window_size=2,
-        window_stride=2,
-        drop_last=True,
-        discretize_labels=True,
-        normalize_eegs=True,
-    )
-    plot_paper_images(dataset=dataset, save_path=join("imgs", "paper"))
+    deap_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
+                                                              dataset_type="deap")
+    amigos_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
+                                                             dataset_type="amigos")
+    dreamer_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
+                                                              dataset_type="dreamer")
+    pprint(deap_best_parameters)
+    # dataset: EEGClassificationDataset = AMIGOSDataset(
+    #     path=join("..", "..", "datasets", "eeg_emotion_recognition", "amigos"),
+    #     window_size=2,
+    #     window_stride=2,
+    #     drop_last=True,
+    #     discretize_labels=True,
+    #     normalize_eegs=True,
+    # )
+    # plot_paper_images(dataset=dataset, save_path=join("imgs", "paper"))
     # plot_ablation(path=join("saved", "ablation_saved", "dreamer_data_augmentation"))
     # for filename in listdir(join("checkpoints", "ablation")):
     #     # print(join("checkpoints", "cross_saved", filename))

@@ -43,7 +43,7 @@ class EEGEmotionTransformer(pl.LightningModule):
             labels: Union[int, List[str]],
             labels_classes: Union[int, List[int]] = 2,
 
-            mels: int = 16,
+            mels: int = 8,
             mel_window_size: Union[int, float] = 0.2,
             mel_window_stride: Union[int, float] = 0.25,
 
