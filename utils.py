@@ -150,7 +150,6 @@ def train_k_fold(
         num_users=len(dataset.subject_ids),
 
         encoder_only=kwargs['encoder_only'],
-        mixing_sublayer_type=kwargs['mixing_sublayer_type'],
         hidden_size=kwargs['hidden_size'],
         num_encoders=kwargs['num_encoders'],
         num_decoders=kwargs['num_decoders'],
