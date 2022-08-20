@@ -566,7 +566,7 @@ class MelSpectrogram(nn.Module):
             power=1,
             win_length=window_size,
             hop_length=window_stride,
-            pad=window_stride//2,
+            pad=math.ceil(window_stride//2),
         ).to(eegs.device).float()
         eegs = einops.rearrange(eegs, "b s c -> b c s")
         spectrogram = mel_fn(eegs)  # (b c m s)
