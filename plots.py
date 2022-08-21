@@ -34,20 +34,27 @@ def plot_eegs(
         eegs: Union[np.ndarray, torch.Tensor],
         scale: Union[int, float] = 5,
         save_path: Optional[str] = None,
+        hide_x_ticks: bool = True,
+        hide_y_ticks: bool = True,
 ):
-    assert len(eegs.shape) == 2
+    assert len(eegs.shape) in {1, 2}
+    if len(eegs.shape) == 1:
+        eegs = einops.rearrange(eegs, "s -> s ()")
     assert scale > 0
-    fig, axs = plt.subplots(nrows=min(eegs.shape[-1], 8), ncols=1,
-                            figsize=(scale, scale * 2),
+    nrows = min(eegs.shape[-1], 8)
+    fig, axs = plt.subplots(nrows=nrows, ncols=1,
+                            figsize=(scale, scale * (nrows / 3)),
                             tight_layout=True)
     ylim = [eegs.min(), eegs.max()]
-    for i_ax, ax in enumerate(axs.flat):
+    for i_ax, ax in enumerate(axs if eegs.shape[-1] > 1 else [axs]):
         ax.plot(np.arange(eegs.shape[0]) / dataset.sampling_rate, eegs[:, i_ax])
         ax.set_ylim(ylim)
         ax.set_ylabel("amplitude")
         ax.set_title(f"electrode {dataset.electrodes[i_ax]}")
-        ax.set_xticks([])
-        ax.set_yticks([])
+        if hide_x_ticks:
+            ax.set_xticks([])
+        if hide_y_ticks:
+            ax.set_yticks([])
         ax.set_xlabel("time")
     if save_path is not None:
         if not isdir(dirname(save_path)):
@@ -151,13 +158,16 @@ def plot_paper_images(
         min_freq=0,
         max_freq=50,
         mels=32,
-        window_size=1,
+        window_size=10,
         window_stride=0.05,
     )(sample_eegs)
     plot_spectrogram(spectrogram=spectrogram, save_path=join(save_path, "spectrogram.svg"))
     # eeg to spectrogram
     plot_eeg_to_spectrogram(eegs=sample_eegs[:, :2], spectrogram=spectrogram[:, :2],
                             save_path=join(save_path, "eeg_to_spectrogram.svg"))
+    # window
+    plot_eegs(eegs=sample_eegs[:, 0], hide_x_ticks=False, hide_y_ticks=False,
+              save_path=join(save_path, "eeg_window.svg"))
 
 
 def plot_cross_subject(
@@ -293,59 +303,52 @@ def plot_ablation(
     logs = logs.sort_values(by=["trial", "epoch"]).drop("Unnamed: 0", axis=1)
     # parses tested parameters
     tested_parameters = read_json(path=join(path, "tested_args.json"))
+    if len(tested_parameters) > 1:
+        return
+    parameter = tested_parameters[0]
+    keys = sorted(logs[parameter].unique().tolist())
     # loops through parameters
-    for parameter in tested_parameters:
-        fig, (ax_loss, ax_acc) = plt.subplots(nrows=1, ncols=2,
-                                              figsize=(2 * scale, scale),
-                                              tight_layout=True)
-        # rearrange the dataframe for seaborn
-        logs_train = logs.copy().rename(columns={"loss_train": "loss",
-                                                 "acc_mean_train": "acc_mean"})
-        logs_train["phase"] = "train"
-        logs_val = logs.copy().rename(columns={"loss_val": "loss",
-                                               "acc_mean_val": "acc_mean"})
-        logs_val["phase"] = "val"
-        logs_grouped = pd.concat([logs_train, logs_val], axis=0)
-        # plots
-        sns.barplot(
-            data=logs_grouped,
-            x=parameter,
-            y="loss",
-            hue="phase",
-            palette="rocket",
-            ax=ax_loss,
-        )
-        sns.barplot(
-            data=logs_grouped,
-            x=parameter,
-            y="acc_mean",
-            hue="phase",
-            palette="rocket",
-            ax=ax_acc,
-        )
-        # labels
-        for ax in [ax_loss, ax_acc]:
-            ax.grid()
-            ax.set_xlabel(parameter.replace("_", " ").capitalize())
-            # for container in ax.containers:
-            #     ax.bar_label(container, label_type="edge", padding=-32)
-        ax_loss.set_ylabel("loss")
-        ax_acc.set_ylabel("accuracy (mean)")
-        ax_loss.set_ylim(0.5, None)
-        ax_acc.set_ylim(0.5, 1)
-        # legends
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            ax_loss.legend(["_" for _ in range(4)] + [
-                f"training ($\mu={logs.groupby('trial').min()['loss_train'].mean():.3f}$)",
-                f"validation ($\mu={logs.groupby('trial').min()['loss_val'].mean():.3f}$)",
-            ])
-            ax_acc.legend(["_" for _ in range(4)] + [
-                f"training ($\mu={logs.groupby('trial').max()['acc_mean_train'].mean():.3f}$)",
-                f"validation ($\mu={logs.groupby('trial').max()['acc_mean_val'].mean():.3f}$)",
-            ])
-        plt.savefig(join(plots_path, f"{parameter}.png"))
-        plt.show()
+
+    fig, axs = plt.subplots(nrows=len(keys), ncols=2,
+                            figsize=(2 * scale, scale),
+                            tight_layout=True)
+    xlim = [0, logs["epoch"].max()]
+    for i_ax, (metric, y_label) in enumerate([
+        ("loss", "loss"),
+        ("acc_mean", "accuracy"),
+        # ("time", "time ($s$)"),
+    ]):
+        for i_key, key in enumerate(keys):
+            ax = axs[i_key, i_ax]
+            ax.plot(
+                logs[logs[parameter] == key].sort_values(by="epoch", ascending=True)[f"{metric}_train"])
+            ax.plot(logs[logs[parameter] == key].sort_values(by="epoch", ascending=True)[f"{metric}_val"])
+            ax.set_xlim(xlim)
+            ax.set_xlabel("epoch")
+        # metric_train, metric_val = [], []
+        # for key in keys:
+        #     best_row = logs[logs[parameter] == key].sort_values(by="loss_val", ascending=True).iloc[0]
+        #     metric_train += [best_row[f"{metric}_train"]]
+        #     metric_val = [best_row[f"{metric}_val"]]
+        # x = np.arange(len(keys))
+        # width = 0.4
+        # rects1 = ax.bar(x - width / 2, metric_train, width, label="training")
+        # rects2 = ax.bar(x + width / 2, metric_val, width, label="validation")
+        #
+        # ax.set_xlabel("parameter value")
+        # ax.set_ylabel(y_label)
+        # ax.set_xticks(x, keys)
+        # ax.legend(loc="lower right")
+        # ax.bar_label(rects1, padding=3, fmt='%.3f')
+        # ax.bar_label(rects2, padding=3, fmt='%.3f')
+        # if metric == "acc_mean":
+        #     ax.set_ylim(0.5, 1.1)
+        # if metric == "time":
+        #     ax.set_ylim(0, None)
+        fig.suptitle(parameter.replace("_", " ").capitalize())
+
+    plt.savefig(join(plots_path, f"{parameter}.png"))
+    plt.show()
 
 
 def get_best_parameters_combination(
@@ -371,16 +374,15 @@ def get_best_parameters_combination(
 
 
 if __name__ == "__main__":
-    deap_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
-                                                              dataset_type="deap")
-    amigos_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
-                                                             dataset_type="amigos")
-    dreamer_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
-                                                              dataset_type="dreamer")
-    pprint(deap_best_parameters)
+    # deap_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
+    #                                                           dataset_type="deap")
+    # amigos_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
+    #                                                          dataset_type="amigos")
+    # dreamer_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
+    #                                                           dataset_type="dreamer")
     # dataset: EEGClassificationDataset = AMIGOSDataset(
     #     path=join("..", "..", "datasets", "eeg_emotion_recognition", "amigos"),
-    #     window_size=2,
+    #     window_size=10,
     #     window_stride=2,
     #     drop_last=True,
     #     discretize_labels=True,
@@ -388,7 +390,6 @@ if __name__ == "__main__":
     # )
     # plot_paper_images(dataset=dataset, save_path=join("imgs", "paper"))
     # plot_ablation(path=join("saved", "ablation_saved", "dreamer_data_augmentation"))
-    # for filename in listdir(join("checkpoints", "ablation")):
-    #     # print(join("checkpoints", "cross_saved", filename))
-    #     # plot_cross_subject(path=join("checkpoints", "cross_saved", filename))
-    #     plot_ablation(path=join("checkpoints", "ablation", filename))
+    for filename in listdir(join("checkpoints", "ablation", "dreamer")):
+        filepath = join("checkpoints", "ablation", "dreamer", filename)
+        plot_ablation(path=filepath)

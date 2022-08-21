@@ -34,7 +34,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         action="store_true",
                         help="Whether not to normalize the EEGs with zero mean and unit variance")
     parser.add_argument("--train_set_size",
-                        default=0.8,
+                        default=0.9,
                         type=float,
                         help="The size of the training set, in percentage")
 
@@ -100,7 +100,8 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
 
     args = parser.parse_args()
 
-    assert isdir(args.dataset_path)
+    assert args.dataset_type is not None
+    assert args.dataset_path is not None and isdir(args.dataset_path)
     assert 0 < args.train_set_size < 1
     args.val_set_size = round(1 - args.train_set_size, 2)
     assert args.train_set_size + args.val_set_size == 1
