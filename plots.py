@@ -285,70 +285,81 @@ def plot_metrics(logs: pd.DataFrame,
 
 def plot_ablation(
         path: str,
-        scale: int = 5
+        scale: int = 10
 ):
     # eventually creates the plots folder
     plots_path = join(path, "plots")
     if not exists(plots_path):
         makedirs(plots_path)
     # parses ablation's logs in the different folders
-    logs = pd.DataFrame()
-    for trial_folder in [f for f in listdir(path) if re.fullmatch(r"trial_[0-9]+", f)]:
-        if not "logs.csv" in listdir(join(path, trial_folder)):
+    for parameter in [f for f in listdir(path)
+                      if isdir(join(path, f)) and f != "plots"]:
+        parameter_name = parameter.replace("_", " ").capitalize()
+        data = {}
+        for i_value in listdir(join(path, parameter)):
+            if not exists(join(path, parameter, i_value, "logs.csv")):
+                continue
+            logs = pd.read_csv(join(path, parameter, i_value, "logs.csv"))
+            value = read_json(join(path, f"{parameter}_{i_value}_desc.json"))["value"]
+            data[value] = logs
+        if len(data) == 0:
             continue
-        trial_logs = pd.read_csv(join(path, trial_folder, "logs.csv"), index_col=False)
-        trial_logs = trial_logs.groupby("epoch").max().reset_index()
-        trial_logs["trial"] = int(trial_folder.split("_")[-1])
-        logs = pd.concat([logs, trial_logs], ignore_index=True)
-    logs = logs.sort_values(by=["trial", "epoch"]).drop("Unnamed: 0", axis=1)
-    # parses tested parameters
-    tested_parameters = read_json(path=join(path, "tested_args.json"))
-    if len(tested_parameters) > 1:
-        return
-    parameter = tested_parameters[0]
-    keys = sorted(logs[parameter].unique().tolist())
-    # loops through parameters
 
-    fig, axs = plt.subplots(nrows=len(keys), ncols=2,
-                            figsize=(2 * scale, scale),
-                            tight_layout=True)
-    xlim = [0, logs["epoch"].max()]
-    for i_ax, (metric, y_label) in enumerate([
-        ("loss", "loss"),
-        ("acc_mean", "accuracy"),
-        # ("time", "time ($s$)"),
-    ]):
-        for i_key, key in enumerate(keys):
-            ax = axs[i_key, i_ax]
-            ax.plot(
-                logs[logs[parameter] == key].sort_values(by="epoch", ascending=True)[f"{metric}_train"])
-            ax.plot(logs[logs[parameter] == key].sort_values(by="epoch", ascending=True)[f"{metric}_val"])
-            ax.set_xlim(xlim)
-            ax.set_xlabel("epoch")
-        # metric_train, metric_val = [], []
-        # for key in keys:
-        #     best_row = logs[logs[parameter] == key].sort_values(by="loss_val", ascending=True).iloc[0]
-        #     metric_train += [best_row[f"{metric}_train"]]
-        #     metric_val = [best_row[f"{metric}_val"]]
-        # x = np.arange(len(keys))
-        # width = 0.4
-        # rects1 = ax.bar(x - width / 2, metric_train, width, label="training")
-        # rects2 = ax.bar(x + width / 2, metric_val, width, label="validation")
-        #
-        # ax.set_xlabel("parameter value")
-        # ax.set_ylabel(y_label)
-        # ax.set_xticks(x, keys)
-        # ax.legend(loc="lower right")
-        # ax.bar_label(rects1, padding=3, fmt='%.3f')
-        # ax.bar_label(rects2, padding=3, fmt='%.3f')
-        # if metric == "acc_mean":
-        #     ax.set_ylim(0.5, 1.1)
-        # if metric == "time":
-        #     ax.set_ylim(0, None)
-        fig.suptitle(parameter.replace("_", " ").capitalize())
+        fig = plt.figure(figsize=(scale * 2, scale), tight_layout=True)
 
-    plt.savefig(join(plots_path, f"{parameter}.png"))
-    plt.show()
+        # fig, axs = plt.subplots(nrows=len(data.keys()), ncols=2,
+        #                         figsize=(2 * scale, scale),
+        #                         tight_layout=True)
+        xlim = [0, max([logs["epoch"].max() for logs in data.values()])]
+        for i_ax, (metric, y_label, title) in enumerate([
+            ("loss", "loss", "loss"),
+            ("acc_mean", "accuracy", "accuracy"),
+            ("time", "time ($s$)", "time"),
+        ]):
+            if metric == "time":
+                ax = plt.subplot2grid(shape=(len(data.keys()), 3), loc=(0, i_ax), rowspan=len(data.keys()))
+                ax.set_title(f"{title.capitalize()} plot")
+                x = np.arange(len(data.keys()))
+                width = 0.3
+                rects_train = ax.barh(x - width / 2, [data[key][f"{metric}_train"].mean() for key in sorted(list(data.keys()))],
+                        height=width, label="training")
+                rects_val = ax.barh(x + width / 2, [data[key][f"{metric}_val"].mean() for key in sorted(list(data.keys()))],
+                        height=width, label="validation")
+                ax.set_yticks(x, sorted(list(data.keys())))
+                ax.set_xlim(0, 0.5)
+                ax.legend(loc="upper right")
+                ax.bar_label(rects_train, padding=3, fmt="%.3f")
+                ax.bar_label(rects_val, padding=3, fmt="%.3f")
+                ax.set_xlabel(y_label)
+                ax.set_ylabel("value")
+                ax.invert_yaxis()
+                continue
+            for i_key, key in enumerate(sorted(data.keys())):
+                # ax = axs[i_key, i_ax]
+                if metric in {"loss", "acc_mean"}:
+                    ax = plt.subplot2grid(shape=(len(data.keys()), 3), loc=(i_key, i_ax))
+                ax.set_title(f"{title.capitalize()} plot for value '{key}'")
+                plotting_data = data[key].sort_values(by="epoch", ascending=True)[
+                    ["epoch", f"{metric}_train", f"{metric}_val"]]
+                plotting_data_train, plotting_data_val = plotting_data[["epoch", f"{metric}_train"]].dropna(), \
+                                                         plotting_data[["epoch", f"{metric}_val"]].dropna()
+                if metric in {"loss", "acc_mean"}:
+                    ax.plot(plotting_data_train["epoch"],
+                            plotting_data_train[f"{metric}_train"])
+                    ax.plot(plotting_data_val["epoch"],
+                            plotting_data_val[f"{metric}_val"])
+                    ax.set_xlim(xlim)
+                    if metric == "acc_mean":
+                        ax.set_ylim(0.5, 1)
+                    ax.set_xlabel("epoch")
+                    ax.legend(["training", "validation"], loc="lower left")
+
+                    # ax.set_xlabel("parameter value")
+                    #     # ax.set_ylabel(y_label)
+                ax.set_ylabel(y_label)
+        fig.suptitle(f"Parameter: {parameter_name.lower()}")
+        plt.savefig(join(plots_path, f"{parameter}.png"))
+        plt.show()
 
 
 def get_best_parameters_combination(
@@ -390,6 +401,8 @@ if __name__ == "__main__":
     # )
     # plot_paper_images(dataset=dataset, save_path=join("imgs", "paper"))
     # plot_ablation(path=join("saved", "ablation_saved", "dreamer_data_augmentation"))
-    for filename in listdir(join("checkpoints", "ablation", "dreamer")):
-        filepath = join("checkpoints", "ablation", "dreamer", filename)
-        plot_ablation(path=filepath)
+    plot_ablation(path=join("checkpoints", "ablation", "dreamer", "20220821_164809"))
+    # for filename in listdir(join("checkpoints", "ablation", "dreamer")):
+    #     filepath = join("checkpoints", "ablation", "dreamer", filename)
+    #     print(filepath)
+    #     plot_ablation(path=filepath)

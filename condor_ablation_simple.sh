@@ -10,7 +10,7 @@ fi
 printf "universe = docker
 docker_image = visionlabsapienza/workgroup:container-08082022
 executable = /bin/python3
-arguments = $(pwd)/ablation_simple.py --dataset_type=$dataset --dataset_path=data/$dataset --checkpoints_path=./checkpoints --batch_size=768 --windows_size=2 --windows_stride=2 --seed=42
+arguments = $(pwd)/ablation_simple.py --dataset_type=$dataset --dataset_path=data/$dataset --checkpoints_path=./checkpoints --batch_size=768 --windows_size=10 --windows_stride=2 --seed=42
 output = $(pwd)/condor_logs/out_\$(ClusterId)
 error = $(pwd)/condor_logs/err_\$(ClusterId)
 log = $(pwd)/condor_logs/log_\$(ClusterId)

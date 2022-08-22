@@ -100,4 +100,4 @@ for i_parameter, (parameter, search_space) in enumerate([
             "value": value,
         }, path=join(experiment_path, f"{parameter}_{i_value}_desc.json"))
 
-# plot_ablation(experiment_path)
+plot_ablation(experiment_path)
