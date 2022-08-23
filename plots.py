@@ -27,7 +27,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
-from utils import read_json
+from utils import read_json, parse_dataset_class
 
 
 def plot_eegs(
@@ -383,6 +383,37 @@ def get_best_parameters_combination(
     logs = logs.sort_values(by=["acc_mean_val"], ascending=False).drop("Unnamed: 0", axis=1)
     return logs.iloc[0].to_dict()
 
+def get_datasets_table(datasets_path: str):
+    assert isdir(datasets_path)
+    header = [
+        "name",
+        "subjects (\\#)",
+        "trials (\\#)",
+        "sampling rate (\\SI{}{\\hertz})",
+        "electrodes (\\#)",
+        "labels (\\#)"
+    ]
+    print(" & ".join([n.capitalize() for n in header]), "\\\\")
+    for dataset_name in ["deap", "dreamer", "amigos", "seed"]:
+        if not isdir(join(datasets_path, dataset_name)):
+            print(f"{dataset_name} not found into {datasets_path}")
+        dataset: EEGClassificationDataset = parse_dataset_class(dataset_name)(
+            path=join(datasets_path, dataset_name)
+        )
+        row = [
+            dataset_name.upper(),
+            len(dataset.subject_ids),
+            len(dataset.eegs_data),
+            dataset.sampling_rate,
+            len(dataset.electrodes),
+            len(dataset.labels)
+        ]
+        row = [str(n) for n in row]
+        assert len(row) == len(header)
+        print(" & ".join(row), "\\\\")
+        del dataset
+
+
 
 if __name__ == "__main__":
     # deap_best_parameters = get_best_parameters_combination(checkpoints_path=join("checkpoints", "ablation"),
@@ -401,8 +432,9 @@ if __name__ == "__main__":
     # )
     # plot_paper_images(dataset=dataset, save_path=join("imgs", "paper"))
     # plot_ablation(path=join("saved", "ablation_saved", "dreamer_data_augmentation"))
-    plot_ablation(path=join("checkpoints", "ablation", "dreamer", "20220821_164809"))
+    # plot_ablation(path=join("checkpoints", "ablation", "dreamer", "20220821_164809"))
     # for filename in listdir(join("checkpoints", "ablation", "dreamer")):
     #     filepath = join("checkpoints", "ablation", "dreamer", filename)
     #     print(filepath)
     #     plot_ablation(path=filepath)
+    get_datasets_table(join("..", "..", "datasets", "eeg_emotion_recognition"))
