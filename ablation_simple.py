@@ -68,7 +68,7 @@ for i_parameter, (parameter, search_space) in enumerate([
     ("hidden_size", [256, 512, 768]),
     ("num_layers", [2, 4, 6]),
     ("positional_embedding_type", ["sinusoidal", "learned"]),
-    ("dropout_p", [0, 0.1, 0.2]),
+    ("dropout_p", [0.01, 0.1, 0.2]),
 
     ("shifting", [True, False]),
     ("cropping", [True, False]),
@@ -87,17 +87,21 @@ for i_parameter, (parameter, search_space) in enumerate([
 
             **{parameter: value}
         )
-        logs = train(
-            dataset_train=dataset_train,
-            dataset_val=dataset_val,
-            model=model,
-            experiment_path=join(experiment_path, parameter, str(i_value)),
-            **args
-        )
-        logs.to_csv(join(experiment_path, f"{parameter}_{i_value}_logs.csv"))
-        save_to_json({
-            "parameter": parameter,
-            "value": value,
-        }, path=join(experiment_path, f"{parameter}_{i_value}_desc.json"))
+        try:
+            logs = train(
+                dataset_train=dataset_train,
+                dataset_val=dataset_val,
+                model=model,
+                experiment_path=join(experiment_path, parameter, str(i_value)),
+                **args
+            )
+            logs.to_csv(join(experiment_path, f"{parameter}_{i_value}_logs.csv"))
+            save_to_json({
+                "parameter": parameter,
+                "value": value,
+            }, path=join(experiment_path, f"{parameter}_{i_value}_desc.json"))
+        except Exception as e:
+            logging.info(f"skipped trial because of exception\n{e}")
+            continue
 
 plot_ablation(experiment_path)
