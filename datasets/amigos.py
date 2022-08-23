@@ -50,7 +50,8 @@ class AMIGOSDataset(EEGClassificationDataset):
                 else:
                     labels_trial[labels_trial > 9] = 9
                     labels[i_trial][:5] = (labels_trial[:5] - 1) / 8
-                    assert labels[i_trial][:5].min() >= 1 and labels[i_trial][:5].max() <= 9
+                    assert labels[i_trial][:5].min() >= 0
+                    assert labels[i_trial][:5].max() <= 9
             return eegs, labels, subject_id
 
         with Pool(processes=len(self.subject_ids)) as pool:
