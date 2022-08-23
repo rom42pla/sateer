@@ -389,6 +389,9 @@ def get_datasets_table(datasets_path: str):
         "name",
         "subjects (\\#)",
         "trials (\\#)",
+        "total length (\\SI{}{\\second})",
+        "mean trial length (\\SI{}{\\second})",
+        "StD. trial length (\\SI{}{\\second})",
         "sampling rate (\\SI{}{\\hertz})",
         "electrodes (\\#)",
         "labels (\\#)"
@@ -404,6 +407,9 @@ def get_datasets_table(datasets_path: str):
             dataset_name.upper(),
             len(dataset.subject_ids),
             len(dataset.eegs_data),
+            np.sum([len(trial)/dataset.sampling_rate for trial in dataset.eegs_data]),
+            np.mean([len(trial)/dataset.sampling_rate for trial in dataset.eegs_data]),
+            np.std([len(trial)/dataset.sampling_rate for trial in dataset.eegs_data]),
             dataset.sampling_rate,
             len(dataset.electrodes),
             len(dataset.labels)
@@ -412,6 +418,7 @@ def get_datasets_table(datasets_path: str):
         assert len(row) == len(header)
         print(" & ".join(row), "\\\\")
         del dataset
+        break
 
 
 
@@ -438,3 +445,4 @@ if __name__ == "__main__":
     #     print(filepath)
     #     plot_ablation(path=filepath)
     get_datasets_table(".")
+    # get_datasets_table(join("..", "..", "datasets", "eeg_emotion_recognition"))
