@@ -35,6 +35,8 @@ if __name__ == '__main__':
     # sets the logging folder
     datetime_str: str = datetime.now().strftime("%Y%m%d_%H:%M")
     experiment_name: str = f"{datetime_str}_{args['dataset_type']}_size={args['windows_size']}_stride={args['windows_stride']}"
+    if args['validation'] == "simple":
+        experiment_name += f"_{args['model_name']}"
     experiment_path: str = join(args['checkpoints_path'], experiment_name)
     makedirs(experiment_path)
 
