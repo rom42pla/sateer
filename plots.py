@@ -418,8 +418,6 @@ def get_datasets_table(datasets_path: str):
         assert len(row) == len(header)
         print(" & ".join(row), "\\\\")
         del dataset
-        break
-
 
 
 if __name__ == "__main__":
