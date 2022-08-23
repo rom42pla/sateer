@@ -7,7 +7,7 @@ import re
 import warnings
 from copy import deepcopy
 from os.path import join, isdir, exists
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ import pandas as pd
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning import Callback
-from pytorch_lightning.callbacks import EarlyStopping, StochasticWeightAveraging
+from pytorch_lightning.callbacks import EarlyStopping, StochasticWeightAveraging, ModelCheckpoint
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.utilities.warnings import LightningDeprecationWarning
 from torch.utils.data import Dataset, DataLoader, Subset
@@ -26,7 +26,7 @@ from datasets.dreamer import DREAMERDataset
 from datasets.eeg_emrec import EEGClassificationDataset
 from datasets.seed import SEEDDataset
 from loggers.logger import FouriEEGTransformerLogger
-from models.feegt import EEGEmotionTransformer
+from models.eegst import EEGSpectralTransformer
 
 
 def parse_dataset_class(name: str):
@@ -119,8 +119,24 @@ def read_json(path: str) -> Dict:
     return x
 
 
+def split_dataset(
+        dataset: Dataset,
+        train_set_perc: float = 0.8,
+):
+    assert isinstance(train_set_perc, float)
+    assert 0 < train_set_perc < 1
+    shuffled_indices = np.random.permutation(len(dataset)).tolist()
+    train_indices = shuffled_indices[:int(len(dataset) * train_set_perc)]
+    val_indices = shuffled_indices[int(len(dataset) * train_set_perc):]
+    assert set(train_indices).isdisjoint(set(val_indices))
+    assert set(train_indices).union(set(val_indices)) == set(shuffled_indices)
+    dataset_train = Subset(dataset, train_indices)
+    dataset_val = Subset(dataset, val_indices)
+    return dataset_train, dataset_val
+
+
 def train_k_fold(
-        dataset: EEGClassificationDataset,
+        dataset: Union[Dataset, Subset],
         experiment_path: str,
         k_folds: int = 10,
         batch_size: int = 64,
@@ -131,12 +147,13 @@ def train_k_fold(
         disable_gradient_clipping: bool = False,
         disable_swa: bool = True,
         progress_bar: bool = True,
+        model_name: str = "model",
         **kwargs,
 ) -> pd.DataFrame:
     # initialize the logs
     logs: pd.DataFrame = pd.DataFrame()
     # initializes the model
-    base_model: EEGEmotionTransformer = EEGEmotionTransformer(
+    base_model: EEGSpectralTransformer = EEGSpectralTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
@@ -269,8 +286,8 @@ def train_k_fold(
 def train(
         dataset_train: Dataset,
         dataset_val: Dataset,
-        model: pl.LightningModule,
         experiment_path: str,
+        model: Optional[pl.LightningModule] = None,
         batch_size: int = 64,
         max_epochs: int = 1000,
         precision: int = 16,
@@ -279,8 +296,45 @@ def train(
         disable_swa: bool = True,
         progress_bar: bool = True,
         learning_rate: float = 1e-4,
+        save_model: bool = False,
+        model_name: str = "model",
         **kwargs,
 ) -> pd.DataFrame:
+    if model is None:
+        dataset = dataset_train.dataset
+        model = EEGSpectralTransformer(
+            in_channels=len(dataset.electrodes),
+            sampling_rate=dataset.sampling_rate,
+            labels=dataset.labels,
+            labels_classes=dataset.labels_classes,
+
+            mels=kwargs['mels'],
+            mel_window_size=kwargs['mel_window_size'],
+            mel_window_stride=kwargs['mel_window_stride'],
+
+            users_embeddings=not kwargs['disable_users_embeddings'],
+            num_users=len(dataset.subject_ids),
+
+            encoder_only=kwargs['encoder_only'],
+            hidden_size=kwargs['hidden_size'],
+            num_encoders=kwargs['num_encoders'],
+            num_decoders=kwargs['num_decoders'],
+            num_attention_heads=kwargs['num_attention_heads'],
+            positional_embedding_type=kwargs['positional_embedding_type'],
+            max_position_embeddings=kwargs['max_position_embeddings'],
+            dropout_p=kwargs['dropout_p'],
+
+            data_augmentation=not kwargs['disable_data_augmentation'],
+            shifting=not kwargs['disable_shifting'],
+            cropping=not kwargs['disable_cropping'],
+            flipping=not kwargs['disable_flipping'],
+            noise_strength=kwargs['noise_strength'],
+            spectrogram_time_masking_perc=kwargs['spectrogram_time_masking_perc'],
+            spectrogram_frequency_masking_perc=kwargs['spectrogram_frequency_masking_perc'],
+
+            learning_rate=learning_rate,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
     initial_weights = deepcopy(model.state_dict().__str__())
 
     dataloader_train: DataLoader = DataLoader(dataset_train,
@@ -294,6 +348,21 @@ def train(
     # frees some memory
     gc.collect()
 
+    callbacks = init_callbacks(
+        progress_bar=progress_bar,
+        swa=not disable_swa,
+        learning_rate=learning_rate,
+    )
+    if save_model:
+        callbacks += [
+            ModelCheckpoint(
+                monitor='acc_mean_val',
+                dirpath=experiment_path,
+                filename=model_name + "_acc{acc_mean_val:.3f}",
+                save_top_k=1,
+            ),
+        ]
+        save_to_json(dict(model.hparams), join(experiment_path, "hparams.json"))
     # initializes the trainer
     accelerator: str = "cpu"
     devices: int = 1
@@ -310,18 +379,14 @@ def train(
         precision=precision,
         max_epochs=max_epochs,
         check_val_every_n_epoch=1,
-        logger=FouriEEGTransformerLogger(path=join(experiment_path)),
+        logger=FouriEEGTransformerLogger(path=experiment_path),
         log_every_n_steps=1,
         enable_progress_bar=progress_bar,
-        enable_model_summary=False,
-        enable_checkpointing=False,
+        enable_model_summary=True if save_model else False,
+        enable_checkpointing=save_model,
         gradient_clip_val=1 if disable_gradient_clipping is False else 0,
         auto_lr_find=False if auto_lr_finder is False else "learning_rate",
-        callbacks=init_callbacks(
-            progress_bar=progress_bar,
-            swa=not disable_swa,
-            learning_rate=learning_rate,
-        ),
+        callbacks=callbacks
     )
     # trains the model
     trainer.fit(model,

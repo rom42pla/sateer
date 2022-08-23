@@ -17,11 +17,11 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=str,
                         help="Path to dataset's directory")
     parser.add_argument("--windows_size",
-                        default=None,
+                        default=2,
                         type=float,
                         help="Duration of the windows in seconds")
     parser.add_argument("--windows_stride",
-                        default=None,
+                        default=1,
                         type=float,
                         help="Duration of stride of the windows in seconds")
     parser.add_argument("--dont_discretize_labels",
@@ -33,6 +33,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         action="store_true",
                         help="Whether not to normalize the EEGs with zero mean and unit variance")
     parser.add_argument("--checkpoints_path",
+                        default="checkpoints",
                         type=str,
                         help="Path to where to save the saved")
     parser.add_argument("--seed",
@@ -55,12 +56,16 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
     parser.add_argument("--validation",
                         default="k_fold",
                         type=str,
-                        choices={"k_fold", "loso"},
+                        choices={"k_fold", "loso", "simple"},
                         help="Type of validation algorithm")
     parser.add_argument("--k_folds",
                         default=10,
                         type=int,
                         help="Number of folds for the cross validation")
+    parser.add_argument("--train_set_perc",
+                        default=0.8,
+                        type=float,
+                        help="Percentage of training set used if validation is simple")
     parser.add_argument("--setting",
                         default="cross_subject",
                         type=str,
@@ -73,6 +78,10 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         help="Number of bits per float")
 
     # architecture
+    parser.add_argument("--model_name",
+                        default="eegst",
+                        type=str,
+                        help="Name of the model to be used in checkpoints")
     parser.add_argument("--encoder_only",
                         default=False,
                         action="store_true",

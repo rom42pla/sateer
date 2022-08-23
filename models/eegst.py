@@ -35,7 +35,7 @@ from models.layers import AddGaussianNoise, MelSpectrogram, \
     GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings, GetUserEmbeddings
 
 
-class EEGEmotionTransformer(pl.LightningModule):
+class EEGSpectralTransformer(pl.LightningModule):
     def __init__(
             self,
             in_channels: int,
@@ -362,7 +362,7 @@ class EEGEmotionTransformer(pl.LightningModule):
         # pass the spectrogram through the encoder
         with profiler.record_function("encoder"):
             # eventually adds positional embeddings and type embeddings
-            if self.users_embeddings and ids is not None:
+            if self.users_embeddings and (ids is not None):
                 with profiler.record_function("user embeddings"):
                     # eventually adds a new user to the dict
                     for user_id in ids:
@@ -387,7 +387,7 @@ class EEGEmotionTransformer(pl.LightningModule):
                 self.position_embedder(x)
             # encoder pass
             x_encoded = self.encoder(x)  # (b s d)
-            if self.users_embeddings and ids is not None:
+            if self.users_embeddings and (ids is not None):
                 x_encoded = x_encoded[:, 2:]
             assert len(x_encoded.shape) == 3, f"invalid number of dimensions ({x_encoded.shape} must be long 3)"
             assert x_encoded.shape[-1] == self.hidden_size, \
@@ -544,7 +544,7 @@ if __name__ == "__main__":
     )
     dataloader_train = DataLoader(dataset, batch_size=32, num_workers=os.cpu_count() - 2, shuffle=False)
     dataloader_val = DataLoader(dataset, batch_size=32, num_workers=os.cpu_count() - 2, shuffle=True)
-    model = EEGEmotionTransformer(
+    model = EEGSpectralTransformer(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,

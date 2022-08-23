@@ -13,9 +13,10 @@ if __name__ == '__main__':
 
     from arg_parsers.train import get_args
     from plots import plot_metrics, plot_cross_subject
-    from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train_k_fold, merge_logs
+    from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train_k_fold, merge_logs, train, \
+    split_dataset
     from datasets.eeg_emrec import EEGClassificationDataset
-    from models.feegt import EEGEmotionTransformer
+    from models.eegst import EEGSpectralTransformer
 
     import torchaudio
 
@@ -62,6 +63,15 @@ if __name__ == '__main__':
             plot_cross_subject(path=experiment_path)
         elif args['validation'] == "loso":
             raise NotImplementedError
+        elif args['validation'] == "simple":
+            dataset_train, dataset_val = split_dataset(dataset, train_set_perc=0.9)
+            train(
+                dataset_train=dataset_train,
+                dataset_val=dataset_val,
+                experiment_path=experiment_path,
+                save_model=True,
+                **args
+            )
 
     elif args['setting'] == "within_subject":
         if args['validation'] == "k_fold":

@@ -21,7 +21,7 @@ from arg_parsers.ablation import get_args
 from plots import plot_metrics, plot_ablation
 from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train
 from datasets.eeg_emrec import EEGClassificationDataset
-from models.feegt import EEGEmotionTransformer
+from models.eegst import EEGSpectralTransformer
 
 # sets up the loggers
 init_logger()
@@ -79,7 +79,7 @@ for i_parameter, (parameter, search_space) in enumerate([
 ]):
     logging.info(f"started trial with parameter {parameter}")
     for i_value, value in enumerate(search_space):
-        model: EEGEmotionTransformer = EEGEmotionTransformer(
+        model: EEGSpectralTransformer = EEGSpectralTransformer(
             in_channels=len(dataset.electrodes),
             sampling_rate=dataset.sampling_rate,
             labels=dataset.labels,
@@ -95,13 +95,13 @@ for i_parameter, (parameter, search_space) in enumerate([
                 experiment_path=join(experiment_path, parameter, str(i_value)),
                 **args
             )
-            logs.to_csv(join(experiment_path, f"{parameter}_{i_value}_logs.csv"))
-            save_to_json({
-                "parameter": parameter,
-                "value": value,
-            }, path=join(experiment_path, f"{parameter}_{i_value}_desc.json"))
         except Exception as e:
             logging.info(f"skipped trial because of exception\n{e}")
             continue
+        logs.to_csv(join(experiment_path, f"{parameter}_{i_value}_logs.csv"))
+        save_to_json({
+            "parameter": parameter,
+            "value": value,
+        }, path=join(experiment_path, f"{parameter}_{i_value}_desc.json"))
 
 plot_ablation(experiment_path)
