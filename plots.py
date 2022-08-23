@@ -437,4 +437,4 @@ if __name__ == "__main__":
     #     filepath = join("checkpoints", "ablation", "dreamer", filename)
     #     print(filepath)
     #     plot_ablation(path=filepath)
-    get_datasets_table(join("..", "..", "datasets", "eeg_emotion_recognition"))
+    get_datasets_table(".")
