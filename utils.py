@@ -357,6 +357,7 @@ def train(
         callbacks += [
             ModelCheckpoint(
                 monitor='acc_mean_val',
+                mode="max",
                 dirpath=experiment_path,
                 filename=model_name + "_acc{acc_mean_val:.3f}",
                 save_top_k=1,
