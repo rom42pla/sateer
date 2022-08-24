@@ -359,7 +359,7 @@ def train(
                 monitor='acc_mean_val',
                 mode="max",
                 dirpath=experiment_path,
-                filename=model_name + "_acc{acc_mean_val:.3f}",
+                filename=model_name + "_{acc_mean_val:.3f}",
                 save_top_k=1,
             ),
         ]
