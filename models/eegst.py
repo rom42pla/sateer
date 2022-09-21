@@ -522,7 +522,7 @@ class EEGSpectralTransformer(pl.LightningModule):
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False, sync_dist=True)
         # classification metrics
-        for metric in ["acc", "f1", "precision", "recall", "kappa", "corrcoeff"]:
+        for metric in ["acc", "f1", "precision", "recall", "kappa", "corrcoef"]:
             metric_data = torch.stack([e[metric] for e in outputs])
             self.log(f"{metric}_mean_{phase}", metric_data.mean(),
                      prog_bar=True if metric == "acc" else False, sync_dist=True)
