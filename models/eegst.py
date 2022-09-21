@@ -451,27 +451,52 @@ class EEGSpectralTransformer(pl.LightningModule):
                  for i_label in range(labels.shape[-1])]),
             "acc": torch.as_tensor(
                 [torchmetrics.functional.accuracy(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
                     else net_outputs["labels_pred"][:, i_label, :],
                     labels[:, i_label], average="micro")
                     for i_label in range(labels.shape[-1])]),
             "f1": torch.as_tensor(
                 [torchmetrics.functional.f1_score(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
                     else net_outputs["labels_pred"][:, i_label, :],
-                    labels[:, i_label], average="micro")
+                    labels[:, i_label],
+                    average="macro",
+                    num_classes=self.labels_classes[i_label],
+                )
                     for i_label in range(labels.shape[-1])]),
             "precision": torch.as_tensor(
                 [torchmetrics.functional.precision(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
                     else net_outputs["labels_pred"][:, i_label, :],
-                    labels[:, i_label], average="micro")
+                    labels[:, i_label],
+                    average="macro",
+                    num_classes=self.labels_classes[i_label],
+                )
                     for i_label in range(labels.shape[-1])]),
             "recall": torch.as_tensor(
                 [torchmetrics.functional.recall(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "val"
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
                     else net_outputs["labels_pred"][:, i_label, :],
-                    labels[:, i_label], average="micro")
+                    labels[:, i_label],
+                    average="macro",
+                    num_classes=self.labels_classes[i_label],
+                )
+                    for i_label in range(labels.shape[-1])]),
+            "kappa": torch.as_tensor(
+                [torchmetrics.functional.cohen_kappa(
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
+                    else net_outputs["labels_pred"][:, i_label, :],
+                    labels[:, i_label],
+                    num_classes=self.labels_classes[i_label],
+                )
+                    for i_label in range(labels.shape[-1])]),
+            "corrcoef": torch.as_tensor(
+                [torchmetrics.functional.matthews_corrcoef(
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
+                    else net_outputs["labels_pred"][:, i_label, :],
+                    labels[:, i_label],
+                    num_classes=self.labels_classes[i_label],
+                )
                     for i_label in range(labels.shape[-1])]),
             "time": time.time() - starting_time,
         }
@@ -497,7 +522,7 @@ class EEGSpectralTransformer(pl.LightningModule):
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False, sync_dist=True)
         # classification metrics
-        for metric in ["acc", "f1", "precision", "recall"]:
+        for metric in ["acc", "f1", "precision", "recall", "kappa", "corrcoeff"]:
             metric_data = torch.stack([e[metric] for e in outputs])
             self.log(f"{metric}_mean_{phase}", metric_data.mean(),
                      prog_bar=True if metric == "acc" else False, sync_dist=True)

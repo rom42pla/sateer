@@ -222,7 +222,7 @@ def plot_cross_subject(
             column: f"accuracy ({column.split('_')[1]})"
             for column in competitors.columns
             if re.fullmatch(r"acc_.+", column)
-        }
+        },
     }, axis=1)
     # capitalize all the columns
     competitors = competitors.rename({
@@ -234,7 +234,21 @@ def plot_cross_subject(
     # saves the table as .csv and latex table
     competitors.to_csv(join(path, "competitors.csv"), index=False, float_format="%.2f")
     competitors.to_latex(join(path, "competitors.tex"), index=False, float_format="%.2f", bold_rows=True)
-    print(competitors)
+    # print(competitors)
+
+    metrics = pd.DataFrame([{
+        "paper": "Ours",
+        "dataset": line_args["dataset_type"],
+        "windows_size": line_args["windows_size"],
+        "windows_stride": line_args["windows_stride"],
+        **{
+            metric: ours[f"{metric}_mean_val"] * 100
+            for metric in ["acc", "precision", "recall", "f1"]
+        }
+    }])
+    metrics.to_csv(join(path, "metrics.csv"), index=False, float_format="%.2f")
+    metrics.to_latex(join(path, "metrics.tex"), index=False, float_format="%.2f", bold_rows=True)
+    print(metrics)
 
 
 def plot_metrics(logs: pd.DataFrame,
@@ -358,7 +372,7 @@ def plot_ablation(
                     #     # ax.set_ylabel(y_label)
                 ax.set_ylabel(y_label)
         fig.suptitle(f"Parameter: {parameter_name.lower()}")
-        plt.savefig(join(plots_path, f"{parameter}.png"))
+        plt.savefig(join(plots_path, f"{parameter}.svg"))
         plt.show()
 
 
@@ -437,10 +451,11 @@ if __name__ == "__main__":
     # )
     # plot_paper_images(dataset=dataset, save_path=join("imgs", "paper"))
     # plot_ablation(path=join("saved", "ablation_saved", "dreamer_data_augmentation"))
-    # plot_ablation(path=join("checkpoints", "ablation", "dreamer", "20220821_164809"))
-    # for filename in listdir(join("checkpoints", "ablation", "dreamer")):
-    #     filepath = join("checkpoints", "ablation", "dreamer", filename)
+    plot_ablation(path=join("checkpoints", "ablation", "dreamer", "20220823_180916"))
+    # for filename in listdir(join("checkpoints", "training", "with_embeddings")):
+    #     filepath = join("checkpoints", "training", "with_embeddings", filename)
+    #     plot_cross_subject(filepath)
     #     print(filepath)
-    #     plot_ablation(path=filepath)
-    get_datasets_table(".")
+        # plot_ablation(path=filepath)
+    # get_datasets_table(".")
     # get_datasets_table(join("..", "..", "datasets", "eeg_emotion_recognition"))
