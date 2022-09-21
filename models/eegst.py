@@ -480,7 +480,7 @@ class EEGSpectralTransformer(pl.LightningModule):
                     for i_label in range(labels.shape[-1])]),
             "kappa": torch.as_tensor(
                 [torchmetrics.functional.cohen_kappa(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
+                    torch.argmax(F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1), dim=-1),
                     labels[:, i_label],
                     num_classes=self.labels_classes[i_label],
                 )
