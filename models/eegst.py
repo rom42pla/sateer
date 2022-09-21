@@ -484,7 +484,7 @@ class EEGSpectralTransformer(pl.LightningModule):
                     labels[:, i_label],
                     average="macro",
                     num_classes=self.labels_classes[i_label],
-                    pos_label=1,
+                    pos_label=None,
                 )
                     for i_label in range(labels.shape[-1])]),
             "mcc": torch.as_tensor(
