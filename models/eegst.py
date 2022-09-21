@@ -540,9 +540,11 @@ class EEGSpectralTransformer(pl.LightningModule):
 
     def on_fit_end(self) -> None:
         if self.logger is not None:
+            # best_epoch = self.logger.logs.groupby('epoch').min().sort_values(by='acc_mean_val',
+            #                                                                  ascending=False).iloc[0:1, :][
+            #     ["loss_train", "loss_val", "acc_mean_train", "acc_mean_val"]]
             best_epoch = self.logger.logs.groupby('epoch').min().sort_values(by='acc_mean_val',
-                                                                             ascending=False).iloc[0:1, :][
-                ["loss_train", "loss_val", "acc_mean_train", "acc_mean_val"]]
+                                                                             ascending=False).iloc[0:1, :]
             print(best_epoch)
 
 
