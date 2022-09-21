@@ -519,7 +519,7 @@ class EEGSpectralTransformer(pl.LightningModule):
                  prog_bar=True if phase == "val" else False, sync_dist=True)
         # classification metrics
         for metric in ["acc", "f1", "precision", "recall", "auroc", "mcc"]:
-            metric_data = torch.stack([e[metric] for e in outputs])
+            metric_data = torch.stack([e[metric] for e in outputs]).float()
             print(metric_data[:4])
             print(metric)
             self.log(f"{metric}_mean_{phase}", metric_data.mean(),
