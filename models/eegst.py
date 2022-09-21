@@ -425,8 +425,8 @@ class EEGSpectralTransformer(pl.LightningModule):
 
             assert labels_pred.shape[1] == len(self.labels)
             assert len(labels_pred.shape) == 3
-            if self.training is False:
-                labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
+            # if self.training is False:
+            #     labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
             outputs["labels_pred"] = labels_pred
         return outputs
 
@@ -451,14 +451,12 @@ class EEGSpectralTransformer(pl.LightningModule):
                  for i_label in range(labels.shape[-1])]),
             "acc": torch.as_tensor(
                 [torchmetrics.functional.accuracy(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
-                    else net_outputs["labels_pred"][:, i_label, :],
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
                     labels[:, i_label], average="micro")
                     for i_label in range(labels.shape[-1])]),
             "f1": torch.as_tensor(
                 [torchmetrics.functional.f1_score(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
-                    else net_outputs["labels_pred"][:, i_label, :],
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
                     labels[:, i_label],
                     average="macro",
                     num_classes=self.labels_classes[i_label],
@@ -466,8 +464,7 @@ class EEGSpectralTransformer(pl.LightningModule):
                     for i_label in range(labels.shape[-1])]),
             "precision": torch.as_tensor(
                 [torchmetrics.functional.precision(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
-                    else net_outputs["labels_pred"][:, i_label, :],
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
                     labels[:, i_label],
                     average="macro",
                     num_classes=self.labels_classes[i_label],
@@ -475,8 +472,7 @@ class EEGSpectralTransformer(pl.LightningModule):
                     for i_label in range(labels.shape[-1])]),
             "recall": torch.as_tensor(
                 [torchmetrics.functional.recall(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
-                    else net_outputs["labels_pred"][:, i_label, :],
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
                     labels[:, i_label],
                     average="macro",
                     num_classes=self.labels_classes[i_label],
@@ -484,16 +480,14 @@ class EEGSpectralTransformer(pl.LightningModule):
                     for i_label in range(labels.shape[-1])]),
             "kappa": torch.as_tensor(
                 [torchmetrics.functional.cohen_kappa(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
-                    else net_outputs["labels_pred"][:, i_label, :],
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
                     labels[:, i_label],
                     num_classes=self.labels_classes[i_label],
                 )
                     for i_label in range(labels.shape[-1])]),
             "corrcoef": torch.as_tensor(
                 [torchmetrics.functional.matthews_corrcoef(
-                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1) if phase == "train"
-                    else net_outputs["labels_pred"][:, i_label, :],
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
                     labels[:, i_label],
                     num_classes=self.labels_classes[i_label],
                 )
