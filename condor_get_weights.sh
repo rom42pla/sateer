@@ -1,4 +1,4 @@
-script_starter="bash cluster_train.sh"
+script_starter="bash condor_train.sh"
 shared_params="--seed=42 --checkpoints_path=./checkpoints/weights --validation=simple"
 
 deap_command="$script_starter deap data/deap --spectrogram_time_masking_perc=0 --spectrogram_frequency_masking_perc=0 --disable_flipping $shared_params"

@@ -1,4 +1,4 @@
-script_starter="bash cluster_train.sh"
+script_starter="bash condor_train.sh"
 shared_params="--seed=42 --checkpoints_path=./checkpoints/training/with_user_embeddings"
 
 
