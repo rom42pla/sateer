@@ -478,14 +478,16 @@ class EEGSpectralTransformer(pl.LightningModule):
                     num_classes=self.labels_classes[i_label],
                 )
                     for i_label in range(labels.shape[-1])]),
-            "kappa": torch.as_tensor(
-                [torchmetrics.functional.cohen_kappa(
-                    torch.argmax(F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1), dim=-1),
+            "auroc": torch.as_tensor(
+                [torchmetrics.functional.auroc(
+                    F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
                     labels[:, i_label],
+                    average="macro",
                     num_classes=self.labels_classes[i_label],
+                    pos_label=1,
                 )
                     for i_label in range(labels.shape[-1])]),
-            "corrcoef": torch.as_tensor(
+            "mcc": torch.as_tensor(
                 [torchmetrics.functional.matthews_corrcoef(
                     F.softmax(net_outputs["labels_pred"][:, i_label, :], dim=-1),
                     labels[:, i_label],
@@ -516,7 +518,7 @@ class EEGSpectralTransformer(pl.LightningModule):
         self.log(f"loss_{phase}", torch.stack([e["loss"] for e in outputs]).mean(),
                  prog_bar=True if phase == "val" else False, sync_dist=True)
         # classification metrics
-        for metric in ["acc", "f1", "precision", "recall", "kappa", "corrcoef"]:
+        for metric in ["acc", "f1", "precision", "recall", "auroc", "mcc"]:
             metric_data = torch.stack([e[metric] for e in outputs])
             print(metric_data[:4])
             print(metric)
