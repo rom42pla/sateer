@@ -50,7 +50,7 @@ def get_args() -> Dict[str, Union[bool, str, int, float]]:
                         type=int,
                         help="Minimum number of epochs")
     parser.add_argument("--max_epochs",
-                        default=1000,
+                        default=20,
                         type=int,
                         help="Maximum number of epochs")
     parser.add_argument("--validation",

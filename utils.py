@@ -26,7 +26,7 @@ from datasets.dreamer import DREAMERDataset
 from datasets.eeg_emrec import EEGClassificationDataset
 from datasets.seed import SEEDDataset
 from loggers.logger import FouriEEGTransformerLogger
-from models.eegst import EEGSpectralTransformer
+from models.sateer import SATEER
 
 
 def parse_dataset_class(name: str):
@@ -153,7 +153,7 @@ def train_k_fold(
     # initialize the logs
     logs: pd.DataFrame = pd.DataFrame()
     # initializes the model
-    base_model: EEGSpectralTransformer = EEGSpectralTransformer(
+    base_model: SATEER = SATEER(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
@@ -302,7 +302,7 @@ def train(
 ) -> pd.DataFrame:
     if model is None:
         dataset = dataset_train.dataset
-        model = EEGSpectralTransformer(
+        model = SATEER(
             in_channels=len(dataset.electrodes),
             sampling_rate=dataset.sampling_rate,
             labels=dataset.labels,

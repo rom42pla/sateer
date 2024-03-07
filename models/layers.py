@@ -8,9 +8,6 @@ import torch
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import nn
 import einops
-from torch._C._autograd import ProfilerActivity
-from torch.autograd import profiler
-from torch.profiler import profile
 from torchaudio import transforms
 
 
@@ -604,6 +601,9 @@ class MelSpectrogram(nn.Module):
 
 
 if __name__ == "__main__":
+    from torch._C._autograd import ProfilerActivity
+    from torch.autograd import profiler
+    from torch.profiler import profile
     embeddings_dim, batch_size, sampling_rate, seconds = 512, 1024, 128, 10
     batch = {
         "eegs": torch.randn(batch_size, seconds * sampling_rate, embeddings_dim, dtype=torch.float32),

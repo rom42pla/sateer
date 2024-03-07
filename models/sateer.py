@@ -22,8 +22,6 @@ from torch.nn import functional as F
 import pytorch_lightning as pl
 import torchmetrics
 import einops
-import torch.autograd.profiler as profiler
-from torch.profiler import profile, ProfilerActivity
 from torch.utils.data import DataLoader
 from torchaudio import transforms
 
@@ -35,7 +33,7 @@ from models.layers import AddGaussianNoise, MelSpectrogram, \
     GetSinusoidalPositionalEmbeddings, GetLearnedPositionalEmbeddings, GetTokenTypeEmbeddings, GetUserEmbeddings
 
 
-class EEGSpectralTransformer(pl.LightningModule):
+class SATEER(pl.LightningModule):
     def __init__(
             self,
             in_channels: int,
@@ -297,137 +295,137 @@ class EEGSpectralTransformer(pl.LightningModule):
 
         # eventually adds data augmentation
         if self.training is True and self.data_augmentation is True:
-            with profiler.record_function("data augmentation (eegs)"):
-                if self.shifting is True:
+            # with profiler.record_function("data augmentation (eegs)"):
+            if self.shifting is True:
+                for i_batch in range(eegs.shape[0]):
+                    shift_direction = "left" if torch.rand(1, device=eegs.device) <= 0.5 else "right"
+                    shift_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
+                    assert shift_amount < eegs.shape[1]
+                    if shift_amount > 0:
+                        if shift_direction == "left":
+                            eegs[i_batch] = torch.roll(eegs[i_batch], shifts=shift_amount, dims=0)
+                            eegs[i_batch, :shift_amount] = 0
+                        else:
+                            eegs[i_batch] = torch.roll(eegs[i_batch], shifts=-shift_amount, dims=0)
+                            eegs[i_batch, -shift_amount:] = 0
+            if self.cropping is True:
+                crop_amount = int(eegs.shape[1] - torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
+                if crop_amount > 0:
                     for i_batch in range(eegs.shape[0]):
-                        shift_direction = "left" if torch.rand(1, device=eegs.device) <= 0.5 else "right"
-                        shift_amount = int(torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
-                        assert shift_amount < eegs.shape[1]
-                        if shift_amount > 0:
-                            if shift_direction == "left":
-                                eegs[i_batch] = torch.roll(eegs[i_batch], shifts=shift_amount, dims=0)
-                                eegs[i_batch, :shift_amount] = 0
-                            else:
-                                eegs[i_batch] = torch.roll(eegs[i_batch], shifts=-shift_amount, dims=0)
-                                eegs[i_batch, -shift_amount:] = 0
-                if self.cropping is True:
-                    crop_amount = int(eegs.shape[1] - torch.rand(1, device=eegs.device) * 0.25 * eegs.shape[1])
-                    if crop_amount > 0:
-                        for i_batch in range(eegs.shape[0]):
-                            crop_start = int(
-                                torch.rand(1, device=eegs.device) * (eegs.shape[1] - crop_amount))
-                            assert crop_start + crop_amount < eegs.shape[1]
-                            eegs[i_batch, :crop_amount] = eegs[i_batch, crop_start:crop_start + crop_amount].clone()
-                    eegs = eegs[:, :crop_amount]
-                if self.flipping is True:
-                    for i_batch, batch in enumerate(eegs):
-                        if torch.rand(1, device=eegs.device) <= 0.25:
-                            eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
-                if self.noise_strength > 0:
-                    eegs = AddGaussianNoise(strength=self.noise_strength)(eegs)
+                        crop_start = int(
+                            torch.rand(1, device=eegs.device) * (eegs.shape[1] - crop_amount))
+                        assert crop_start + crop_amount < eegs.shape[1]
+                        eegs[i_batch, :crop_amount] = eegs[i_batch, crop_start:crop_start + crop_amount].clone()
+                eegs = eegs[:, :crop_amount]
+            if self.flipping is True:
+                for i_batch, batch in enumerate(eegs):
+                    if torch.rand(1, device=eegs.device) <= 0.25:
+                        eegs[i_batch] = torch.flip(eegs[i_batch], dims=[0])
+            if self.noise_strength > 0:
+                eegs = AddGaussianNoise(strength=self.noise_strength)(eegs)
 
         # converts the eegs to a spectrogram
-        with profiler.record_function("spectrogram"):
-            spectrogram = self.get_spectrogram(eegs)  # (b s c m)
+        # with profiler.record_function("spectrogram"):
+        spectrogram = self.get_spectrogram(eegs)  # (b s c m)
+        # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
+        if self.training is True and self.data_augmentation is True:
             # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
-            if self.training is True and self.data_augmentation is True:
-                # MelSpectrogram.plot_mel_spectrogram(spectrogram[0])
-                with profiler.record_function("data augmentation (spectrogram)"):
-                    if self.spectrogram_time_masking_perc > 0:
-                        for i_batch in range(len(spectrogram)):
-                            mask_amount = int(random.random() * \
-                                              self.spectrogram_time_masking_perc * \
-                                              spectrogram.shape[1])
-                            if mask_amount > 0:
-                                masked_indices = torch.randperm(spectrogram.shape[1], device=spectrogram.device)[
-                                                 :mask_amount]
-                                spectrogram[i_batch, masked_indices] = 0
-                    if self.spectrogram_frequency_masking_perc > 0:
-                        for i_batch in range(len(spectrogram)):
-                            mask_amount = int(random.random() * \
-                                              self.spectrogram_frequency_masking_perc * \
-                                              spectrogram.shape[-1])
-                            if mask_amount > 0:
-                                masked_indices = torch.randperm(spectrogram.shape[-1], device=spectrogram.device)[
-                                                 :mask_amount]
-                                spectrogram[i_batch, :, :, masked_indices] = 0
+            # with profiler.record_function("data augmentation (spectrogram)"):
+            if self.spectrogram_time_masking_perc > 0:
+                for i_batch in range(len(spectrogram)):
+                    mask_amount = int(random.random() * \
+                                        self.spectrogram_time_masking_perc * \
+                                        spectrogram.shape[1])
+                    if mask_amount > 0:
+                        masked_indices = torch.randperm(spectrogram.shape[1], device=spectrogram.device)[
+                                            :mask_amount]
+                        spectrogram[i_batch, masked_indices] = 0
+            if self.spectrogram_frequency_masking_perc > 0:
+                for i_batch in range(len(spectrogram)):
+                    mask_amount = int(random.random() * \
+                                        self.spectrogram_frequency_masking_perc * \
+                                        spectrogram.shape[-1])
+                    if mask_amount > 0:
+                        masked_indices = torch.randperm(spectrogram.shape[-1], device=spectrogram.device)[
+                                            :mask_amount]
+                        spectrogram[i_batch, :, :, masked_indices] = 0
 
         # prepares the spectrogram for the encoder
-        with profiler.record_function("preparation"):
-            x = self.merge_mels(spectrogram)  # (b s c)
-            assert len(x.shape) == 3, f"invalid number of dimensions ({x.shape} must be long 3)"
-            assert x.shape[-1] == self.hidden_size, \
-                f"invalid hidden size after merging ({x.shape[-1]} != {self.hidden_size})"
+        # with profiler.record_function("preparation"):
+        x = self.merge_mels(spectrogram)  # (b s c)
+        assert len(x.shape) == 3, f"invalid number of dimensions ({x.shape} must be long 3)"
+        assert x.shape[-1] == self.hidden_size, \
+            f"invalid hidden size after merging ({x.shape[-1]} != {self.hidden_size})"
 
         # pass the spectrogram through the encoder
-        with profiler.record_function("encoder"):
-            # eventually adds positional embeddings and type embeddings
-            if self.users_embeddings and (ids is not None):
-                with profiler.record_function("user embeddings"):
-                    # eventually adds a new user to the dict
-                    for user_id in ids:
-                        if user_id not in self.users_dict:
-                            self.users_dict[user_id] = len(self.users_dict)
-                    # generates an embedding for each users
-                    users_embeddings = self.users_embedder(
-                        torch.as_tensor([self.users_dict[user_id] for user_id in ids],
-                                        device=self.device))  # (b c)
-                    # concatenates the embeddings to the eeg
-                    x = torch.cat([
-                        users_embeddings.unsqueeze(1),
-                        self.special_tokens_embedder(
-                            torch.as_tensor([self.special_tokens_vocab["ues"]],
-                                            device=self.device)).repeat(x.shape[0], 1, 1),
-                        x], dim=1)
-                    x = x + self.token_type_embedder(
-                        torch.as_tensor([0, 1, *[2 for _ in range(x.shape[1] - 2)]],
-                                        device=self.device)).repeat(x.shape[0], 1, 1)
-            # adds the positional embeddings
-            x = x + \
-                self.position_embedder(x)
-            # encoder pass
-            x_encoded = self.encoder(x)  # (b s d)
-            if self.users_embeddings and (ids is not None):
-                x_encoded = x_encoded[:, 2:]
-            assert len(x_encoded.shape) == 3, f"invalid number of dimensions ({x_encoded.shape} must be long 3)"
-            assert x_encoded.shape[-1] == self.hidden_size, \
-                f"invalid hidden size after encoder ({x_encoded.shape[-1]} != {self.hidden_size})"
+        # with profiler.record_function("encoder"):
+        # eventually adds positional embeddings and type embeddings
+        if self.users_embeddings and (ids is not None):
+            # with profiler.record_function("user embeddings"):
+            # eventually adds a new user to the dict
+            for user_id in ids:
+                if user_id not in self.users_dict:
+                    self.users_dict[user_id] = len(self.users_dict)
+            # generates an embedding for each users
+            users_embeddings = self.users_embedder(
+                torch.as_tensor([self.users_dict[user_id] for user_id in ids],
+                                device=self.device))  # (b c)
+            # concatenates the embeddings to the eeg
+            x = torch.cat([
+                users_embeddings.unsqueeze(1),
+                self.special_tokens_embedder(
+                    torch.as_tensor([self.special_tokens_vocab["ues"]],
+                                    device=self.device)).repeat(x.shape[0], 1, 1),
+                x], dim=1)
+            x = x + self.token_type_embedder(
+                torch.as_tensor([0, 1, *[2 for _ in range(x.shape[1] - 2)]],
+                                device=self.device)).repeat(x.shape[0], 1, 1)
+        # adds the positional embeddings
+        x = x + \
+            self.position_embedder(x)
+        # encoder pass
+        x_encoded = self.encoder(x)  # (b s d)
+        if self.users_embeddings and (ids is not None):
+            x_encoded = x_encoded[:, 2:]
+        assert len(x_encoded.shape) == 3, f"invalid number of dimensions ({x_encoded.shape} must be long 3)"
+        assert x_encoded.shape[-1] == self.hidden_size, \
+            f"invalid hidden size after encoder ({x_encoded.shape[-1]} != {self.hidden_size})"
 
         # eventually pass the encoded spectrogram to the decoder
         if self.encoder_only is False:
-            with profiler.record_function("decoder"):
-                # prepares the labels tensor
-                label_tokens = self.labels_embedder(
-                    torch.as_tensor(list(range(len(self.labels))),
-                                    device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
-                # adds the positional embeddings
-                label_tokens = label_tokens + \
-                               self.position_embedder(label_tokens)  # (b l d)
-                # decoder pass
-                x_decoded = self.decoder(
-                    label_tokens,
-                    x_encoded
-                )  # (b l d)
-                assert len(x_decoded.shape) == 3, f"invalid number of dimensions ({x_decoded.shape} must be long 3)"
-                assert x_decoded.shape[-1] == self.hidden_size, \
-                    f"invalid hidden size after merging ({x_decoded.shape[-1]} != {self.hidden_size})"
+            # with profiler.record_function("decoder"):
+            # prepares the labels tensor
+            label_tokens = self.labels_embedder(
+                torch.as_tensor(list(range(len(self.labels))),
+                                device=x_encoded.device)).repeat(x_encoded.shape[0], 1, 1)  # (b l d)
+            # adds the positional embeddings
+            label_tokens = label_tokens + \
+                            self.position_embedder(label_tokens)  # (b l d)
+            # decoder pass
+            x_decoded = self.decoder(
+                label_tokens,
+                x_encoded
+            )  # (b l d)
+            assert len(x_decoded.shape) == 3, f"invalid number of dimensions ({x_decoded.shape} must be long 3)"
+            assert x_decoded.shape[-1] == self.hidden_size, \
+                f"invalid hidden size after merging ({x_decoded.shape[-1]} != {self.hidden_size})"
 
         # makes the predictions using the encoded or decoded data
-        with profiler.record_function("predictions"):
-            if self.encoder_only is True:
-                labels_pred = torch.stack([net(x_encoded[:, 0, :])
-                                           for i_label, net in enumerate(self.classification)],
-                                          dim=1)  # (b l d)
-            else:
-                labels_pred = torch.stack([net(x_decoded[:, i_label if self.encoder_only else 0, :])
-                                           for i_label, net in enumerate(self.classification)],
-                                          dim=1)  # (b l d)
+        # with profiler.record_function("predictions"):
+        if self.encoder_only is True:
+            labels_pred = torch.stack([net(x_encoded[:, 0, :])
+                                        for i_label, net in enumerate(self.classification)],
+                                        dim=1)  # (b l d)
+        else:
+            labels_pred = torch.stack([net(x_decoded[:, i_label if self.encoder_only else 0, :])
+                                        for i_label, net in enumerate(self.classification)],
+                                        dim=1)  # (b l d)
 
-            assert labels_pred.shape[1] == len(self.labels)
-            assert len(labels_pred.shape) == 3
-            # if self.training is False:
-            #     labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
-            outputs["labels_pred"] = labels_pred
+        assert labels_pred.shape[1] == len(self.labels)
+        assert len(labels_pred.shape) == 3
+        # if self.training is False:
+        #     labels_pred = F.softmax(labels_pred, dim=-1)  # (b l d)
+        outputs["labels_pred"] = labels_pred
         return outputs
 
     def training_step(self, batch, batch_idx):
@@ -551,6 +549,9 @@ class EEGSpectralTransformer(pl.LightningModule):
 
 
 if __name__ == "__main__":
+    import torch.autograd.profiler as profiler
+    from torch.profiler import profile, ProfilerActivity
+
     # sets the seed
     seed = 42
     random.seed(seed)
@@ -567,7 +568,7 @@ if __name__ == "__main__":
     )
     dataloader_train = DataLoader(dataset, batch_size=32, num_workers=os.cpu_count() - 2, shuffle=False)
     dataloader_val = DataLoader(dataset, batch_size=32, num_workers=os.cpu_count() - 2, shuffle=True)
-    model = EEGSpectralTransformer(
+    model = SATEER(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,

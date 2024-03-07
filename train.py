@@ -16,7 +16,7 @@ if __name__ == '__main__':
     from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train_k_fold, merge_logs, train, \
     split_dataset
     from datasets.eeg_emrec import EEGClassificationDataset
-    from models.eegst import EEGSpectralTransformer
+    from models.sateer import SATEER
 
     import torchaudio
 

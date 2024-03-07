@@ -21,7 +21,7 @@ from arg_parsers.ablation import get_args
 from plots import plot_metrics, plot_ablation
 from utils import parse_dataset_class, set_global_seed, save_to_json, init_logger, train
 from datasets.eeg_emrec import EEGClassificationDataset
-from models.eegst import EEGSpectralTransformer
+from models.sateer import SATEER
 
 # sets up the loggers
 init_logger()
@@ -124,7 +124,7 @@ def objective(trial: Trial):
             trial_args[parameter] = defaults[parameter]["default"]
     logging.info(f"started trial {trial.number} with parameters:\n{pformat(trial_args)}")
 
-    model: EEGSpectralTransformer = EEGSpectralTransformer(
+    model: SATEER = SATEER(
         in_channels=len(dataset.electrodes),
         sampling_rate=dataset.sampling_rate,
         labels=dataset.labels,
