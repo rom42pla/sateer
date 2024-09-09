@@ -1,3 +1,4 @@
+numpy<2.0
 jupyter
 scikit-learn
 mne
@@ -13,3 +14,4 @@ torchmetrics
 torchvision
 torchaudio
 functorch
+flopth 

@@ -6,11 +6,11 @@
   <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
-    <dc:date>2024-03-07T16:59:20.254563</dc:date>
+    <dc:date>2024-09-09T15:15:57.166335</dc:date>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
-      <dc:title>Matplotlib v3.7.5, https://matplotlib.org/</dc:title>
+      <dc:title>Matplotlib v3.9.2, https://matplotlib.org/</dc:title>
      </cc:Agent>
     </dc:creator>
    </cc:Work>
@@ -72,7 +72,7 @@ L 487.625806 45.527151
 L 503.883871 49.310796 
 L 520.141935 47.459684 
 L 536.4 34.64564 
-" clip-path="url(#p89e6512e37)" style="fill: none; stroke: #1f77b4; stroke-width: 1.5; stroke-linecap: square"/>
+" clip-path="url(#pebe0664fb7)" style="fill: none; stroke: #1f77b4; stroke-width: 1.5; stroke-linecap: square"/>
    </g>
    <g id="patch_3">
     <path d="M 7.2 65.7 
@@ -139,7 +139,7 @@ L 487.625806 115.363257
 L 503.883871 105.793126 
 L 520.141935 112.629822 
 L 536.4 97.916158 
-" clip-path="url(#pe3b80c40d5)" style="fill: none; stroke: #1f77b4; stroke-width: 1.5; stroke-linecap: square"/>
+" clip-path="url(#pe78a808bdf)" style="fill: none; stroke: #1f77b4; stroke-width: 1.5; stroke-linecap: square"/>
    </g>
    <g id="patch_8">
     <path d="M 7.2 135 
@@ -206,7 +206,7 @@ L 487.625806 176.647087
 L 503.883871 176.284071 
 L 520.141935 171.335917 
 L 536.4 156.767406 
-" clip-path="url(#p6439048a87)" style="fill: none; stroke: #1f77b4; stroke-width: 1.5; stroke-linecap: square"/>
+" clip-path="url(#p658be83b41)" style="fill: none; stroke: #1f77b4; stroke-width: 1.5; stroke-linecap: square"/>
    </g>
    <g id="patch_13">
     <path d="M 7.2 204.3 
@@ -273,7 +273,7 @@ L 487.625806 240.343635
 L 503.883871 243.389807 
 L 520.141935 236.144075 
 L 536.4 224.020438 
-" clip-path="url(#p5dead2bddb)" style="fill: none; stroke: #1f77b4; stroke-width: 1.5; stroke-linecap: square"/>
+" clip-path="url(#p36a96ffee3)" style="fill: none; stroke: #1f77b4; stroke-width: 1.5; stroke-linecap: square"/>
    </g>
    <g id="patch_18">
     <path d="M 7.2 273.6 
@@ -298,16 +298,16 @@ L 561.6 215.1
   </g>
  </g>
  <defs>
-  <clipPath id="p89e6512e37">
+  <clipPath id="pebe0664fb7">
    <rect x="7.2" y="7.2" width="554.4" height="58.5"/>
   </clipPath>
-  <clipPath id="pe3b80c40d5">
+  <clipPath id="pe78a808bdf">
    <rect x="7.2" y="76.5" width="554.4" height="58.5"/>
   </clipPath>
-  <clipPath id="p6439048a87">
+  <clipPath id="p658be83b41">
    <rect x="7.2" y="145.8" width="554.4" height="58.5"/>
   </clipPath>
-  <clipPath id="p5dead2bddb">
+  <clipPath id="p36a96ffee3">
    <rect x="7.2" y="215.1" width="554.4" height="58.5"/>
   </clipPath>
  </defs>
